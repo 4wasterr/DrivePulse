@@ -1,0 +1,310 @@
+/* Shared monochrome theme and comfortable reading / interaction sizes. */
+.app-shell { background: #f7f7f7; }
+.sidebar { width: 272px; padding: 30px 20px 18px; background: #fff; border-color: #e2e2e2; overflow-y: auto; overscroll-behavior: contain; }
+.brand, .primary-nav, .sidebar-bottom { flex-shrink: 0; }
+.brand { color: #111; font-size: 29px; gap: 10px; }
+.brand-mark { width: 36px; height: 38px; }
+.brand-period { color: #111; }
+.workspace-label { margin-top: 38px; color: #686868; }
+.primary-nav a, .saved-nav { min-height: 54px; font-size: 16px; color: #626262; padding: 14px 15px; }
+.primary-nav a > .icon, .saved-nav > .icon { width: 23px; height: 23px; }
+.primary-nav a.active, .saved-nav.active { background: #111; color: #fff; box-shadow: none; }
+.primary-nav a.active > .icon { color: #fff; }
+.active .nav-count { background: #fff; color: #111; }
+.primary-nav a:hover, .saved-nav:hover { background: #ededed; color: #111; }
+.primary-nav a.active:hover, .saved-nav.active:hover { background: #292929; color: #fff; }
+.sidebar-bottom { padding-top: 30px; }
+.help-card { background: #f0f0f0; padding: 20px; }
+.help-card button, .sidebar-help { min-height: 44px; font-size: 14px; }
+.help-card p { font-size: 17px; }
+.profile-button { min-height: 78px; }
+.profile-button strong { font-size: 15px; }
+.profile-button small { font-size: 13px; color: #626262; }
+.preview-caption { font-size: 11px; color: #626262; }
+.avatar { background: #e9e9e9; color: #222; width: 44px; height: 44px; font-size: 14px; }
+.main-content { margin-left: 272px; padding-inline: 38px; }
+.topbar { min-height: 94px; }
+.breadcrumb, .topbar-location, .today-date, .greeting { color: #626262; }
+.topbar-actions .icon-button, .icon-button { width: 44px; height: 44px; }
+.icon-button { color: #505050; }
+.topbar-actions { gap: 14px; }
+.page-heading { margin-block: 32px; }
+.page-heading h1 { font-size: clamp(28px, 2.5vw, 36px); line-height: 1.35; }
+.eyebrow, .search-label, .vehicle-tagline, .vehicle-specs, .muted, .form-field, .results-header, .fleet-note, .page-footer { color: #666; }
+.button { min-height: 50px; padding: 13px 22px; font-size: 16px; gap: 12px; border-radius: 9px; white-space: normal; text-align: center; }
+.button-dark, .category-tabs button.active { background: #111; color: #fff; }
+.button-dark:hover { background: #333; box-shadow: 0 6px 18px #00000014; }
+.button-lime { background: #fff; color: #111; }
+.button-lime:hover { background: #e8e8e8; box-shadow: none; }
+.button-outline { border-color: #cdcdcd; color: #222; background: #fff; }
+.button-outline:hover { background: #eee; border-color: #999; }
+.text-link { color: #333; min-height: 44px; font-size: 15px; }
+.text-link:hover { color: #000; }
+.hero { height: 440px; background: #171717; }
+.hero-image { filter: grayscale(1); }
+.hero-overlay { background: linear-gradient(90deg,#000000e8 0%,#000000a8 40%,#00000000 80%); }
+.hero-copy { padding: 38px; }
+.hero-copy h2 { font-size: clamp(44px, 4vw, 62px); }
+.hero-copy h2 span { color: #fff; }
+.hero-copy > p { font-size: 17px; color: #dedede; }
+.hero-eyebrow { color: #eee; font-size: 12px; }
+.hero-eyebrow i, .availability i { background: #fff; box-shadow: none; }
+.hero-copy .button { min-height: 50px; font-size: 16px; padding: 13px 22px; margin-top: 24px; }
+.hero-feature { min-width: 280px; padding: 20px; background: #ffffff1f; }
+.hero-feature > div > span { font-size: 11px; }
+.hero-feature strong { font-size: 19px; }
+.hero-feature p { font-size: 16px; }
+.hero-feature p small { font-size: 13px; }
+.trip-search { padding: 24px; grid-template-columns: minmax(180px,1.3fr) minmax(150px,1fr) minmax(150px,1fr) auto; gap: 20px; background: #fff; border-color: #ddd; }
+.search-label { font-size: 13px; gap: 8px; }
+.search-field { gap: 7px; border-color: #e0e0e0; }
+.search-field select, .search-field input { font-size: 16px; min-height: 38px; color: #171717; padding-left: 0; }
+.search-submit { font-size: 16px; min-height: 56px; padding: 14px 22px; }
+.dashboard-grid { grid-template-columns: minmax(0,1fr); gap: 32px; }
+.recommendation-cards { gap: 24px; }
+.vehicle-card { background: #fff; border-color: #dedede; box-shadow: none; }
+.vehicle-image, .fleet-grid .vehicle-image { height: 240px; background: #e8e8e8; }
+.vehicle-content, .fleet-grid .vehicle-content { padding: 23px; }
+.vehicle-name, .fleet-grid .vehicle-name { font-size: 20px; line-height: 1.4; max-width: none; letter-spacing: -.5px; }
+.vehicle-name:hover { color: #555; }
+.vehicle-title-row { align-items: center; gap: 12px; }
+.vehicle-tagline, .fleet-grid .vehicle-tagline { font-size: 14px; margin-top: 7px; white-space: normal; }
+.vehicle-specs, .fleet-grid .vehicle-specs { font-size: 13px; gap: 10px; padding-block: 21px; flex-wrap: wrap; }
+.vehicle-specs span { gap: 6px; }
+.vehicle-specs .icon { width: 19px; height: 19px; color: #666; }
+.vehicle-category { font-size: 12px; padding: 6px 11px; top: 16px; left: 16px; color: #222; }
+.availability { font-size: 12px; bottom: 15px; left: 16px; }
+.availability i { width: 6px; height: 6px; }
+.availability.unavailable i { background: #bcbcbc; }
+.save-button, .round-arrow { height: 46px; width: 46px; color: #222; }
+.save-button { top: 12px; right: 12px; }
+.save-button .icon { width: 23px; height: 23px; }
+.save-button:hover, .save-button.is-saved, .round-arrow:hover { background: #ddd; color: #111; }
+.save-button.is-saved .icon { fill: #111; }
+.round-arrow { background: #f1f1f1; border-color: #ddd; }
+.round-arrow .icon { width: 24px; height: 24px; }
+.vehicle-price { font-size: 26px; color: #111; }
+.vehicle-price small { font-size: 14px; color: #666; }
+.rating { font-size: 14px; color: #444; }
+.rating > .icon { width: 16px; height: 16px; fill: #444; stroke: #444; }
+.vehicle-card-footer, .fleet-grid .vehicle-card-footer { padding-top: 19px; }
+.trust-strip { font-size: 13px; flex-wrap: wrap; justify-content: flex-start; gap: 20px; color: #626262; }
+.trust-strip .icon { height: 18px; width: 18px; }
+.next-trip-panel { display: block; }
+.next-trip-card { background: #efefef; padding: 26px; }
+.next-trip-vehicle > img { width: 110px; height: 78px; }
+.next-trip-vehicle h3 { font-size: 21px; }
+.next-trip-vehicle > div > span, .next-trip-vehicle small, .sample-label { font-size: 12px; color: #626262; }
+.next-trip-dates strong { font-size: 26px; color: #222; }
+.next-trip-dates small, .trip-location { font-size: 14px; color: #626262; }
+.next-trip-dates > div > span { font-size: 12px; color: #666; }
+.next-trip-card > .button { min-height: 48px; font-size: 15px; background: #fff; }
+.status { font-size: 12px; padding: 6px 9px; }
+.status-ready, .status-completed { background: #e0e0e0; color: #333; }
+.status-pending { background: #f4f4f4; color: #444; border: 1px dashed #aaa; }
+.status-rental { background: #333; color: #fff; }
+.essentials-banner { padding: 24px; background: #eee; gap: 18px; }
+.essentials-banner h3 { font-size: 19px; }
+.essentials-banner p { font-size: 14px; color: #626262; }
+.essentials-banner > .button { min-height: 48px; font-size: 15px; }
+.document-progress { font-size: 13px; }
+.page-footer { font-size: 13px; padding-block: 26px; }
+.fleet-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 24px; }
+.fleet-toolbar { flex-wrap: wrap; }
+.category-tabs { flex-wrap: wrap; gap: 7px; }
+.category-tabs button { font-size: 15px; padding: 12px 18px; min-height: 48px; }
+.fleet-controls { margin-left: 0; }
+.fleet-search { min-height: 50px; }
+.fleet-search input { font-size: 16px; width: 180px; }
+.filter-button { font-size: 15px; min-height: 50px; }
+.filter-panel { flex-wrap: wrap; }
+.filter-panel > .form-field { min-width: 160px; }
+.results-header, .results-header > label, .results-header select { font-size: 14px; }
+.results-header select { max-width: 180px; min-height: 44px; }
+.fleet-note { font-size: 14px; }
+.pill-tabs { flex-wrap: wrap; }
+.pill-tabs button { font-size: 14px; min-height: 46px; }
+.booking-list-card { flex-wrap: wrap; }
+.booking-list-info { min-width: 0; }
+.booking-list-info > p { font-size: 14px; flex-wrap: wrap; color: #626262; }
+.booking-list-actions .button, .bookings-header > .button { font-size: 15px; min-height: 48px; }
+.documents-layout { grid-template-columns: 1fr; }
+.document-guidance { display: none; }
+.generated-row { flex-wrap: wrap; }
+.generated-row > .button { min-height: 48px; font-size: 14px; }
+.billing-stats { grid-template-columns: 1fr; }
+.billing-stat > div > span { font-size: 15px; }
+.billing-stat small { font-size: 13px; }
+.billing-table td, .billing-table td strong { font-size: 15px; }
+.billing-table th, .billing-table td small, .billing-footnote { font-size: 13px; }
+.modal { width: min(620px,calc(100% - 32px)); background: #fff; color: #171717; border-color: #ddd; }
+.modal::backdrop { background: #00000080; }
+.modal-wide { width: min(1050px,calc(100% - 40px)); }
+.modal-inner { padding: 32px; }
+.modal-header h2 { font-size: 30px; }
+.modal-header .eyebrow { font-size: 12px; }
+.modal .muted { color: #626262; }
+.small, .step-content > .small { font-size: 14px; }
+.booking-layout { grid-template-columns: minmax(0,1.35fr) minmax(280px,1fr); gap: 30px; }
+.booking-steps > div { font-size: 14px; white-space: normal; }
+.booking-steps > div > span { height: 32px; width: 32px; font-size: 12px; flex-shrink: 0; }
+.step-content h3 { font-size: 24px; }
+.form-field { font-size: 14px; }
+.form-field input:not([type=range]), .form-field select, .filter-panel .form-field select { font-size: 16px; min-height: 50px; padding: 12px; background: #fff; }
+.form-field input:focus, .form-field select:focus { border-color: #555; }
+.timezone-note, .summary-trust { font-size: 12px; color: #626262; }
+.summary-content h3 { font-size: 23px; }
+.summary-content > .eyebrow { font-size: 12px; }
+.summary-content > .muted, .summary-dates small { font-size: 13px; }
+.price-line, .price-total { font-size: 15px; }
+.price-total strong { font-size: 30px; }
+.form-actions .button { font-size: 16px; }
+.upload-copy strong { font-size: 15px; color: #222; }
+.upload-copy > span { font-size: 13px; color: #626262; }
+.upload-action, .uploaded-meta { font-size: 12px; color: #626262; }
+.upload-field { min-height: 80px; background: #f6f6f6; border-color: #aaa; }
+.upload-field.uploaded { background: #eee; border-color: #aaa; }
+.upload-symbol { width: 44px; height: 44px; }
+.info-note, .checkbox-label, .error-banner, .field-error { font-size: 14px; color: #555; }
+.payment-option strong { font-size: 16px; color: #222; }
+.payment-option small { font-size: 13px; color: #626262; }
+.payment-option input, .checkbox-label input { height: 19px; width: 19px; }
+.payment-option.selected { background: #f1f1f1; border-color: #666; }
+.vehicle-detail-copy > .muted { font-size: 16px; }
+.detail-spec-grid > span, .detail-inclusions, .trip-detail-top .muted { font-size: 15px; }
+.detail-price .small, .vehicle-detail-copy > .small:last-child, .trip-detail-top .small, .trip-stop p { font-size: 13px; }
+.trip-detail-billing > div { font-size: 16px; }
+.trip-downloads .button { font-size: 15px; }
+.faq-list summary { font-size: 16px; min-height: 60px; color: #222; }
+.faq-list details p { font-size: 15px; color: #626262; }
+.profile-intro .muted { font-size: 16px; }
+.notification-popover { width: 390px; background: #fff; }
+.notification-popover > button strong { font-size: 15px; color: #333; }
+.notification-popover small { font-size: 13px; color: #626262; }
+.toast { left: calc(50% + 136px); font-size: 15px; color: #222; background: #fff; }
+@media (min-width: 1650px) {
+  .dashboard-grid { grid-template-columns: minmax(0,1.7fr) minmax(340px,1fr); }
+  .fleet-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 1150px) {
+  .main-content { padding-inline: 28px; }
+  .trip-search { grid-template-columns: 1fr 1fr; }
+  .location-field { grid-column: span 2; border-right: 0; border-bottom: 1px solid #ddd; padding-bottom: 16px; }
+  .search-field:nth-child(3) { border-right: 0; }
+  .search-submit { grid-column: span 2; }
+  .hero-feature { display: none; }
+  .recommendation-cards, .fleet-grid { grid-template-columns: 1fr; }
+  .vehicle-image, .fleet-grid .vehicle-image { height: 290px; }
+  .booking-layout { display: flex; flex-direction: column; }
+  .booking-summary { display: block; order: -1; width: 100%; }
+  .booking-summary > img, .summary-dates, .summary-content > .eyebrow, .summary-trust, .summary-content > .muted { display: none; }
+  .summary-content { padding: 20px; }
+  .summary-content h3 { font-size: 20px; margin-bottom: 14px; }
+  .price-total { padding-bottom: 0; }
+  .booking-list-actions { width: 100%; flex-direction: row; justify-content: space-between; align-items: center; border-top: 1px solid #ddd; padding-top: 18px; }
+  .essentials-banner { flex-wrap: wrap; }
+  .essentials-banner > .button { margin-left: 0; }
+}
+@media (max-width: 760px) {
+  .sidebar { width: min(310px,calc(100% - 36px)); padding: 28px 22px; background: #fff; }
+  .main-content { margin-left: 0; padding-inline: 22px; }
+  .mobile-scrim { background: #00000066; }
+  .topbar { min-height: 82px; height: auto; }
+  .breadcrumb { font-size: 13px; gap: 8px; }
+  .topbar-actions { gap: 8px; }
+  .topbar-avatar { height: 40px; width: 40px; font-size: 13px; }
+  .topbar-actions .icon-button { height: 44px; width: 44px; }
+  .greeting { font-size: 14px; }
+  .hero { height: 410px; }
+  .hero-copy { padding: 32px 28px; }
+  .hero-copy h2 { font-size: 46px; }
+  .hero-copy > p { font-size: 16px; }
+  .hero-eyebrow { font-size: 11px; letter-spacing: 1px; }
+  .hero + .trip-search { margin-inline: 0; }
+  .trip-search { padding: 22px; gap: 18px 14px; }
+  .search-field input, .search-field select { font-size: 16px; min-height: 42px; }
+  .section-heading h2 { font-size: 26px; }
+  .section-heading .eyebrow { font-size: 11px; }
+  .section-heading .text-link { font-size: 14px; }
+  .recommendation-cards, .fleet-grid { gap: 24px; }
+  .vehicle-image, .fleet-grid .vehicle-image { height: 250px; }
+  .category-tabs { justify-content: flex-start; gap: 8px; }
+  .category-tabs button { padding: 11px 16px; font-size: 15px; }
+  .fleet-search input, .filter-button { font-size: 16px; }
+  .fleet-search input { width: 100%; }
+  .fleet-controls { width: 100%; }
+  .results-header { align-items: flex-start; flex-wrap: wrap; }
+  .results-header, .results-header > label, .results-header select { font-size: 14px; }
+  .pill-tabs { gap: 5px; justify-content: flex-start; }
+  .pill-tabs button { font-size: 14px; padding: 10px 12px; }
+  .booking-list-card > img { width: 100%; height: 210px; }
+  .booking-list-info > h2 { font-size: 23px; }
+  .booking-list-info > p { font-size: 14px; }
+  .booking-list-meta > span:first-child, .booking-list-meta .status { font-size: 12px; }
+  .booking-list-actions .vehicle-price { font-size: 24px; }
+  .booking-list-actions .vehicle-price small { font-size: 13px; }
+  .booking-list-actions { gap: 12px; flex-wrap: wrap; }
+  .next-trip-dates { gap: 10px; }
+  .essentials-banner h3 { font-size: 19px; }
+  .essentials-banner p { font-size: 14px; }
+  .page-footer { font-size: 13px; }
+  .documents-card > .muted, .generated-documents > .small { font-size: 14px; }
+  .generated-row strong { font-size: 16px; }
+  .generated-row small { font-size: 13px; }
+  .generated-row > .button { font-size: 14px; }
+  .generated-row > .button:nth-last-child(2) { margin-left: 0; }
+  .billing-stat > div > span { font-size: 14px; }
+  .billing-stat small { font-size: 12px; }
+  .billing-footnote { font-size: 13px; }
+  .modal-inner { padding: 26px 22px; }
+  .modal-header h2 { font-size: 28px; }
+  .modal-header .eyebrow { font-size: 11px; }
+  .booking-steps { align-items: flex-start; }
+  .booking-steps > div { font-size: 12px; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .step-content h3 { font-size: 23px; }
+  .form-grid { gap: 16px 12px; }
+  .upload-field { flex-wrap: wrap; gap: 10px; padding: 16px 12px; }
+  .upload-copy { flex: 1; }
+  .upload-copy strong { font-size: 15px; }
+  .upload-copy > span, .modal .upload-copy > span { max-width: 100%; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+  .upload-action { font-size: 12px; }
+  .uploaded-meta { font-size: 12px; flex-wrap: wrap; }
+  .uploaded-meta .text-link { font-size: 13px; }
+  .modal .info-note { font-size: 14px; }
+  .trip-detail-top { flex-direction: column; }
+  .trip-detail-top > img { width: 100%; height: 210px; }
+  .trip-detail-top h3 { font-size: 26px; }
+  .trip-detail-top .muted { font-size: 15px; }
+  .trip-detail-top .small { font-size: 13px; }
+  .trip-detail-top .status, .trip-detail-billing .status { font-size: 12px; }
+  .trip-detail-grid { grid-template-columns: 1fr; gap: 24px; }
+  .trip-stop .eyebrow { font-size: 12px; }
+  .trip-stop h3 { font-size: 18px; }
+  .trip-stop p { font-size: 14px; }
+  .trip-detail-billing > div { font-size: 15px; flex-wrap: wrap; }
+  .trip-downloads .button { font-size: 15px; }
+  .trip-timeline li { font-size: 11px; }
+  .trip-detail > .small { font-size: 13px; }
+  .toast { left: 50%; font-size: 14px; }
+  .notification-popover { width: min(390px,calc(100vw - 28px)); }
+}
+@media (max-width: 400px) {
+  .main-content { padding-inline: 16px; }
+  .breadcrumb > span { display: none; }
+  .hero-copy { padding: 28px 22px; }
+  .hero-copy h2 { font-size: 40px; }
+  .hero-eyebrow { font-size: 10px; }
+  .hero-copy > p { font-size: 15px; }
+  .trip-search { padding: 18px 14px; gap: 16px 10px; }
+  .search-label { font-size: 12px; }
+  .search-label .icon { width: 17px; height: 17px; }
+  .vehicle-content, .fleet-grid .vehicle-content { padding: 20px; }
+  .vehicle-name, .fleet-grid .vehicle-name { font-size: 19px; }
+  .vehicle-specs, .fleet-grid .vehicle-specs { gap: 8px; font-size: 12px; }
+  .vehicle-image, .fleet-grid .vehicle-image { height: 220px; }
+  .modal-inner { padding: 24px 18px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .span-2 { grid-column: auto; }
+  .form-actions { flex-wrap: wrap; }
+  .form-actions .button { flex: 1; }
+}

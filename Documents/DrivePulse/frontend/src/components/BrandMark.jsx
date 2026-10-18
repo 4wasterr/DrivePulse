@@ -1,0 +1,3 @@
+export default function BrandMark() {
+  return <svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect width="64" height="64" rx="16" fill="#111" /><path fillRule="evenodd" clipRule="evenodd" d="M15 13h15c14 0 23 8 23 19s-9 19-23 19H15V13Zm9 8v22h6c9 0 14-4 14-11s-5-11-14-11h-6Z" fill="#fff" /><path d="M19.5 22v7m0 7v7" stroke="#111" strokeWidth="3" /></svg>
+}

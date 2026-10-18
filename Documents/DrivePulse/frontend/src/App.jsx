@@ -1,22 +1,203 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import Icon from './components/Icon'
+import Modal from './components/Modal'
+import UploadField from './components/UploadField'
+import BookingModal, { requiredDocuments } from './components/BookingModal'
+import LandingPage from './components/LandingPage'
+import BrandMark from './components/BrandMark'
+import { dateISO, initialDates, isAvailable, locations, money, prettyDate, rentalPeriodError, sampleBookings, statuses, vehicles } from './data'
+import { downloadFile, getDocument, readStorage, writeStorage } from './storage'
 import './App.css'
+import './responsive.css'
+import './polish.css'
+import './landing.css'
 
-function App() {
-  const [message, setMessage] = useState('');
+const navigation = [{ id: 'overview', icon: 'grid', label: 'Overview' }, { id: 'fleet', icon: 'car', label: 'Explore the fleet' }, { id: 'bookings', icon: 'calendar', label: 'My bookings' }, { id: 'documents', icon: 'file', label: 'My documents' }, { id: 'payments', icon: 'wallet', label: 'Payments & billing' }]
+const titles = { overview: 'A good day for a great drive.', fleet: 'Find your kind of drive.', bookings: 'Your journeys, all in one place.', documents: 'A little prep. A lot of freedom.', payments: 'Every detail, accounted for.', saved: 'Good taste. Great possibilities.' }
+const readPage = () => [...navigation.map(n => n.id), 'saved', 'home'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'home'
+const vehicleFor = (booking) => vehicles.find(v => v.id === booking.vehicleId)
+const escapeHTML = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 
-  useEffect(() => {
-    fetch('http://localhost:5000/api/hello')
-      .then((res) => res.json())
-      .then((data) => setMessage(data.message))
-      .catch((err) => console.error('Error fetching data:', err));
-  }, []);
-
-  return (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <h1>Separated Frontend & Backend</h1>
-      <p>Server says: <strong>{message || 'Connecting...'}</strong></p>
-    </div>
-  );
+function Status({ value }) {
+  const style = { 'Pending Approval': 'pending', 'Ready for Dispatch': 'ready', 'On Rental': 'rental', Completed: 'completed' }[value] || 'completed'
+  return <span className={`status status-${style}`}><span />{value}</span>
 }
 
-export default App;
+function VehicleCard({ vehicle, saved, onSave, onDetails, onReserve, available }) {
+  return <article className="vehicle-card">
+    <div className="vehicle-image"><img src={vehicle.image} alt={vehicle.name} loading="lazy" /><span className="vehicle-category">{vehicle.category === 'Electric' && <Icon name="bolt" size={12} />}{vehicle.category}</span><button className={`save-button ${saved ? 'is-saved' : ''}`} onClick={onSave} aria-label={`${saved ? 'Unsave' : 'Save'} ${vehicle.name}`} aria-pressed={saved}><Icon name="heart" size={18} /></button><span className={`availability ${available ? '' : 'unavailable'}`}><i />{available ? 'Available for your dates' : 'Reserved for these dates'}</span></div>
+    <div className="vehicle-content"><div className="vehicle-title-row"><button className="text-button vehicle-name" onClick={onDetails}>{vehicle.name}</button><span className="rating"><Icon name="star" size={13} />{vehicle.rating}</span></div><p className="vehicle-tagline">{vehicle.tagline}</p><div className="vehicle-specs"><span><Icon name="users" size={15} />{vehicle.seats} seats</span><span><Icon name="gear" size={15} />{vehicle.transmission}</span><span><Icon name={vehicle.fuel === 'Electric' ? 'bolt' : 'fuel'} size={15} />{vehicle.fuel}</span></div><div className="vehicle-card-footer"><span className="vehicle-price">{money(vehicle.rate)}<small> / day</small></span><button className="round-arrow" onClick={onReserve} disabled={!available} aria-label={`Reserve ${vehicle.name}`}><Icon name="diagonal" size={19} /></button></div></div>
+  </article>
+}
+
+function TripTimeline({ status, compact = false }) {
+  const current = statuses.indexOf(status)
+  return <ol className={`trip-timeline ${compact ? 'compact' : ''}`}>{statuses.map((label, index) => <li key={label} className={`${index <= current ? 'reached' : ''} ${index === current ? 'active' : ''}`}><span className="timeline-dot">{index < current ? <Icon name="check" size={11} /> : <i />}</span><span>{label}</span></li>)}</ol>
+}
+
+function SearchBar({ dates, onChange, onSearch }) {
+  return <form className="trip-search glass" onSubmit={e => { e.preventDefault(); onSearch() }}>
+    <label className="search-field location-field"><span className="search-label"><Icon name="pin" size={17} />Pick-up location</span><select value={dates.pickup} onChange={e => onChange({ ...dates, pickup: e.target.value, dropoff: e.target.value })}>{locations.map(location => <option key={location}>{location}</option>)}</select></label>
+    <label className="search-field"><span className="search-label"><Icon name="calendar" size={17} />Pick-up date</span><input aria-label="Pick-up date" required type="date" min={dateISO()} value={dates.start} onChange={e => onChange({ ...dates, start: e.target.value })} /></label>
+    <label className="search-field"><span className="search-label"><Icon name="calendar" size={17} />Return date</span><input aria-label="Return date" required type="date" min={dates.start} value={dates.end} onChange={e => onChange({ ...dates, end: e.target.value })} /></label>
+    <button className="button button-dark search-submit" type="submit"><Icon name="search" size={18} /><span>Find a ride</span></button>
+  </form>
+}
+
+function EmptyState({ icon = 'car', title, description, action, onAction }) {
+  return <div className="empty-state"><span className="empty-icon"><Icon name={icon} size={30} /></span><h3>{title}</h3><p>{description}</p>{action && <button className="button button-dark" onClick={onAction}>{action}<Icon name="arrow" size={17} /></button>}</div>
+}
+
+function App() {
+  const [page, setPage] = useState(readPage)
+  const [bookings, setBookings] = useState(() => readStorage('bookings', sampleBookings()))
+  const [saved, setSaved] = useState(() => readStorage('saved', []))
+  const [documents, setDocuments] = useState(() => readStorage('documents', {}))
+  const documentsRef = useRef(documents)
+  const [profile, setProfile] = useState(() => readStorage('profile', { name: 'Alex Morgan', email: 'alex@example.com' }))
+  const [dates, setDates] = useState(initialDates)
+  const [category, setCategory] = useState('All cars')
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState('recommended')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [maxRate, setMaxRate] = useState(10000)
+  const [seats, setSeats] = useState('any')
+  const [transmission, setTransmission] = useState('any')
+  const [onlyAvailable, setOnlyAvailable] = useState(false)
+  const [modal, setModal] = useState(null)
+  const [toast, setToast] = useState('')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [notifications, setNotifications] = useState(false)
+  const [bookingTab, setBookingTab] = useState('Upcoming')
+  const toastTimer = useRef(null)
+  const upcoming = bookings.filter(b => !['Completed', 'Cancelled'].includes(b.status)).sort((a, b) => a.start.localeCompare(b.start))
+  const nextTrip = upcoming[0]
+  const completed = bookings.filter(b => b.status === 'Completed')
+  const documentCount = requiredDocuments.filter(d => documents[d.id]).length
+  const initials = profile.name.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('').toUpperCase()
+
+  useEffect(() => {
+    const change = () => {
+      setPage(readPage()); setMenuOpen(false); setNotifications(false)
+      requestAnimationFrame(() => {
+        const section = document.getElementById(window.location.hash.slice(1))
+        if (section) section.scrollIntoView({ behavior: 'instant' })
+        else window.scrollTo({ top: 0, behavior: 'instant' })
+      })
+    }
+    window.addEventListener('hashchange', change)
+    const initialScroll = window.location.hash ? requestAnimationFrame(() => document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ behavior: 'instant' })) : null
+    const syncStorage = event => {
+      if (event.key === 'drivepulse:bookings') setBookings(readStorage('bookings', []))
+      if (event.key === 'drivepulse:saved') setSaved(readStorage('saved', []))
+      if (event.key === 'drivepulse:profile') setProfile(readStorage('profile', { name: 'Alex Morgan', email: 'alex@example.com' }))
+      if (event.key === 'drivepulse:documents') { const next = readStorage('documents', {}); documentsRef.current = next; setDocuments(next) }
+    }
+    window.addEventListener('storage', syncStorage)
+    return () => { window.removeEventListener('hashchange', change); window.removeEventListener('storage', syncStorage); clearTimeout(toastTimer.current); if (initialScroll !== null) cancelAnimationFrame(initialScroll) }
+  }, [])
+  function navigate(to) { window.location.hash = to; setPage(to); setMenuOpen(false); setNotifications(false) }
+  function notify(message) { setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 4500) }
+  function persist(key, value, setter) {
+    try { writeStorage(key, value); setter(value); return true }
+    catch { notify('Your browser could not save this change. Please check local storage.'); return false }
+  }
+  function toggleSave(id) {
+    const next = saved.includes(id) ? saved.filter(v => v !== id) : [...saved, id]
+    if (persist('saved', next, setSaved)) notify(next.includes(id) ? 'A great choice. Added to your saved rides.' : 'Removed from your saved rides.')
+  }
+  function onDocument(id, value) {
+    const next = { ...documentsRef.current, [id]: value }
+    writeStorage('documents', next)
+    documentsRef.current = next
+    setDocuments(next)
+  }
+  function search() {
+    const problem = rentalPeriodError(dates)
+    if (problem) { notify(problem); return }
+    setOnlyAvailable(true); navigate('fleet')
+  }
+  async function reserve(booking) {
+    const latest = readStorage('bookings', bookings)
+    if (!isAvailable(booking.vehicleId, booking, latest)) throw new Error('Those dates are no longer available. Please choose a different date range.')
+    const next = [{ ...booking, renter: { ...profile } }, ...latest]
+    writeStorage('bookings', next)
+    setBookings(next)
+  }
+  async function downloadDocument(id) {
+    try {
+      const stored = await getDocument(id)
+      if (!stored) { notify('The original file is no longer in this browser. Please upload it again.'); return }
+      downloadFile(stored.file, stored.name)
+    } catch { notify('Could not open this document. Please try uploading it again.') }
+  }
+  function downloadBooking(booking, kind) {
+    const car = vehicleFor(booking)
+    const esc = escapeHTML
+    const content = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(booking.id)} — ${kind === 'receipt' ? 'Payment receipt' : 'Rental agreement'}</title><style>body{font:15px/1.7 system-ui,sans-serif;color:#323232;max-width:720px;margin:50px auto;padding:24px}h1{font-size:34px;letter-spacing:-1px}h2{font-size:20px}header{display:flex;justify-content:space-between;border-bottom:2px solid #323232;padding-bottom:20px}.tag{background:#efefef;padding:6px 12px;border-radius:20px;font-size:12px}dl{display:grid;grid-template-columns:1fr 1fr;gap:16px}dt{color:#7c7c7c;font-size:12px}dd{margin:0}table{width:100%;border-collapse:collapse;margin:30px 0}td{padding:14px 0;border-bottom:1px solid #e0e0e0}td:last-child{text-align:right}.note{background:#f5f5f5;padding:20px;border-radius:12px;font-size:13px}footer{font-size:12px;color:#7e7e7e;margin-top:40px}@media print{body{margin:0}}</style><header><strong>drivepulse.</strong><span class="tag">DEMO COPY · ${kind === 'receipt' ? 'SIMULATED PAYMENT' : 'DRAFT AGREEMENT'}</span></header><h1>${kind === 'receipt' ? 'Payment receipt' : 'Rental agreement'}</h1><p>Booking ${esc(booking.id)} · ${esc(booking.status)}</p><dl><div><dt>RENTER</dt><dd>${esc((booking.renter || profile).name)}<br>${esc((booking.renter || profile).email)}</dd></div><div><dt>VEHICLE</dt><dd>${esc(car.name)}<br>${esc(car.color)} · ${esc(car.transmission)}</dd></div><div><dt>PICK-UP</dt><dd>${esc(prettyDate(booking.start, { year: 'numeric' }))}, ${esc(booking.startTime)} PHT<br>${esc(booking.pickup)}</dd></div><div><dt>RETURN</dt><dd>${esc(prettyDate(booking.end, { year: 'numeric' }))}, ${esc(booking.endTime)} PHT<br>${esc(booking.dropoff)}</dd></div></dl><table><tr><td>Vehicle rental · ${esc(booking.days)} days × ${esc(money(car.rate))}</td><td>${esc(money(booking.rental))}</td></tr><tr><td>Refundable security deposit</td><td>${esc(money(booking.deposit))}</td></tr><tr><td><strong>Total quotation</strong></td><td><strong>${esc(money(booking.total))}</strong></td></tr><tr><td>Payment method / status</td><td>${esc(booking.payment)}<br>${esc(booking.paymentStatus)}</td></tr></table><div class="note">${kind === 'receipt' ? 'This receipt records a simulated checkout or a payment proof submitted in this browser. No money has been collected or verified.' : 'This draft summarizes your requested rental. It is subject to document review, vehicle confirmation, and a final signed agreement. Rental is charged per started 24-hour period. The security deposit is refundable subject to the final vehicle inspection and settlement of outstanding charges. Fuel, tolls, and additional charges are excluded. This preview is not a signed contract.'}</div><footer>Generated ${esc(new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' }))} PHT · Browser-local DrivePulse client preview.<br>Use your browser’s Print → Save as PDF to keep a PDF copy.</footer></html>`
+    downloadFile(content, `${booking.id}-${kind}.html`, 'text/html')
+    notify(`${kind === 'receipt' ? 'Receipt' : 'Draft agreement'} downloaded. Open it to print or save as PDF.`)
+  }
+  const filtered = vehicles.filter(v => (page !== 'saved' || saved.includes(v.id)) && (category === 'All cars' || v.category === category) && `${v.name} ${v.category} ${v.fuel}`.toLowerCase().includes(query.toLowerCase()) && v.rate <= maxRate && (seats === 'any' || v.seats >= Number(seats)) && (transmission === 'any' || v.transmission === transmission) && (!onlyAvailable || isAvailable(v.id, dates, bookings))).sort((a, b) => sort === 'price-low' ? a.rate - b.rate : sort === 'price-high' ? b.rate - a.rate : sort === 'rating' ? Number(b.rating) - Number(a.rating) : 0)
+  const card = vehicle => <VehicleCard key={vehicle.id} vehicle={vehicle} saved={saved.includes(vehicle.id)} available={isAvailable(vehicle.id, dates, bookings)} onSave={() => toggleSave(vehicle.id)} onDetails={() => setModal({ type: 'vehicle', vehicle })} onReserve={() => setModal({ type: 'booking', vehicle })} />
+
+  return <div id={page === 'home' ? 'home' : undefined} className={page === 'home' ? 'landing-shell' : 'app-shell'}>
+    {page === 'home' ? <LandingPage onNavigate={navigate} renderVehicle={card} searchBar={<SearchBar dates={dates} onChange={setDates} onSearch={search} />} onFeature={() => setModal({ type: 'vehicle', vehicle: vehicles.find(v => v.id === 'porsche-panamera') })} /> : <>
+    {menuOpen && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
+    <aside className={`sidebar ${menuOpen ? 'mobile-open' : ''}`}>
+      <a className="brand" href="#home" onClick={() => navigate('home')} aria-label="DrivePulse home"><span className="brand-mark"><BrandMark /></span><span>drivepulse<span className="brand-period">.</span></span></a>
+      <div className="workspace-label">YOUR OPEN ROAD</div>
+      <nav className="primary-nav" aria-label="Main navigation">{navigation.map(item => <a key={item.id} href={`#${item.id}`} onClick={() => navigate(item.id)} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined}><Icon name={item.icon} size={19} /><span>{item.label}</span>{item.id === 'bookings' && upcoming.length > 0 && <span className="nav-count">{upcoming.length}</span>}</a>)}</nav>
+      <div className="sidebar-divider" />
+      <a href="#saved" className={`saved-nav ${page === 'saved' ? 'active' : ''}`} onClick={() => navigate('saved')}><Icon name="heart" size={19} /><span>Saved rides</span>{saved.length > 0 && <span className="saved-count">{saved.length}</span>}</a>
+      <div className="sidebar-bottom"><div className="help-card"><span className="help-spark"><Icon name="road" size={24} /></span><p>A smooth journey,<br />from the very start.</p><button onClick={() => setModal({ type: 'help' })}>We’re here to help<Icon name="diagonal" size={16} /></button><span className="help-circle one" /><span className="help-circle two" /></div><button className="sidebar-help" onClick={() => setModal({ type: 'help' })}><Icon name="help" size={18} />Help & support<Icon name="diagonal" size={15} /></button><button className="profile-button" onClick={() => setModal({ type: 'profile' })}><span className="avatar">{initials}</span><span><strong>{profile.name}</strong><small>Client account</small></span><Icon name="settings" size={18} /></button><div className="preview-caption"><i />Client preview · saved on this device</div></div>
+    </aside>
+
+    <main className="main-content">
+      <header className="topbar"><div className="breadcrumb"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><span>Client portal</span><Icon name="chevron" size={12} /><strong>{page === 'saved' ? 'Saved rides' : navigation.find(n => n.id === page)?.label}</strong></div><div className="topbar-actions"><span className="topbar-location"><Icon name="pin" size={15} />Metro Manila, PH</span><span className="topbar-separator" /><button className="icon-button" aria-label="Search vehicles" onClick={() => { navigate('fleet'); setTimeout(() => document.getElementById('fleet-search')?.focus(), 50) }}><Icon name="search" size={19} /></button><div className="notification-wrap"><button className={`icon-button notification-button ${notifications ? 'selected' : ''}`} aria-label="Notifications" aria-expanded={notifications} onClick={() => setNotifications(!notifications)}><Icon name="bell" size={19} /><i /></button>{notifications && <><button className="notification-dismiss" aria-label="Close notifications" onClick={() => setNotifications(false)} /><div className="notification-popover"><div className="popover-title"><strong>Your updates</strong><span className="mini-tag">PREVIEW</span></div>{nextTrip && <button onClick={() => { setNotifications(false); setModal({ type: 'trip', booking: nextTrip }) }}><span className="notification-icon"><Icon name="car" size={18} /></span><span><strong>{nextTrip.status === 'Ready for Dispatch' ? 'Your ride is getting ready' : 'Your reservation is in progress'}</strong><small>{vehicleFor(nextTrip).name} · {prettyDate(nextTrip.start)}</small></span><Icon name="chevron" size={15} /></button>}<button onClick={() => navigate('documents')}><span className="notification-icon"><Icon name="shield" size={18} /></span><span><strong>{documentCount === 3 ? 'Your documents are ready to submit' : 'A smooth start begins here'}</strong><small>{documentCount} of 3 required documents uploaded</small></span><Icon name="chevron" size={15} /></button></div></>}</div><button className="avatar topbar-avatar" onClick={() => setModal({ type: 'profile' })} aria-label="Edit profile">{initials}</button></div></header>
+
+      <div className="page-content" key={page}>
+        <section className="page-heading"><div><p className="greeting"><Icon name="sun" size={15} />{page === 'overview' ? `Good to see you, ${profile.name.split(' ')[0]}.` : 'A little freedom goes a long way.'}</p><h1>{titles[page]}</h1></div><span className="today-date"><Icon name="calendar" size={16} />{new Date().toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' })}</span></section>
+
+        {page === 'overview' && <>
+          <section className="hero"><div className="hero-image" /><div className="hero-overlay" /><div className="hero-copy"><span className="hero-eyebrow"><i />MORE THAN A RENTAL. YOUR NEXT CHAPTER.</span><h2>Different plans.<br />Same <span>open road.</span></h2><p>The perfect ride for wherever life takes you.<br className="desktop-break" /> Find it. Book it. Make it yours.</p><button className="button button-lime" onClick={() => navigate('fleet')}>Explore the fleet<Icon name="diagonal" size={18} /></button></div><div className="hero-feature glass"><span className="hero-feature-icon"><Icon name="road" size={20} /></span><div><span>THE DRIVE OF THE MOMENT</span><strong>Porsche Panamera</strong><p>From {money(8500)} <small>/ day</small></p></div><button className="icon-button" aria-label="Explore Porsche Panamera" onClick={() => setModal({ type: 'vehicle', vehicle: vehicles[2] })}><Icon name="diagonal" size={21} /></button></div><span className="hero-number">01 <span>/ 06</span></span></section>
+          <SearchBar dates={dates} onChange={setDates} onSearch={search} />
+          <div className="dashboard-grid"><section className="recommendations"><div className="section-heading"><div><p className="eyebrow">A LITTLE INSPIRATION</p><h2>Your next great drive.</h2></div><button className="text-link" onClick={() => navigate('fleet')}>View all cars<Icon name="arrow" size={16} /></button></div><div className="recommendation-cards">{vehicles.slice(0, 2).map(card)}</div><div className="trust-strip"><span><Icon name="shield" size={16} />Well-maintained. Road-ready.</span><span><Icon name="check" size={16} />Transparent pricing</span><span><Icon name="heart" size={16} />A human touch</span></div></section>
+          <section className="next-trip-panel"><div className="section-heading"><div><p className="eyebrow">SOMETHING TO LOOK FORWARD TO</p><h2>Your next trip.</h2></div><span className="trip-count">{String(upcoming.length).padStart(2, '0')}</span></div>{nextTrip ? <div className="next-trip-card glass"><div className="next-trip-head"><Status value={nextTrip.status} /><span className="sample-label">{nextTrip.sample ? 'SAMPLE TRIP' : nextTrip.id}</span></div><div className="next-trip-vehicle"><img src={vehicleFor(nextTrip).image} alt={vehicleFor(nextTrip).name} /><div><span>{vehicleFor(nextTrip).category} · {vehicleFor(nextTrip).transmission}</span><h3>{vehicleFor(nextTrip).name}</h3><small>{nextTrip.days} days of new possibilities</small></div></div><div className="next-trip-dates"><div><span>PICK-UP</span><strong>{prettyDate(nextTrip.start)}</strong><small>{nextTrip.startTime} AM</small></div><Icon name="arrow" size={18} /><div><span>RETURN</span><strong>{prettyDate(nextTrip.end)}</strong><small>{nextTrip.endTime} AM</small></div></div><div className="trip-location"><Icon name="pin" size={16} /><span>{nextTrip.pickup}</span></div><button className="button button-outline full-width" onClick={() => setModal({ type: 'trip', booking: nextTrip })}>View booking details<Icon name="arrow" size={16} /></button></div> : <div className="next-trip-card"><EmptyState icon="road" title="The road is calling." description="Your next adventure belongs right here." action="Find your ride" onAction={() => navigate('fleet')} /></div>}</section></div>
+          <section className="essentials-banner"><span className="essentials-icon"><Icon name="file" size={24} /></span><div><h3>Less paperwork. More possibilities.</h3><p>Get your documents ready now for a smoother booking later.</p></div><span className="document-progress">{documentCount}/3 uploaded</span><button className="button button-outline" onClick={() => navigate('documents')}>My documents<Icon name="diagonal" size={16} /></button></section>
+        </>}
+
+        {(page === 'fleet' || page === 'saved') && <>
+          {page === 'fleet' && <SearchBar dates={dates} onChange={setDates} onSearch={search} />}
+          <div className="fleet-toolbar"><div className="category-tabs" role="group" aria-label="Vehicle categories">{['All cars', 'Sedan', 'SUV', 'Luxury', 'Electric'].map(c => <button key={c} className={category === c ? 'active' : ''} onClick={() => setCategory(c)}>{c === 'Electric' && <Icon name="bolt" size={14} />}{c}</button>)}</div><div className="fleet-controls"><label className="fleet-search"><Icon name="search" size={17} /><input id="fleet-search" type="search" placeholder="Find a vehicle…" value={query} onChange={e => setQuery(e.target.value)} aria-label="Search vehicle names" /></label><button className={`button button-outline filter-button ${filtersOpen ? 'selected' : ''}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen(!filtersOpen)}><Icon name="filter" size={17} />Filters</button></div></div>
+          {filtersOpen && <div className="filter-panel"><label className="form-field">Maximum daily rate · {money(maxRate)}<input type="range" min="2500" max="10000" step="100" value={maxRate} onChange={e => setMaxRate(Number(e.target.value))} /></label><label className="form-field">Seating<select value={seats} onChange={e => setSeats(e.target.value)}><option value="any">Any capacity</option><option value="5">5 or more seats</option></select></label><label className="form-field">Transmission<select value={transmission} onChange={e => setTransmission(e.target.value)}><option value="any">All transmissions</option><option>Automatic</option><option>Manual</option></select></label><label className="checkbox-label"><input type="checkbox" checked={onlyAvailable} onChange={e => setOnlyAvailable(e.target.checked)} />Available for these dates</label><button className="text-link" onClick={() => { setMaxRate(10000); setSeats('any'); setTransmission('any'); setOnlyAvailable(false); setQuery(''); setCategory('All cars') }}>Reset filters</button></div>}
+          <div className="results-header"><p><strong>{filtered.length}</strong> {page === 'saved' ? 'saved rides' : 'rides for your next chapter'}<span> · {prettyDate(dates.start)} – {prettyDate(dates.end)}</span></p><label>Sort by<select aria-label="Sort vehicles" value={sort} onChange={e => setSort(e.target.value)}><option value="recommended">Recommended</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Highest rated</option></select></label></div>
+          {filtered.length ? <div className="fleet-grid">{filtered.map(card)}</div> : <EmptyState icon={page === 'saved' ? 'heart' : 'search'} title={page === 'saved' && !saved.length ? 'Keep a little inspiration.' : 'A different route, perhaps?'} description={page === 'saved' && !saved.length ? 'Tap the heart on a car you love. We’ll keep it right here.' : 'Try another category, date range, or search to find your ride.'} action="Explore all cars" onAction={() => { setQuery(''); setCategory('All cars'); setMaxRate(10000); setSeats('any'); setTransmission('any'); setOnlyAvailable(false); navigate('fleet') }} />}
+          <div className="fleet-note"><Icon name="info" size={17} />Preview availability reflects reservations stored in this browser. Vehicle photos are illustrative.</div>
+        </>}
+
+        {page === 'bookings' && <><div className="bookings-header"><div className="pill-tabs" role="group" aria-label="Booking view">{['Upcoming', 'Past trips', 'All bookings'].map(t => <button key={t} className={bookingTab === t ? 'active' : ''} onClick={() => setBookingTab(t)}>{t}<span>{t === 'Upcoming' ? upcoming.length : t === 'Past trips' ? completed.length : bookings.length}</span></button>)}</div><button className="button button-dark" onClick={() => navigate('fleet')}>Plan a new trip<Icon name="diagonal" size={17} /></button></div><div className="booking-list">{(bookingTab === 'Upcoming' ? upcoming : bookingTab === 'Past trips' ? completed : bookings).map(booking => <article className="booking-list-card" key={booking.id}><img src={vehicleFor(booking).image} alt={vehicleFor(booking).name} /><div className="booking-list-info"><div className="booking-list-meta"><span>{booking.id}{booking.sample && ' · SAMPLE TRIP'}</span><Status value={booking.status} /></div><h2>{vehicleFor(booking).name}</h2><p><Icon name="calendar" size={15} />{prettyDate(booking.start, { year: 'numeric' })} – {prettyDate(booking.end, { year: 'numeric' })}<span>·</span>{booking.days} days</p><p><Icon name="pin" size={15} />{booking.pickup}</p><TripTimeline status={booking.status} compact /></div><div className="booking-list-actions"><span className="vehicle-price">{money(booking.total)}<small> incl. deposit</small></span><button className="button button-outline" onClick={() => setModal({ type: 'trip', booking })}>View details<Icon name="arrow" size={16} /></button></div></article>)}</div>{!(bookingTab === 'Upcoming' ? upcoming : bookingTab === 'Past trips' ? completed : bookings).length && <EmptyState icon="road" title="Your next chapter is unwritten." description="Choose a ride and make some new memories." action="Explore the fleet" onAction={() => navigate('fleet')} />}</>}
+
+        {page === 'documents' && <><div className="documents-layout"><section className="surface-card documents-card"><div className="section-heading"><div><span className="eyebrow">READY WHEN YOU ARE</span><h2>Your travel essentials.</h2></div><span className="count-pill">{documentCount} of 3 uploaded</span></div><p className="muted">A valid driver’s license and two different government-issued IDs help get your journey started. Files can be PDF, JPG, PNG or WebP, up to 5 MB each.</p><div className="document-completion"><span style={{ width: `${documentCount / 3 * 100}%` }} /></div><div className="upload-stack">{requiredDocuments.map(doc => <div key={doc.id}><UploadField documentId={doc.id} label={doc.label} value={documents[doc.id]} onUpload={value => onDocument(doc.id, value)} />{documents[doc.id] && <div className="uploaded-meta"><span>Uploaded {new Date(documents[doc.id].uploadedAt).toLocaleDateString('en-PH')} · Ready to submit</span><button className="text-link" onClick={() => downloadDocument(doc.id)}>Download<Icon name="download" size={13} /></button></div>}</div>)}</div></section><aside className="document-guidance"><span className="guidance-icon"><Icon name="shield" size={30} /></span><p className="eyebrow">A CLEAR PICTURE HELPS</p><h2>Good to go,<br />from the get-go.</h2><ul><li><Icon name="check" size={17} />Use clear, readable images.</li><li><Icon name="check" size={17} />Include all four corners of each ID.</li><li><Icon name="check" size={17} />Make sure your documents are valid.</li><li><Icon name="check" size={17} />Choose two different government IDs.</li></ul><div className="info-note"><Icon name="info" size={18} /><span>Preview storage only. Files remain in this browser and are not sent for real identity verification. Clearing site data removes them.</span></div></aside></div><section className="surface-card generated-documents"><div className="section-heading"><div><span className="eyebrow">THE DETAILS, TAKEN CARE OF</span><h2>Agreements & receipts.</h2></div></div>{bookings.map(b => <div className="generated-row" key={b.id}><span className="file-symbol"><Icon name="file" /></span><div><strong>{vehicleFor(b).name}</strong><small>{b.id} · {prettyDate(b.start)}{b.sample ? ' · Sample' : ''}</small></div><button className="button button-outline" onClick={() => downloadBooking(b, 'agreement')}><Icon name="download" size={16} />Draft agreement</button><button className="button button-outline" onClick={() => downloadBooking(b, 'receipt')}><Icon name="download" size={16} />Receipt</button></div>)}<p className="small muted">Downloads are printable HTML files. Open one and choose Print → Save as PDF for a PDF copy.</p></section></>}
+
+        {page === 'payments' && <><div className="billing-stats"><div className="billing-stat"><span className="stat-symbol"><Icon name="wallet" size={23} /></span><div><span>Total rental quotations</span><strong>{money(bookings.reduce((sum, b) => sum + b.rental, 0))}</strong><small>Across {bookings.length} preview bookings</small></div></div><div className="billing-stat"><span className="stat-symbol sage"><Icon name="shield" size={23} /></span><div><span>Upcoming security deposits</span><strong>{money(upcoming.reduce((sum, b) => sum + b.deposit, 0))}</strong><small>Refundable, subject to final inspection</small></div></div><div className="billing-stat"><span className="stat-symbol warm"><Icon name="clock" size={23} /></span><div><span>Awaiting payment review</span><strong>{bookings.filter(b => b.paymentStatus === 'Awaiting verification').length}</strong><small>Payment proofs submitted in this preview</small></div></div></div><section className="surface-card billing-table-card"><div className="section-heading"><div><span className="eyebrow">EVERYTHING IN ONE PLACE</span><h2>Your billing history.</h2></div><span className="mini-tag">SIMULATED PAYMENTS</span></div><div className="table-scroll"><table className="billing-table"><thead><tr><th>Booking / vehicle</th><th>Rental</th><th>Deposit</th><th>Total</th><th>Payment status</th><th><span className="sr-only">Downloads</span></th></tr></thead><tbody>{bookings.map(b => <tr key={b.id}><td><strong>{vehicleFor(b).name}</strong><small>{b.id}{b.sample ? ' · Sample' : ''}</small></td><td>{money(b.rental)}</td><td>{money(b.deposit)}</td><td><strong>{money(b.total)}</strong></td><td><span className={`status ${b.paymentStatus === 'Awaiting verification' ? 'status-pending' : 'status-completed'}`}>{b.paymentStatus}</span>{b.proofId && <button className="text-link proof-link" onClick={() => downloadDocument(b.proofId)}>View proof</button>}</td><td><button className="icon-button" aria-label={`Download receipt for ${b.id}`} onClick={() => downloadBooking(b, 'receipt')}><Icon name="download" size={18} /></button></td></tr>)}</tbody></table></div><div className="billing-footnote"><Icon name="info" size={17} />This client preview does not collect, verify, or refund real payments.</div></section></>}
+        <footer className="page-footer"><span>Go places. Make memories. <strong>drivepulse.</strong></span><span>Thoughtfully made for your journey.<span className="footer-dot" />Client portal</span></footer>
+      </div>
+    </main>
+    </>}
+
+    {modal?.type === 'booking' && <BookingModal vehicle={modal.vehicle} initialDates={dates} bookings={bookings} documents={documents} onDocument={onDocument} onReserve={reserve} onClose={() => setModal(null)} onViewTrips={() => { setModal(null); setBookingTab('Upcoming'); navigate('bookings') }} />}
+    {modal?.type === 'vehicle' && <Modal title={modal.vehicle.name} eyebrow={modal.vehicle.label.toUpperCase()} wide onClose={() => setModal(null)}><div className="vehicle-detail-layout"><img className="vehicle-detail-image" src={modal.vehicle.image} alt={modal.vehicle.name} /><div className="vehicle-detail-copy"><span className="rating"><Icon name="star" size={15} />{modal.vehicle.rating}<span className="muted"> · {modal.vehicle.trips} sample trips</span></span><h3>{modal.vehicle.tagline}</h3><p className="muted">{modal.vehicle.description}</p><div className="detail-spec-grid"><span><Icon name="users" />{modal.vehicle.seats} seats</span><span><Icon name="gear" />{modal.vehicle.transmission}</span><span><Icon name="fuel" />{modal.vehicle.fuel}</span><span><Icon name="car" />{modal.vehicle.category}</span></div><div className="detail-inclusions"><span><Icon name="check" size={15} />Air conditioning</span><span><Icon name="check" size={15} />Bluetooth audio</span><span><Icon name="check" size={15} />{modal.vehicle.luggage} bags</span></div><div className="detail-price"><span className="vehicle-price">{money(modal.vehicle.rate)}<small> / day</small></span><span className="small muted">+ {money(5000)} refundable deposit</span></div><button className="button button-dark full-width" disabled={!isAvailable(modal.vehicle.id, dates, bookings)} onClick={() => setModal({ type: 'booking', vehicle: modal.vehicle })}>{isAvailable(modal.vehicle.id, dates, bookings) ? 'Make this ride yours' : 'Reserved for your selected dates'}<Icon name="arrow" size={18} /></button><p className="small muted">Selected dates: {prettyDate(dates.start)} – {prettyDate(dates.end)} · Photos are illustrative.</p></div></div></Modal>}
+    {modal?.type === 'trip' && <Modal title="Every step of your journey." eyebrow={`${modal.booking.id}${modal.booking.sample ? ' · SAMPLE BOOKING' : ''}`} wide onClose={() => setModal(null)}><TripDetails booking={modal.booking} onDownload={kind => downloadBooking(modal.booking, kind)} /></Modal>}
+    {modal?.type === 'profile' && <Modal title="Make yourself at home." eyebrow="YOUR CLIENT PROFILE" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); const data = new FormData(e.currentTarget); const name = String(data.get('name')).trim(); if (!name) return; if (persist('profile', { name, email: String(data.get('email')).trim() }, setProfile)) { setModal(null); notify('Your profile has been updated on this device.') } }}><div className="profile-intro"><span className="avatar large-avatar">{initials}</span><p className="muted">A few details to make your journey more personal.</p></div><label className="form-field">Full name<input required name="name" autoComplete="name" defaultValue={profile.name} maxLength={70} /></label><label className="form-field">Email address<input required name="email" type="email" autoComplete="email" defaultValue={profile.email} maxLength={120} /></label><div className="info-note"><Icon name="info" size={18} /><span>This is a local preview profile. Updating it does not create or change an authenticated account.</span></div><button className="button button-dark full-width" type="submit">Save my details<Icon name="check" size={17} /></button></form></Modal>}
+    {modal?.type === 'help' && <Modal title="A smoother journey starts here." eyebrow="YOUR PERSONAL PIT STOP" onClose={() => setModal(null)}><p className="muted">A few helpful answers before you hit the road.</p><div className="faq-list">{[{ q: 'What do I need to book a vehicle?', a: 'Choose your dates and locations, upload a valid driver’s license and two different government-issued IDs, then choose simulated checkout or upload a payment proof. Your booking starts as Pending Approval.' }, { q: 'How is my quotation calculated?', a: 'The daily rate is charged for each started 24-hour period. A ₱5,000 refundable security deposit is added to the rental total. Fuel, tolls, and additional charges are excluded.' }, { q: 'How do I track my reservation?', a: 'Open My bookings and select View details. The tracker shows Pending Approval → Ready for Dispatch → On Rental → Completed. This client preview does not include staff approval or dispatch controls.' }, { q: 'Where are my documents and payments stored?', a: 'All files and reservations stay in this browser. Clearing site data removes them. Checkout is simulated, and no actual money is collected. Sample trips show how the portal will look.' }, { q: 'Can I get a PDF agreement or receipt?', a: 'Download the printable agreement or receipt from My documents or the booking details. Open the HTML file, choose Print, then Save as PDF. Agreements are demo drafts until confirmed and signed.' }].map(faq => <details key={faq.q}><summary>{faq.q}<Icon name="down" size={17} /></summary><p>{faq.a}</p></details>)}</div><button className="button button-dark full-width" onClick={() => { setModal(null); navigate('fleet') }}>Find my next ride<Icon name="arrow" size={17} /></button></Modal>}
+    {toast && <div className="toast" role="status"><span><Icon name="check" size={17} /></span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast('')}><Icon name="close" size={15} /></button></div>}
+  </div>
+}
+
+function TripDetails({ booking, onDownload }) {
+  const vehicle = vehicleFor(booking)
+  return <div className="trip-detail"><div className="trip-detail-top"><img src={vehicle.image} alt={vehicle.name} /><div><Status value={booking.status} /><h3>{vehicle.name}</h3><p className="muted">{vehicle.category} · {vehicle.transmission} · {vehicle.seats} seats</p><p className="small muted">{booking.sample ? 'An illustrative booking to show the experience.' : 'Saved on this device. No real booking has been sent.'}</p></div></div><TripTimeline status={booking.status} /><div className="trip-detail-grid"><div className="trip-stop"><span className="eyebrow">PICK-UP</span><h3>{prettyDate(booking.start, { year: 'numeric' })} · {booking.startTime}</h3><p><Icon name="pin" size={16} />{booking.pickup}</p></div><div className="trip-stop"><span className="eyebrow">RETURN</span><h3>{prettyDate(booking.end, { year: 'numeric' })} · {booking.endTime}</h3><p><Icon name="pin" size={16} />{booking.dropoff}</p></div></div><div className="trip-detail-billing"><div><span>Vehicle rental · {booking.days} days</span><strong>{money(booking.rental)}</strong></div><div><span>Refundable security deposit</span><strong>{money(booking.deposit)}</strong></div><div className="total"><span>Total quotation</span><strong>{money(booking.total)}</strong></div><div><span>{booking.payment}</span><span className="status status-completed">{booking.paymentStatus}</span></div></div><div className="info-note"><Icon name="info" size={18} /><span>{booking.status === 'Pending Approval' ? 'Your reservation is awaiting staff review. This preview saves the request locally; it is not sent to a rental company.' : booking.status === 'Ready for Dispatch' ? 'Your sample ride is ready for dispatch. Bring your original license and IDs for pick-up.' : booking.status === 'On Rental' ? 'Enjoy the journey. Return your vehicle at the agreed location and time.' : 'A chapter well travelled. Your agreement and receipt are ready to download.'}</span></div><div className="trip-downloads"><button className="button button-outline" onClick={() => onDownload('agreement')}><Icon name="download" size={17} />Download draft agreement</button><button className="button button-dark" onClick={() => onDownload('receipt')}><Icon name="download" size={17} />Download receipt</button></div><p className="small muted">Printable HTML downloads · All times in Philippine Standard Time.</p></div>
+}
+
+export default App
