@@ -53,11 +53,11 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
         const booking = {
           id: `DP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`, vehicleId: vehicle.id, ...dates, days, rental, deposit, total,
           status: 'Pending Approval', payment: method === 'demo' ? 'Demo checkout' : 'Payment proof',
-          paymentStatus: method === 'demo' ? 'Simulated · paid' : 'Awaiting verification', proofId: method === 'proof' ? proofId : null,
-          documents: requiredDocuments.map(d => ({ id: d.id, name: documents[d.id].name })), createdAt: new Date().toISOString(),
+          paymentStatus: 'Awaiting verification', proofId: method === 'proof' ? proof.id : null,
+          documents: requiredDocuments.map(d => ({ id: documents[d.id].id, kind: d.id, name: documents[d.id].name })), createdAt: new Date().toISOString(),
         }
-        await onReserve(booking)
-        setReservation(booking)
+        const savedBooking = await onReserve(booking)
+        setReservation(savedBooking)
       } catch (err) { setError(err.message || 'Could not save the reservation. Please try again.') }
       finally { submitting.current = false; setBusy(false) }
     }
@@ -67,7 +67,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
     <div className="success-mark"><Icon name="check" size={34} /></div>
     <p className="success-copy">Your {vehicle.name} is reserved for {prettyDate(dates.start)} – {prettyDate(dates.end)}. Your documents are ready for review.</p>
     <div className="success-reference"><span>Booking reference</span><strong>{reservation.id}</strong><span className="status status-pending">Pending Approval</span></div>
-    <p className="small muted">This is a browser-local preview. No real reservation or payment has been sent.</p>
+    <p className="small muted">Your request is ready for the booking team. Payments in this development workspace are simulated.</p>
     <button className="button button-dark full-width" onClick={onViewTrips}>Track my booking<Icon name="arrow" size={18} /></button>
   </Modal>
 
@@ -86,7 +86,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
             <label className="form-field">Return time<input required type="time" value={dates.endTime} onChange={e => update('endTime', e.target.value)} /></label>
           </div><p className="timezone-note"><Icon name="clock" size={14} /> All times are Philippine Standard Time (UTC+8).</p>
         </div>}
-        {step === 1 && <div className="step-content"><h3>A little paperwork. Then freedom.</h3><p className="muted small">Upload a valid license and two different government-issued IDs. PDF, JPG, PNG or WebP, up to 5 MB each.</p><div className="upload-stack">{requiredDocuments.map(doc => <UploadField key={doc.id} documentId={doc.id} label={doc.label} value={documents[doc.id]} onUpload={value => onDocument(doc.id, value)} />)}</div><div className="info-note"><Icon name="shield" size={18} /><span>Files stay in this browser for this preview. Uploading a file does not verify your identity.</span></div></div>}
+        {step === 1 && <div className="step-content"><h3>A little paperwork. Then freedom.</h3><p className="muted small">Upload a valid license and two different government-issued IDs. PDF, JPG, PNG or WebP, up to 5 MB each.</p><div className="upload-stack">{requiredDocuments.map(doc => <UploadField key={doc.id} documentId={doc.id} label={doc.label} value={documents[doc.id]} onUpload={value => onDocument(doc.id, value)} />)}</div><div className="info-note"><Icon name="shield" size={18} /><span>Your documents are uploaded for booking-agent review. An upload alone does not verify your identity.</span></div></div>}
         {step === 2 && <div className="step-content"><h3>One last stop before you go.</h3><p className="muted small">Choose how you’d like to complete your booking.</p><div className="payment-options">
           <label className={`payment-option ${method === 'demo' ? 'selected' : ''}`}><input type="radio" name="payment" checked={method === 'demo'} onChange={() => setMethod('demo')} /><Icon name="card" /><span><strong>Simulated checkout</strong><small>Try the full flow. No card or charge.</small></span><span className="mini-tag">DEMO</span></label>
           <label className={`payment-option ${method === 'proof' ? 'selected' : ''}`}><input type="radio" name="payment" checked={method === 'proof'} onChange={() => setMethod('proof')} /><Icon name="upload" /><span><strong>Upload payment proof</strong><small>Submit a receipt for review in this preview.</small></span></label>

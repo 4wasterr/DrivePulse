@@ -41,7 +41,7 @@
 .text-link { color: #333; min-height: 44px; font-size: 15px; }
 .text-link:hover { color: #000; }
 .hero { height: 440px; background: #171717; }
-.hero-image { filter: grayscale(1); }
+.hero-image { filter: none; }
 .hero-overlay { background: linear-gradient(90deg,#000000e8 0%,#000000a8 40%,#00000000 80%); }
 .hero-copy { padding: 38px; }
 .hero-copy h2 { font-size: clamp(44px, 4vw, 62px); }

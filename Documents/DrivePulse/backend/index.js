@@ -1,22 +1,7 @@
-const express = require('express');
-const cors = require('cors');
 require('dotenv').config();
-
-const app = express();
-const PORT = process.env.PORT || 5000;
-
-// Enable CORS specifically allowing your frontend's URL
-app.use(cors({
-  origin: 'http://localhost:5173', // Vite's default dev server port
-  credentials: true
-}));
-
-app.use(express.json());
-
-app.get('/api/hello', (req, res) => {
-  res.json({ message: 'Hello from the separate backend folder!' });
-});
-
-app.listen(PORT, () => {
-  console.log(`Backend server running on http://localhost:${PORT}`);
-});
+const { createApp } = require('./app');
+const { app, db } = createApp();
+const server = app.listen(Number(process.env.PORT || 5000), process.env.HOST || '127.0.0.1', () => console.log(`DrivePulse API ready on http://${process.env.HOST || '127.0.0.1'}:${process.env.PORT || 5000}`));
+function shutdown() { server.close(() => { db.close(); process.exit(0); }); }
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

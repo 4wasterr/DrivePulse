@@ -13,10 +13,11 @@ const steps = [
   { number: '03', icon: 'road', title: 'Keep the journey in view.', copy: 'Follow your booking status and keep your trip details, documents, and receipts together in your portal.' },
 ]
 
-export default function LandingPage({ onNavigate, renderVehicle, searchBar, onFeature }) {
+export default function LandingPage({ user, onNavigate, renderVehicle, searchBar, onFeature }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const featured = ['bmw-3', 'porsche-panamera', 'range-rover'].map(id => vehicles.find(vehicle => vehicle.id === id))
   const closeMenu = () => setMenuOpen(false)
+  const portal = user?.role === 'agent' ? 'agent-overview' : user ? 'overview' : 'login'
 
   return <>
     <a className="skip-link" href="#landing-main">Skip to content</a>
@@ -27,10 +28,13 @@ export default function LandingPage({ onNavigate, renderVehicle, searchBar, onFe
           <a href="#fleet" onClick={closeMenu}>Explore the fleet</a>
           <a href="#how-it-works" onClick={closeMenu}>How it works</a>
           <a href="#why-drivepulse" onClick={closeMenu}>Why DrivePulse</a>
-          <a className="landing-mobile-portal" href="#overview" onClick={closeMenu}>My portal <Icon name="arrow" /></a>
+          <a className="landing-mobile-portal" href={`#${portal}`} onClick={closeMenu}>{user ? 'My workspace' : 'Sign in'} <Icon name="arrow" /></a>
+          {!user && <a className="landing-mobile-portal" href="#signup" onClick={closeMenu}>Create account <Icon name="arrow" /></a>}
+          <a className="landing-mobile-portal" href="#agent-login" onClick={closeMenu}>Booking agent sign in <Icon name="arrow" /></a>
         </nav>
         <div className="landing-header-actions">
-          <a className="button button-dark landing-portal" href="#overview">My portal <Icon name="diagonal" /></a>
+          {!user && <a className="landing-signin" href="#login">Sign in</a>}
+          <a className="button button-dark landing-portal" href={`#${user ? portal : 'signup'}`}>{user ? 'My workspace' : 'Get started'} <Icon name="diagonal" /></a>
           <button className="icon-button landing-menu-toggle" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-controls="landing-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}><Icon name={menuOpen ? 'close' : 'menu'} size={24} /></button>
         </div>
       </div>
@@ -56,7 +60,7 @@ export default function LandingPage({ onNavigate, renderVehicle, searchBar, onFe
       <section className="landing-container landing-fleet landing-section" aria-labelledby="landing-fleet-title">
         <div className="landing-section-heading"><div><p className="landing-eyebrow">A RIDE FOR EVERY REASON</p><h2 id="landing-fleet-title">Good plans deserve a great car.</h2></div><a className="landing-text-link" href="#fleet">View all vehicles <Icon name="arrow" size={22} /></a></div>
         <div className="landing-vehicle-grid">{featured.map(renderVehicle)}</div>
-        <p className="landing-fleet-note"><Icon name="info" size={17} /> Illustrative fleet and ratings. Daily rates are in PHP; availability reflects this browser’s preview bookings.</p>
+        <p className="landing-fleet-note"><Icon name="info" size={17} /> Illustrative fleet and ratings. Daily rates are in PHP; availability reflects current fleet reservations.</p>
       </section>
 
       <section className="landing-how-section" id="how-it-works" aria-labelledby="how-title">
@@ -71,9 +75,9 @@ export default function LandingPage({ onNavigate, renderVehicle, searchBar, onFe
         <div className="landing-why-copy"><p className="landing-eyebrow">THE DETAILS MAKE THE DIFFERENCE</p><h2 id="why-title">More clarity.<br />More open road.</h2><p>A thoughtful rental experience starts with knowing what to expect. Explore your options and keep every detail close.</p><ul><li><Icon name="check" /><span><strong>A clear quotation.</strong>See the daily rental and refundable deposit before you reserve.</span></li><li><Icon name="check" /><span><strong>Your journey, in one place.</strong>Keep track of bookings, uploaded documents, and receipts.</span></li><li><Icon name="check" /><span><strong>A car for your plans.</strong>Explore sedans, SUVs, luxury cars, and electric rides.</span></li></ul></div>
       </section>
 
-      <section className="landing-cta" aria-labelledby="cta-title"><div className="landing-container landing-cta-inner"><div><p className="landing-eyebrow">YOUR NEXT CHAPTER IS OUT THERE</p><h2 id="cta-title">A little freedom.<br />A lot of possibility.</h2></div><div><a className="button landing-button-light" href="#fleet">Find my next ride <Icon name="diagonal" size={22} /></a><button className="landing-cta-portal" onClick={() => onNavigate('overview')}>Already planning? Open my portal <Icon name="arrow" size={19} /></button></div></div></section>
+      <section className="landing-cta" aria-labelledby="cta-title"><div className="landing-container landing-cta-inner"><div><p className="landing-eyebrow">YOUR NEXT CHAPTER IS OUT THERE</p><h2 id="cta-title">A little freedom.<br />A lot of possibility.</h2></div><div><a className="button landing-button-light" href="#fleet">Find my next ride <Icon name="diagonal" size={22} /></a><button className="landing-cta-portal" onClick={() => onNavigate(portal)}>Already planning? Open my portal <Icon name="arrow" size={19} /></button></div></div></section>
     </main>
 
-    <footer className="landing-footer"><div className="landing-container"><div className="landing-footer-top"><div><Brand /><p>Go places. Make memories.</p></div><nav aria-label="Explore"><span>EXPLORE</span><a href="#fleet">Our fleet</a><a href="#how-it-works">How it works</a><a href="#why-drivepulse">Why DrivePulse</a></nav><nav aria-label="Your journey"><span>YOUR JOURNEY</span><a href="#overview">Client portal</a><a href="#bookings">My bookings</a><a href="#documents">My documents</a></nav><div className="landing-footer-location"><span>FIND YOUR OPEN ROAD</span><p><Icon name="pin" size={19} />Metro Manila, Philippines</p><small>A car for every kind of chapter.</small></div></div><div className="landing-footer-bottom"><span>© {new Date().getFullYear()} DrivePulse.</span><p>Client preview · Bookings and files stay in this browser. No real reservations or payments.</p><a href="#home">Back to top <Icon name="arrow" size={17} /></a></div></div></footer>
+    <footer className="landing-footer"><div className="landing-container"><div className="landing-footer-top"><div><Brand /><p>Go places. Make memories.</p></div><nav aria-label="Explore"><span>EXPLORE</span><a href="#fleet">Our fleet</a><a href="#how-it-works">How it works</a><a href="#why-drivepulse">Why DrivePulse</a></nav><nav aria-label="Your journey"><span>YOUR JOURNEY</span><a href="#overview">Client portal</a><a href="#bookings">My bookings</a><a href="#documents">My documents</a><a href="#agent-login">Booking agent sign in</a></nav><div className="landing-footer-location"><span>FIND YOUR OPEN ROAD</span><p><Icon name="pin" size={19} />Metro Manila, Philippines</p><small>A car for every kind of chapter.</small></div></div><div className="landing-footer-bottom"><span>© {new Date().getFullYear()} DrivePulse.</span><p>Development workspace. Payments are simulated.</p><a href="#home">Back to top <Icon name="arrow" size={17} /></a></div></div></footer>
   </>
 }

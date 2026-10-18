@@ -17,7 +17,7 @@
 .skip-link:focus { top: 16px; }
 #landing-main { outline: none; }
 .landing-hero { position: relative; isolation: isolate; color: #fff; background: #151515; overflow: hidden; }
-.landing-hero-photo { position: absolute; inset: 0; z-index: -2; background: url('/images/hero-porsche.jpg') 58% 55%/cover no-repeat; filter: grayscale(1); }
+.landing-hero-photo { position: absolute; inset: 0; z-index: -2; background: url('/images/hero-porsche.jpg') 58% 55%/cover no-repeat; filter: none; }
 .landing-hero::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg,#080808ee 0%,#080808c9 32%,#08080840 70%),linear-gradient(0deg,#080808b3,transparent 45%); }
 .landing-hero-inner { min-height: 680px; position: relative; display: flex; align-items: center; padding-block: 80px 100px; }
 .landing-hero-copy { max-width: 850px; }

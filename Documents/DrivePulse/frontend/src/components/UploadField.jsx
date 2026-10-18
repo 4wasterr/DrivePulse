@@ -1,8 +1,9 @@
 import { useId, useState } from 'react'
 import Icon from './Icon'
-import { putDocument, validateFile } from '../storage'
+import { validateFile } from '../storage'
+import { uploadDocument } from '../api'
 
-export default function UploadField({ documentId, label, value, onUpload }) {
+export default function UploadField({ documentId, label, value, onUpload, bookingId }) {
   const inputId = useId()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -12,11 +13,9 @@ export default function UploadField({ documentId, label, value, onUpload }) {
     setBusy(true)
     setError('')
     try {
-      await putDocument(documentId, file)
-      const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
-      const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
-      onUpload({ id: documentId, name: file.name, size: file.size, fingerprint, uploadedAt: new Date().toISOString() })
-    } catch { setError('This browser could not save the file. Please allow local storage and try again.') }
+      const uploaded = await uploadDocument(documentId, file, bookingId)
+      await onUpload(uploaded)
+    } catch (problem) { setError(problem.message || 'Your file could not be uploaded. Please try again.') }
     finally { setBusy(false) }
   }
   return <div className="upload-group">
