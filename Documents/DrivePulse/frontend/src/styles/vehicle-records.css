@@ -1,0 +1,8 @@
+.staff-caption { margin-block: 22px 15px; }
+.staff-report-readings { display: grid; grid-template-columns: repeat(3,1fr); gap: 15px; padding: 20px; background: #f4f4f4; border-radius: 8px; }
+.staff-report-readings span { display: block; color: #777; font-size: 12px; margin-bottom: 9px; }
+.staff-report-readings strong { font-size: 18px; }
+.staff-proof-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 25px; }
+.staff-proof-grid figure { margin: 0; min-width: 0; }
+.staff-proof-grid img { width: 100%; height: 220px; object-fit: contain; background: #f2f2f2; border: 1px solid #ddd; border-radius: 8px; }
+.staff-proof-grid figcaption { margin-top: 9px; font-size: 12px; color: #777; overflow-wrap: anywhere; }

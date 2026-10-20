@@ -31,6 +31,13 @@ test('invalid, past, and inverted rental periods cannot proceed', () => {
   assert.equal(rentalPeriodError(initialDates()), '')
 })
 
+test('operational holds block all dates and cannot appear as rentable vehicles', () => {
+  for (const status of ['Maintenance', 'Under Inspection', 'Out of Service', 'Overdue']) {
+    assert.equal(isAvailable('car-1', { start: '2099-01-01', end: '2099-01-02' }, [{ vehicleId: 'car-1', status, blocked: true }]), false)
+    assert.equal(isAvailable('car-2', { start: '2099-01-01', end: '2099-01-02' }, [{ vehicleId: 'car-1', status, blocked: true }]), true)
+  }
+})
+
 test('document uploads reject unsupported formats and files larger than 5 MB', () => {
   assert.equal(validateFile(new File(['sample'], 'license.pdf', { type: 'application/pdf' })), null)
   assert.equal(validateFile(new File(['sample'], 'id.png', { type: 'image/png' })), null)

@@ -1,10 +1,10 @@
 # DrivePulse
 
-A React rental website with separate authenticated client and booking-agent workspaces. The interface uses black, white, and neutral grays; car photographs keep their original colors.
+A React rental website with separate authenticated **Client**, **Booking Agent**, **Fleet Mechanic**, and **Operations Manager** workspaces. Designed around lightweight, by-exception governance so normal workflows are automated and the Operations Manager only intervenes on exceptions.
 
 ## Run locally
 
-Use Node.js 24 or later. Dependencies already present in `frontend/node_modules` and `backend/node_modules` can be reused. On a fresh checkout:
+Use Node.js 24 or later:
 
 ```sh
 npm --prefix frontend install
@@ -14,39 +14,39 @@ npm run dev
 
 Open http://127.0.0.1:5173. The root command runs both Vite and the Express API. In Windows PowerShell with script execution disabled, use `npm.cmd` instead of `npm`.
 
-You can also run `npm run dev` separately inside `backend` and `frontend`. The API uses port 5000 by default; Vite proxies `/api` requests to it. `npm run build` builds the frontend, and `npm test` runs both test suites.
+## Demo accounts
 
-## Accounts
+Sign in at `#login` using email and password:
 
-The landing page opens first. Client sign-in and registration are at `#login` and `#signup`; booking-agent sign-in and registration are at `#agent-login` and `#agent-signup`. Each account lands in its own workspace. Public fleet browsing remains available without signing in; reserving and saving a vehicle require a client account.
-
-The sign-in screens offer **Try client demo** and **Try agent demo** buttons in development. Seeded credentials are:
-
-| Account | Email | Password |
+| Role | Email | Password |
 | --- | --- | --- |
-| Client | client@drivepulse.demo | DrivePulse123! |
-| Booking agent | agent@drivepulse.demo | DrivePulse123! |
+| Client (End-User) | `client@drivepulse.demo` | `DrivePulse123!` |
+| Booking Agent (Front Desk) | `agent@drivepulse.demo` | `DrivePulse123!` |
+| Fleet Mechanic (Yard / Field) | `mechanic@drivepulse.demo` | `DrivePulse123!` |
+| Operations Manager (Governance & Admin) | `manager@drivepulse.demo` | `DrivePulse123!` |
 
-The demo includes labeled sample reservations, PDF review documents, pending payments, an active rental, and a customer query. New accounts start with their own records. Existing browser-local records from the previous frontend preview remain untouched but are not imported into the new service.
+## User Roles & System Responsibilities
 
-## Booking-agent workspace
+### 1. Client (*End-User*) — Demand & Consumption
+- Browses vehicle models, daily rates, availability, and capacity.
+- Submits bookings and uploads verification IDs (Driver’s License and two valid government IDs).
+- Processes payments/deposits and accesses official rental contracts, receipts, dispatch passes, and booking status.
 
-- **Reservations:** Search and filter online and walk-in bookings. Schedule walk-ins with a server-calculated quotation and exact-time availability validation. Matching client email addresses link walk-ins to the corresponding client portal.
-- **Availability:** Browse a seven-day vehicle calendar, move between weeks, choose dates, open reservations, and schedule from an available cell. Partial-day bookings are checked using exact times on submission.
-- **Customer verification:** Open actual uploaded PDFs/images, approve or reject each license and ID, and supply rejection notes. The three required documents must be distinct files. Replacements return verification to pending and invalidate any issued pass.
-- **Payments and billing:** Confirm or reject submitted payment records; record downpayments, rental balances, deposits, and additional charges with receipt references. Amounts cannot exceed their outstanding allocation.
-- **Dispatch:** Record an inspection checklist and issue a digital pass only when identity, rental payment, deposit, and inspection checks pass. Download a printable HTML pass or use Print → Save as PDF. Mark the vehicle dispatched to begin the rental.
-- **Adjustments:** Extend a rental with conflict checks and recalculated charges, cancel before dispatch with preserved payment/refund accounting, or record a return with configurable fees for started late hours. Extensions invalidate an existing pass; closed rentals cannot be rescheduled.
-- **Customer support:** Read client questions, open linked reservations, reply, and resolve or reopen conversations. Booking changes and staff actions are retained in the reservation activity log.
+### 2. Booking Agent (*Front Desk*) — Reservation & Intake Handling
+- **Unified Reservations & Intake:** Manages walk-in and online reservations, validates customer identity, confirms schedules, collects cash payments/security deposits, and issues digital dispatch passes from one unified queue.
+- **Availability Calendar:** Interactive 7-day fleet schedule with operational readiness holds.
+- **Adjustments & Customer Support:** Handles booking extensions, cancellations, returns, and support conversations.
+- **One-Click Soft Deletes:** Archives completed or cancelled historical bookings in one click to keep active queues clean.
 
-Clients can upload documents, reserve a vehicle, track staff updates, download an issued dispatch pass, and send extension/cancellation requests through Help & support. Both workspaces refresh from the service every 30 seconds and on window focus.
+### 3. Fleet Mechanic (*Yard / Field*) — Vehicle Health & Auditing
+- **Digital Checklists & Photo Proof:** Executes pre-dispatch and post-return checklists (tire pressures in PSI, odometer mileage, fuel/battery percentage, exterior scratches, interior cleanliness) with mandatory exterior and interior condition photographs.
+- **Automated Clean-Return Trigger:** Marking a post-return inspection *Safe*, *Clean*, with *zero damage flags* and *100% fuel* automatically triggers the 24–48 hour security deposit **Auto-Release** without requiring manager approval.
+- **Work Orders & Fleet Readiness:** Logs repair work and maintenance costs, flags unsafe cars as **Out of Service**, and submits vehicle decommission requests for manager confirmation.
 
-## Storage and security boundary
-
-The Express API stores users, sessions, bookings, payment records, conversations, and uploaded file bytes in SQLite at `backend/data/drivepulse.sqlite`. This directory is ignored by Git. `DB_PATH` can override it. Use `HOST`, `PORT`, and comma-separated `FRONTEND_ORIGIN` values to configure the development service.
-
-Passwords are salted and hashed with scrypt. Sessions use random tokens in HttpOnly, SameSite=Strict cookies; the database stores token hashes. All agent mutations enforce the staff role on the server. Client records and document downloads are scoped to the owner; public availability exposes only vehicle/time/status information. Server transactions protect reservations from overlaps; version checks reject stale staff updates. Uploaded files are limited to 5 MB and checked for supported signatures.
-
-This is a development implementation, not a live rental or payment integration. Payment confirmation records a staff decision and does not charge or refund money. Dispatch exports are development copies; the current server record must be checked before release. Agent self-registration is enabled for the requested preview; `NODE_ENV=production` disables agent self-registration and demo seeding by default. Production staff provisioning, password recovery, HTTPS hosting, backups, payment providers, file scanning, and business-specific rental policies require a deployment plan.
-
-The vehicle photos are illustrative local Unsplash assets; see `frontend/README.md` for attribution.
+### 4. Operations Manager (*Governance & Admin*) — Oversight, Auditing & Control
+- **Aggregated Dashboard & Fleet Oversight:** High-level operational counts (`Utilization %`, `Units Overdue`, `Critical Repairs`, `Exceptions Awaiting Review`), live deployment stages, anomaly drill-down filter, daily rate modifications, and vehicle decommissioning.
+- **By-Exception Financial & Policy Controls:** Clean returns auto-release deposits automatically; the Operations Manager only reviews **disputed/withheld deposits**, **cancelled rental refunds**, **overdue rental overrides**, and **driver risk overrides**.
+- **User Management & Telemetry:** Provisions staff and client accounts, manages role authority, deactivates employee/user accounts with confirmation, and tracks authentication telemetry (successful vs. failed login attempts and IP history).
+- **System Audit Logs & Threshold Alerts:** Automatically flags suspicious events (**Rate change > 20%**, **Failed login attempts**, **Off-hours deletions**, **Permanent record purges**, **Policy overrides**) on a dedicated notification widget while keeping raw forensic logs searchable with **Actor IDs** and **Old vs. New Value** mutation diffs.
+- **Data Archives:** Reviews, restores, or permanently purges soft-deleted bookings, deactivated users, and decommissioned vehicles.
+- **Macro Dashboards:** Reviews and exports fleet utilization percentages, net rental revenue growth, driver risk summaries, and maintenance costs.

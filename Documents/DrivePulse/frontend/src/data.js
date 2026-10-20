@@ -9,6 +9,7 @@ export const vehicles = [
 
 export const locations = ['Makati City, Metro Manila', 'BGC, Taguig City', 'NAIA Terminal 3, Pasay', 'Quezon City, Metro Manila']
 export const statuses = ['Pending Approval', 'Ready for Dispatch', 'On Rental', 'Completed']
+export const requiredDocuments = [{ id: 'license', label: "Driver’s license" }, { id: 'government-1', label: 'Government ID 1' }, { id: 'government-2', label: 'Government ID 2' }]
 export const money = (amount) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(amount)
 export const dateISO = (offset = 0) => {
   const date = new Date()
@@ -38,5 +39,5 @@ export function isAvailable(vehicleId, dates, bookings) {
   const start = tripTime(dates.start, dates.startTime)
   const end = tripTime(dates.end, dates.endTime)
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return false
-  return !bookings.some(b => b.vehicleId === vehicleId && !['Completed', 'Cancelled'].includes(b.status) && start < tripTime(b.end, b.endTime) && end > tripTime(b.start, b.startTime))
+  return !bookings.some(b => b.vehicleId === vehicleId && (b.blocked || !['Completed', 'Cancelled'].includes(b.status) && start < tripTime(b.end, b.endTime) && end > tripTime(b.start, b.startTime)))
 }

@@ -21,7 +21,7 @@ function time(date, hour = '10:00') {
   if (!Number.isFinite(stamp) || new Date(stamp + 8 * 3600000).toISOString().slice(0, 10) !== date) return NaN;
   return stamp;
 }
-function quote(input, allowPast = false) {
+function quote(input, allowPast = false, customRate = null) {
   const vehicle = FLEET.find(v => v.id === input.vehicleId);
   if (!vehicle) fail('Choose a vehicle from the fleet.');
   const start = time(input.start, input.startTime), end = time(input.end, input.endTime);
@@ -30,16 +30,18 @@ function quote(input, allowPast = false) {
   if (end - start > 366 * DAY) fail('A rental can be at most 366 days.');
   if (!LOCATIONS.includes(input.pickup) || !LOCATIONS.includes(input.dropoff)) fail('Choose supported pick-up and return locations.');
   const days = Math.ceil((end - start) / DAY);
-  return { days, rental: vehicle.rate * days, deposit: 5000, total: vehicle.rate * days + 5000 };
+  const dailyRate = typeof customRate === 'number' && customRate > 0 ? customRate : vehicle.rate;
+  return { days, rental: dailyRate * days, deposit: 5000, total: dailyRate * days + 5000 };
 }
 function available(bookings, input, exclude) {
-  return !bookings.some(b => b.id !== exclude && b.vehicleId === input.vehicleId && !['Cancelled', 'Completed'].includes(b.status) && time(input.start, input.startTime) < time(b.end, b.endTime) && time(input.end, input.endTime) > time(b.start, b.startTime));
+  return !bookings.some(b => !b.archivedAt && b.id !== exclude && b.vehicleId === input.vehicleId && !['Cancelled', 'Completed'].includes(b.status) && time(input.start, input.startTime) < time(b.end, b.endTime) && time(input.end, input.endTime) > time(b.start, b.startTime));
 }
 function billing(booking) {
-  const paid = type => (booking.payments || []).filter(p => p.type === type && p.status === 'confirmed').reduce((sum, p) => sum + p.amount, 0);
-  const rentalDue = booking.rental + (booking.lateFee || 0);
+  const paid = type => (booking.payments || []).filter(p => p.type === type && p.status === 'confirmed').reduce((sum, p) => sum + Math.round(p.amount * 100), 0) / 100;
+  const rentalDue = Math.round((booking.rental + (booking.lateFee || 0)) * 100) / 100;
   const rentalPaid = paid('rental'), depositPaid = paid('deposit');
-  return { rentalDue, rentalPaid, depositPaid, rentalBalance: Math.max(0, rentalDue - rentalPaid), depositBalance: Math.max(0, booking.deposit - depositPaid), totalPaid: rentalPaid + depositPaid, balance: Math.max(0, rentalDue - rentalPaid) + Math.max(0, booking.deposit - depositPaid) };
+  const rentalBalance = Math.max(0, Math.round((rentalDue - rentalPaid) * 100)) / 100, depositBalance = Math.max(0, Math.round((booking.deposit - depositPaid) * 100)) / 100;
+  return { rentalDue, rentalPaid, depositPaid, rentalBalance, depositBalance, totalPaid: Math.round((rentalPaid + depositPaid) * 100) / 100, balance: Math.round((rentalBalance + depositBalance) * 100) / 100 };
 }
 function verification(booking) {
   const docs = REQUIRED_DOCUMENTS.map(kind => (booking.documents || []).find(d => d.kind === kind));
@@ -51,7 +53,7 @@ function dispatchBlocks(booking) {
   if (verification(booking) !== 'Verified') blocks.push('Approve the license and both government IDs.');
   if (bill.rentalBalance > 0) blocks.push('Verify the full rental payment, including additional charges.');
   if (bill.depositBalance > 0) blocks.push('Record the full security deposit.');
-  if (booking.inspection?.status !== 'approved') blocks.push('Record an approved vehicle inspection.');
+  if (booking.inspection?.status !== 'approved' || booking.inspection?.role !== 'mechanic' || !booking.inspection?.photos?.length) blocks.push('A fleet mechanic must complete the digital pre-dispatch inspection with condition photos.');
   if (['Cancelled', 'Completed'].includes(booking.status)) blocks.push('This reservation is closed.');
   return blocks;
 }

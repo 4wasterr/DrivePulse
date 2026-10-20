@@ -1,0 +1,5 @@
+.staff-checklist { display: grid; gap: 14px; margin-block: 24px; }
+.staff-checklist .checkbox-label { align-items: flex-start; font-size: 13px; line-height: 1.7; }
+.staff-checklist input { margin-top: 4px; flex-shrink: 0; }
+.staff-photo-input { padding: 20px; border: 1px dashed #bbb; background: #fafafa; border-radius: 9px; min-width: 0; }
+.staff-photo-input input { font-size: 12px !important; padding: 8px !important; width: 100%; min-width: 0; }

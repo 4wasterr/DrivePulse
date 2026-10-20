@@ -1,0 +1,126 @@
+@media (max-width: 1500px) { .agent-overview-grid { grid-template-columns: 1fr; } .daily-movement { display: grid; grid-template-columns: 1fr 1fr; column-gap: 32px; } .daily-movement > .workspace-kicker,.daily-movement > h2 { grid-column: 1/-1; } .daily-movement > .button { grid-column: 1/-1; } }
+@media (max-width: 1150px) {
+  .auth-story { padding: 40px 32px; }
+  .auth-main { padding: 45px 35px; }
+  .agent-main { padding-inline: 26px; }
+  .agent-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .agent-page-heading { align-items: flex-start; flex-direction: column; gap: 22px; }
+  .agent-table-toolbar { flex-wrap: wrap; }
+  .agent-table-toolbar > div { flex-wrap: wrap; }
+  .dispatch-queue,.agent-support-grid { grid-template-columns: 1fr; }
+  .calendar-toolbar { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 1000px) {
+  .agent-sidebar { transform: translateX(-100%); transition: transform .25s; width: 292px; z-index: 65; }
+  .agent-sidebar.is-open { transform: translateX(0); box-shadow: 10px 0 50px #00000022; }
+  .agent-scrim { position: fixed; inset: 0; background: #00000077; z-index: 60; backdrop-filter: blur(3px); }
+  .agent-main { margin-left: 0; padding-inline: 32px; }
+  .agent-mobile-menu { display: inline-flex; }
+  .agent-page-heading { flex-direction: row; align-items: center; }
+  .agent-topbar { min-height: 83px; }
+  .agent-topbar-date { display: none; }
+  .auth-story-copy h2 { font-size: 36px; }
+  .auth-story-copy > p:not(.landing-eyebrow) { font-size: 15px; }
+  .auth-story-copy .landing-eyebrow { font-size: 10px; }
+  .auth-main h1 { font-size: 32px; }
+  .auth-role-tabs button { padding-inline: 16px; }
+}
+@media (max-width: 760px) {
+  .auth-page { grid-template-columns: 1fr; }
+  .auth-story { display: none; }
+  .auth-main { padding: 35px 24px 45px; min-height: 100dvh; align-items: flex-start; }
+  .auth-mobile-brand { display: inline-flex; font-size: 29px; margin-bottom: 34px; }
+  .auth-mobile-brand svg { width: 39px; height: 39px; }
+  .auth-role-tabs { display: flex; width: 100%; margin-bottom: 30px; }
+  .auth-role-tabs button { flex: 1; font-size: 14px; min-height: 46px; }
+  .auth-main h1 { font-size: 33px; }
+  .auth-description { font-size: 15px; }
+  .auth-form { margin-top: 27px; }
+  .auth-demo > div { flex-direction: column; }
+  .auth-demo .button { font-size: 14px; }
+  .auth-switch { font-size: 14px; }
+  .agent-main { padding-inline: 22px; }
+  .agent-page { padding-top: 28px; }
+  .agent-page-heading { flex-direction: column; align-items: flex-start; gap: 22px; margin-bottom: 27px; }
+  .agent-page-heading h1 { font-size: 30px; }
+  .agent-page-heading > div > p:last-child { font-size: 14px; }
+  .agent-topbar > div { font-size: 11px; gap: 8px; }
+  .agent-topbar > div > span:first-of-type { display: none; }
+  .agent-development-tag { font-size: 8px; }
+  .agent-topbar { gap: 8px; min-height: 76px; }
+  .agent-stats { gap: 13px; }
+  .agent-stat { padding: 19px 16px; }
+  .agent-stat > strong { font-size: 38px; margin-top: 23px; margin-bottom: 12px; }
+  .agent-stat > span:nth-last-child(2) { font-size: 13px; }
+  .agent-stat small { font-size: 11px; }
+  .workspace-surface { padding: 22px 18px; }
+  .workspace-section-heading { gap: 15px; align-items: flex-start; flex-wrap: wrap; }
+  .workspace-section-heading h2 { font-size: 22px; }
+  .workspace-section-heading .text-link { min-height: 32px; font-size: 13px; }
+  .workspace-section-heading .workspace-muted { font-size: 13px; }
+  .daily-movement { grid-template-columns: 1fr; }
+  .agent-table-toolbar { gap: 18px; }
+  .agent-table-toolbar > div { width: 100%; gap: 10px; }
+  .agent-table-toolbar select { flex: 1; min-width: 0; font-size: 14px; min-height: 48px; }
+  .agent-search { max-width: none; min-width: 100%; }
+  .agent-search input { font-size: 16px; }
+  .calendar-toolbar > div:last-child { flex-wrap: wrap; gap: 8px; }
+  .calendar-toolbar input { font-size: 16px; max-width: 170px; }
+  .calendar-toolbar h2 { font-size: 22px; }
+  .calendar-legend { gap: 12px 20px; }
+  .calendar-legend > span:last-child { width: 100%; }
+  .dispatch-queue-card > img { height: 230px; }
+  .dispatch-queue-card > div { padding: 20px; }
+  .dispatch-queue-card h3 { font-size: 22px; }
+  .dispatch-card-top { flex-direction: column; align-items: flex-start; }
+  .agent-support-toolbar .auth-role-tabs { overflow-x: auto; }
+  .agent-support-toolbar .auth-role-tabs > button { flex-shrink: 0; flex: auto; font-size: 12px; gap: 6px; padding-inline: 12px; }
+  .support-conversation { padding: 22px 18px; }
+  .support-conversation-heading { gap: 12px; }
+  .support-conversation-heading h3 { font-size: 20px; }
+  .support-conversation-heading .workspace-kicker { font-size: 10px; }
+  .support-conversation .workspace-tag { font-size: 10px; }
+  .agent-footer { flex-direction: column; gap: 12px; font-size: 12px; }
+  .agent-demo-note { font-size: 12px; }
+  .reservation-summary-strip { flex-wrap: wrap; padding: 16px; gap: 13px; }
+  .reservation-summary-strip > img { height: 60px; width: 80px; }
+  .reservation-summary-strip strong { font-size: 16px; }
+  .reservation-summary-strip > div > span { font-size: 12px; }
+  .reservation-summary-strip > .workspace-tag { margin-left: auto; }
+  .booking-detail-tabs > button { min-height: 46px; font-size: 13px; padding-inline: 12px; }
+  .detail-overview-grid { grid-template-columns: 1fr; gap: 23px; }
+  .detail-balance-grid { grid-template-columns: 1fr; gap: 12px; }
+  .detail-balance-grid > div { padding: 20px; }
+  .detail-balance-grid strong { font-size: 29px; }
+  .detail-balance-grid span { font-size: 14px; }
+  .detail-balance-grid small { font-size: 12px; }
+  .detail-next-actions > .button { width: 100%; }
+  .review-document,.payment-record { padding: 20px 16px; }
+  .review-document-title,.payment-record-heading { flex-wrap: wrap; gap: 12px; }
+  .review-document-title > .workspace-tag,.payment-record-heading > .workspace-tag { margin-left: auto; }
+  .review-file-icon { height: 40px; width: 40px; }
+  .review-document-title h4 { font-size: 15px; }
+  .payment-record-heading strong { font-size: 15px; }
+  .review-actions > .button { flex: 1; }
+  .review-meta { font-size: 12px; }
+  .dispatch-readiness,.digital-pass { padding: 23px 19px; }
+  .dispatch-readiness h3 { font-size: 23px; }
+  .dispatch-readiness ul { font-size: 14px; }
+  .release-checks { gap: 15px 18px; }
+  .release-checks > span { font-size: 12px; }
+  .digital-pass > h3 { font-size: 25px; }
+  .digital-pass-actions > .button { width: 100%; }
+  .adjustment-panels > form,.cancel-reservation-panel { padding: 23px 18px; }
+  .adjustment-panels h3 { font-size: 22px; }
+  .document-preview { padding: 18px 13px; }
+  .document-preview iframe { height: 410px; }
+  .walkin-layout { display: flex; flex-direction: column; }
+  .walkin-quote { position: static; width: 100%; }
+  .walkin-quote > img { height: 220px; }
+  .walkin-quote > div { padding: 22px; }
+  .walkin-quote h3 { font-size: 24px; }
+  .walkin-quote p:not(.workspace-kicker) { font-size: 14px; }
+}
+@media (max-width: 700px) { .landing-signin { display: none; } .landing-nav > .landing-mobile-portal { display: flex; } }
+@media (max-width: 380px) { .agent-main { padding-inline: 16px; } .agent-stat { padding: 17px 14px; } .agent-stat > span:nth-last-child(2) { font-size: 12px; } .agent-stat small { font-size: 10px; } .workspace-surface { padding: 20px 15px; } .auth-main { padding-inline: 20px; } .auth-main h1 { font-size: 30px; } .auth-role-tabs button { padding-inline: 12px; } .agent-development-tag { display: none; } }
+@media (prefers-reduced-motion: reduce) { .loading-line { animation: none; } .agent-sidebar { transition: none; } .agent-stat:hover { transform: none; } }

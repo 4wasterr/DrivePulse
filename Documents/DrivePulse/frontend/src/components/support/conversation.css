@@ -1,0 +1,10 @@
+.support-conversation { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 26px; min-width: 0; }
+.support-conversation-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.support-conversation-heading h3 { font-size: 22px; letter-spacing: -.7px; line-height: 1.4; overflow-wrap: anywhere; }
+.support-messages { display: flex; flex-direction: column; gap: 15px; margin: 25px 0; max-height: 430px; overflow: auto; }
+.support-message { border: 1px solid #e1e1e1; padding: 17px; border-radius: 9px; background: #fafafa; }
+.support-message.from-agent { background: #eee; border-color: #ddd; }
+.support-message > div { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 11px; color: #888; }
+.support-message strong { font-size: 12px; font-weight: 550; color: #555; }
+.support-message p { margin-top: 10px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; color: #555; line-height: 1.8; }
+.support-conversation .button { font-size: 14px; min-height: 46px; }

@@ -1,0 +1,15 @@
+@media(max-width:1250px) { .fleet-stage-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); } .staff-vehicle-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .staff-metrics:not(.fleet-stage-metrics) { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { .staff-metrics,.fleet-stage-metrics { gap: 10px; grid-template-columns: repeat(2,minmax(0,1fr)); } .staff-vehicle-grid,.staff-proof-grid { grid-template-columns: 1fr; } .staff-ledger-row { flex-wrap: wrap; gap: 12px; } .staff-ledger-row > div:first-child { flex-basis: calc(100% - 95px); } .staff-ledger-row .button { width: 100%; justify-content: center; } .staff-report-readings { padding: 15px; gap: 10px; } .staff-report-readings strong { font-size: 14px; } .staff-toolbar > select,.staff-search { width: 100%; } .staff-report-toolbar .button { flex: 1; } .account-role-tabs button { font-size: 12px; } }
+.record-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:18px 0}
+.record-actions .workspace-muted{font-size:13px}
+.record-section{border-top:1px solid #e5e5e5;padding-top:22px;margin-top:24px}
+.audit-filters{display:flex;align-items:end;gap:14px;flex-wrap:wrap;margin:24px 0}
+.audit-filters .form-field{flex:1;min-width:140px}
+.staff-form input[type=file]{max-width:100%}
+.record-actions a{white-space:normal}
+@media(max-width:600px){.record-actions{align-items:stretch;flex-direction:column}.record-actions .button{width:100%}.audit-filters .form-field{min-width:100%}}
+.generated-row{flex-wrap:wrap}
+.generated-row>.record-actions{flex-basis:100%;margin:0 0 0 52px;min-width:0}
+.billing-table .record-actions{max-width:330px;text-align:left;white-space:normal}
+.digital-pass-actions>form{flex-basis:100%}
+@media(max-width:600px){.generated-row>.record-actions{margin-left:0}}

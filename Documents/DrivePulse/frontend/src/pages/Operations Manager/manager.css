@@ -1,0 +1,5 @@
+.staff-report-toolbar { display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; }
+.staff-report-toolbar .form-field { gap: 8px; font-size: 13px; flex: 1; min-width: 155px; }
+.staff-report-toolbar .button { min-height: 46px; font-size: 13px; }
+.staff-utilization-bar { width: 100px; height: 4px; background: #eee; margin-top: 10px; border-radius: 3px; }
+.staff-utilization-bar span { height: 100%; display: block; background: #333; border-radius: inherit; }

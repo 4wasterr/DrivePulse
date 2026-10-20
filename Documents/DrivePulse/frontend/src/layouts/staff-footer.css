@@ -1,0 +1,2 @@
+.agent-footer { display: flex; justify-content: space-between; gap: 20px; padding-block: 28px; margin-top: 36px; border-top: 1px solid #e1e1e1; font-size: 11px; color: #888; }
+.agent-footer strong { font-family: 'Manrope',sans-serif; letter-spacing: -.4px; color: #555; }
