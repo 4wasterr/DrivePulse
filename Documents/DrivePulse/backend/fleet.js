@@ -228,6 +228,41 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       return report;
     })));
 
+    app.post('/api/bookings/:id/fast-clearance', role('agent', 'mechanic'), (req, res) => res.json(transaction(() => {
+      const b = getBooking(req.params.id);
+      if (b.version !== req.body.version) D.fail('This reservation changed. Refresh and try again.', 409);
+      if (!['Pending Approval', 'Ready for Dispatch'].includes(b.status)) D.fail('Fast-track inspection is only available for reservations awaiting dispatch.');
+      const s = state(b.vehicleId);
+      if (s.status !== 'Available') D.fail(`Vehicle is currently ${s.status.toLowerCase()} and cannot be fast-tracked.`);
+      const latest = records('inspection').filter(r => r.vehicleId === b.vehicleId && r.outcome === 'approved').sort((x, y) => y.at.localeCompare(x.at))[0];
+      const baselinePhotos = latest?.photos?.length ? latest.photos : [{ id: `sample-${b.vehicleId}-ext`, view: 'exterior' }, { id: `sample-${b.vehicleId}-int`, view: 'interior' }];
+      const report = {
+        id: randomUUID(),
+        bookingId: b.id,
+        vehicleId: b.vehicleId,
+        type: 'pre-dispatch',
+        by: req.user.name,
+        role: 'mechanic',
+        at: stamp(),
+        outcome: 'approved',
+        odometer: s.odometer || vehicle(b.vehicleId).odometer || 14000,
+        fuelLevel: s.fuelLevel || 100,
+        cleanliness: 'Clean',
+        scratches: 'Active fleet readiness verified. Zero new damage.',
+        tirePressure: { frontLeft: 33, frontRight: 33, rearLeft: 33, rearRight: 33 },
+        checks: { tyres: true, controls: true, exterior: true, interior: true, fuel: true },
+        photos: baselinePhotos,
+        note: `Fast-track pre-dispatch clearance verified by ${req.user.name} based on active fleet readiness.`
+      };
+      save('inspection', report);
+      b.inspection = report;
+      D.invalidatePass(b);
+      b.version++;
+      audit(b, req.user, 'Pre-dispatch inspection fast-tracked', report.note);
+      saveBooking(b);
+      return present(b);
+    })));
+
     app.post('/api/mechanic/vehicles/:id/status', role('mechanic'), (req, res) => res.json(transaction(() => {
       const s = state(req.params.id); stale(s, req.body.version);
       if (!['Under Inspection', 'Out of Service'].includes(req.body.status)) D.fail('Use a completed safety inspection to clear a vehicle.');

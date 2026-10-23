@@ -48,13 +48,17 @@ export default function App() {
   const authenticate = (to = 'overview') => { returnTo.current = to; navigate('login') }
   async function signedIn(user) { await refresh(); navigate(user.role !== 'client' ? `${user.role}-overview` : clientPages.includes(page) ? page : returnTo.current) }
   async function logout() { await api('/logout', { method: 'POST' }); sequence.current += 1; setWorkspace(null); navigate('home') }
+  useEffect(() => {
+    if (!authPages.includes(page) && clientPages.includes(page)) {
+      returnTo.current = page
+    }
+  }, [page])
   const user = workspace?.user
   const requiresAuth = page !== 'home' && !authPages.includes(page)
   if (loading) return <div className="workspace-loading" role="status"><span className="loading-line" /><strong>Getting your journey ready.</strong></div>
   const StaffWorkspace = user?.role === 'mechanic' ? MechanicPortal : ManagerPortal
   let content
   if (authPages.includes(page) || requiresAuth && !user) {
-    if (!authPages.includes(page) && clientPages.includes(page)) returnTo.current = page
     content = <AuthPage key={page} mode={page.includes('signup') ? 'signup' : 'login'} onSuccess={signedIn} config={config} />
   }
   else if (user && ['mechanic', 'manager'].includes(user.role) && (page.startsWith(`${user.role}-`) || clientPages.includes(page))) content = <StaffWorkspace page={page.startsWith(`${user.role}-`) ? page : `${user.role}-overview`} user={user} operations={workspace.operations} onRefresh={refresh} onNavigate={navigate} onLogout={logout} />

@@ -39,7 +39,8 @@ function available(bookings, input, exclude) {
 function billing(booking) {
   const paid = type => (booking.payments || []).filter(p => p.type === type && p.status === 'confirmed').reduce((sum, p) => sum + Math.round(p.amount * 100), 0) / 100;
   const rentalDue = Math.round((booking.rental + (booking.lateFee || 0)) * 100) / 100;
-  const rentalPaid = paid('rental'), depositPaid = paid('deposit');
+  const depositPaid = paid('deposit');
+  const rentalPaid = (booking.payments || []).filter(p => p.type !== 'deposit' && p.status === 'confirmed').reduce((sum, p) => sum + Math.round(p.amount * 100), 0) / 100;
   const rentalBalance = Math.max(0, Math.round((rentalDue - rentalPaid) * 100)) / 100, depositBalance = Math.max(0, Math.round((booking.deposit - depositPaid) * 100)) / 100;
   return { rentalDue, rentalPaid, depositPaid, rentalBalance, depositBalance, totalPaid: Math.round((rentalPaid + depositPaid) * 100) / 100, balance: Math.round((rentalBalance + depositBalance) * 100) / 100 };
 }

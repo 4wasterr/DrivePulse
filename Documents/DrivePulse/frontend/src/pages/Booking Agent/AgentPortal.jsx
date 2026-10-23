@@ -83,7 +83,6 @@ export default function AgentPortal({ page, user, workspace, availability, onRef
       </nav>
       <div className="agent-sidebar-bottom">
         <div className="agent-sidebar-note"><Icon name="road" size={28} /><strong>A great journey starts<br />with the details.</strong><span>One desk. Every step.</span></div>
-        <a href="#home" className="agent-home-link"><Icon name="diagonal" size={17} />View website</a>
         <button className="agent-signout" onClick={signout}><Icon name="logout" size={18} />Sign out</button>
         <div className="agent-user"><span className="avatar">{user.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</span><div><strong>{user.name}</strong><span>Booking agent</span></div></div>
       </div>

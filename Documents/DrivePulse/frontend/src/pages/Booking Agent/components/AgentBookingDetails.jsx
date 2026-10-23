@@ -1,14 +1,18 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { vehicles, prettyDate, money, dateISO, rentalDays, tripTime } from '../../../data.js'
-import { api, fetchDocument } from '../../../api.js'
+import { api } from '../../../api.js'
 import Modal from '../../../components/ui/Modal.jsx'
 import Icon from '../../../components/ui/Icon.jsx'
+import IdViewerModal from '../../../components/ui/IdViewerModal.jsx'
 import UploadField from '../../../components/ui/UploadField.jsx'
 import { BookingRecords, IssuedLink } from '../../../components/operations/OperationalRecords.jsx'
 import { downloadPass } from '../../../dispatchPass.js'
-import { downloadFile } from '../../../storage.js'
 
-const documentKinds = [['license', 'Driver’s license'], ['government-1', 'Government ID 1'], ['government-2', 'Government ID 2']]
+const documentKinds = [
+  ['license', "Official Driver's License"],
+  ['government-1', 'Primary Government ID (Passport / UMID / PhilSys)'],
+  ['government-2', 'Secondary ID / Proof of Billing']
+]
 
 const tabs = [
   ['reservation', 'Overview & contracts'],
@@ -85,7 +89,7 @@ export default function AgentBookingDetails({ booking, initialTab, onClose, onRe
           {payment.reviewedBy && <p className="review-meta">Reviewed by {payment.reviewedBy}{payment.reviewNote ? ` · ${payment.reviewNote}` : ''}</p>}
           {payment.status === 'pending' && booking.status !== 'Cancelled' && <form onSubmit={event => { event.preventDefault(); mutate('payment', { paymentId: payment.id, decision: event.nativeEvent.submitter.value, reason: new FormData(event.currentTarget).get('reason'), reference: new FormData(event.currentTarget).get('reference'), received: new FormData(event.currentTarget).get('received') === 'on' }, 'Payment review saved.') }}><label className="form-field">Review note <span className="field-optional">Required when rejecting</span><input name="reason" maxLength={1000} placeholder="Review notes or reason for rejection" /></label><label className="form-field">Cash receipt reference (required to confirm)<input name="reference" maxLength={150} /></label><label className="checkbox-label"><input type="checkbox" name="received" />I physically received this cash amount.</label><div className="review-actions"><button className="button button-outline" value="rejected" disabled={busy}>Reject</button><button className="button button-dark" value="confirmed" disabled={busy}>Confirm payment<Icon name="check" size={18} /></button></div></form>}
         </article>) : <p className="workspace-muted">No payments recorded yet.</p>}</div>
-        {booking.status !== 'Cancelled' && booking.billing.balance > 0 && <form key={booking.version} className="record-payment-form" onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); mutate('payment', { type: data.get('type'), amount: Number(data.get('amount')), method: data.get('method'), reference: data.get('reference'), received: data.get('received') === 'on' }, 'Payment recorded and added to the verified ledger.') }}><h3>Record a payment</h3><div className="form-grid"><label className="form-field">Payment allocation<select name="type" defaultValue={booking.billing.rentalBalance > 0 ? 'rental' : 'deposit'}><option value="rental">Rental / downpayment / fees</option><option value="deposit">Security deposit</option></select></label><label className="form-field">Amount (PHP)<input name="amount" type="number" min="0.01" max={booking.billing.balance} step="0.01" required /></label><label className="form-field">Payment method<input name="method" value="Cash" readOnly /></label><label className="form-field">Receipt / transaction reference<input name="reference" maxLength={150} required /></label></div><label className="checkbox-label"><input type="checkbox" name="received" required />I physically received this cash amount.</label><button className="button button-dark" disabled={busy}>Record cash received<Icon name="check" size={18} /></button></form>}
+        {booking.status !== 'Cancelled' && booking.billing.balance > 0 && <form key={booking.version} className="record-payment-form" onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); mutate('payment', { type: data.get('type'), amount: Number(data.get('amount')), method: data.get('method'), reference: data.get('reference'), received: data.get('received') === 'on' }, 'Payment recorded and added to the verified ledger.') }}><h3>Record a payment</h3><div className="form-grid"><label className="form-field">Payment allocation<select name="type" defaultValue={booking.billing.rentalBalance > 0 ? 'rental' : 'deposit'}><option value="rental">Base Rental Charges / Downpayment</option><option value="deposit">Refundable Security Deposit (PHP 5,000)</option><option value="extension">Rental Extension Adjustment</option><option value="late_fee">Late Return Hourly Surcharge</option><option value="fuel_charge">Fuel Refill / Shortfall Fee</option><option value="cleaning_fee">Interior Sanitation / Detailing Fee</option><option value="damage_fee">Vehicle Damage / Scratch Repair Charge</option><option value="toll_violation">Unpaid Expressway Tolls / Violations</option></select></label><label className="form-field">Amount (PHP)<input name="amount" type="number" min="0.01" max={booking.billing.balance} step="0.01" required /></label><label className="form-field">Payment method<input name="method" value="Cash" readOnly /></label><label className="form-field">Receipt / transaction reference<input name="reference" maxLength={150} required /></label></div><label className="checkbox-label"><input type="checkbox" name="received" required />I physically received this cash amount.</label><button className="button button-dark" disabled={busy}>Record cash received<Icon name="check" size={18} /></button></form>}
       </>}
 
       {tab === 'dispatch' && <>
@@ -94,6 +98,37 @@ export default function AgentBookingDetails({ booking, initialTab, onClose, onRe
           <div className="release-checks">{[['Identity approved', booking.verificationStatus === 'Verified'], ['Rental fully paid', booking.billing.rentalBalance === 0], ['Deposit recorded', booking.billing.depositBalance === 0], ['Mechanic inspection', booking.inspection?.status === 'approved' && booking.inspection?.role === 'mechanic']].map(([label, complete]) => <span key={label} className={complete ? 'is-complete' : ''}><Icon name={complete ? 'check' : 'clock'} size={18} />{label}</span>)}</div>
           {booking.dispatchBlocks.length > 0 && <ul>{booking.dispatchBlocks.map(block => <li key={block}>{block}</li>)}</ul>}
         </div>
+        {booking.inspection?.status !== 'approved' && !closed && (
+          <div className="fast-track-clearance-card" style={{ background: '#f8fafc', border: '1px solid #cbd5e1', padding: '14px 16px', borderRadius: '8px', margin: '14px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a', fontWeight: 600, marginBottom: '4px' }}>
+              <Icon name="bolt" size={17} />
+              <span>Fast-track pre-dispatch inspection:</span>
+            </div>
+            <p className="workspace-muted" style={{ margin: '0 0 10px', fontSize: '13px' }}>
+              If this vehicle is currently parked and cleared in the active fleet, you can fast-track digital clearance in 1 click using its active fleet readiness.
+            </p>
+            <button
+              type="button"
+              className="button button-outline"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true); setError('')
+                try {
+                  await api(`/bookings/${booking.id}/fast-clearance`, { method: 'POST', body: { version: booking.version } })
+                  await onRefresh()
+                  onNotice('Pre-dispatch clearance verified and attached to reservation!')
+                } catch (e) {
+                  setError(e.message)
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            >
+              <Icon name="check" size={16} />
+              Fast-track dispatch clearance (1-click)
+            </button>
+          </div>
+        )}
         {booking.inspection?.status === 'approved' && booking.inspection?.role === 'mechanic' && <div className="info-note"><Icon name="check" /><span>Inspection approved by {booking.inspection.by} · {stamp(booking.inspection.at)}{booking.inspection.photos && <><br />{booking.inspection.odometer.toLocaleString()} km · Fuel / charge {booking.inspection.fuelLevel}% · Interior {booking.inspection.cleanliness}<br />{booking.inspection.photos.filter(p => !p.id.startsWith('sample-')).map(photo => <a className="text-link" key={photo.id} href={`/api/documents/${encodeURIComponent(photo.id)}`} target="_blank" rel="noreferrer">View {photo.view} condition photo </a>)}</>}</span></div>}
         {booking.dispatchPass && !booking.dispatchPass.revokedAt && !closed ? (
           <div className="digital-pass">
@@ -113,7 +148,7 @@ export default function AgentBookingDetails({ booking, initialTab, onClose, onRe
 
       {tab === 'adjustments' && <Adjustments key={booking.version} booking={booking} vehicle={vehicle} busy={busy} mutate={mutate} />}
     </div>
-    {preview && <DocumentPreview key={preview.id} document={preview} onClose={() => setPreview(null)} />}
+    {preview && <IdViewerModal document={{ ...preview, label: documentKinds.find(([k]) => k === preview.kind)?.[1] || preview.name }} onClose={() => setPreview(null)} />}
   </Modal>
 }
 
@@ -130,14 +165,4 @@ function Adjustments({ booking, vehicle, busy, mutate }) {
     {['Pending Approval', 'Ready for Dispatch'].includes(booking.status) && <div className="cancel-reservation-panel"><h3>Cancel reservation</h3>{cancel ? <form onSubmit={event => { event.preventDefault(); mutate('cancel', { reason: new FormData(event.currentTarget).get('reason') }, 'Reservation cancelled. Any paid amounts require refund handling.') }}><label className="form-field">Cancellation reason<textarea name="reason" required maxLength={1000} rows={3} /></label><div className="review-actions"><button type="button" className="button button-outline" onClick={() => setCancel(false)}>Keep reservation</button><button className="button button-dark" disabled={busy}>Confirm cancellation</button></div></form> : <button className="button button-outline" onClick={() => setCancel(true)}>Cancel this reservation</button>}</div>}
     {closed && <div className="info-note"><Icon name="info" /><span>This reservation is {booking.status.toLowerCase()}. Scheduling adjustments are closed.{booking.lateFee > 0 && ` Recorded late fee: ${money(booking.lateFee)}.`}</span></div>}
   </div>
-}
-
-function DocumentPreview({ document: doc, onClose }) {
-  const [file, setFile] = useState(null), [error, setError] = useState('')
-  useEffect(() => {
-    let active = true, url
-    fetchDocument(doc.id).then(blob => { if (active) { url = URL.createObjectURL(blob); setFile({ url, blob }) } }).catch(problem => { if (active) setError(problem.message) })
-    return () => { active = false; if (url) URL.revokeObjectURL(url) }
-  }, [doc.id])
-  return <section className="document-preview"><div className="workspace-section-heading"><h3>{doc.name}</h3><button className="icon-button" onClick={onClose} aria-label="Close document preview"><Icon name="close" /></button></div>{error && <p className="error-banner" role="alert">{error}</p>}{!file && !error && <p role="status">Opening document…</p>}{file && <>{file.blob.type.startsWith('image/') ? <img src={file.url} alt={`Uploaded ${doc.name}`} /> : <iframe src={file.url} title={`Uploaded ${doc.name}`} />}<button className="button button-outline" onClick={() => downloadFile(file.blob, doc.name)}><Icon name="download" size={18} />Download document</button></>}</section>
 }

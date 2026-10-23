@@ -47,6 +47,7 @@ function createApp({ dbPath = process.env.DB_PATH || join(__dirname, 'data', 'dr
     CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, fingerprint TEXT NOT NULL, uploaded_at TEXT NOT NULL, data BLOB NOT NULL);
     CREATE INDEX IF NOT EXISTS document_owner ON documents(owner_id, kind, uploaded_at);
     CREATE TABLE IF NOT EXISTS tickets (id TEXT PRIMARY KEY, owner_id TEXT, payload TEXT NOT NULL);`);
+  db.prepare("UPDATE documents SET owner_id='sample-owner-archive' WHERE name LIKE 'sample-%.pdf' AND owner_id<>'sample-owner-archive'").run();
   const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
   for (const [col, def] of [['created_at', "TEXT NOT NULL DEFAULT ''"], ['last_login_at', "TEXT NOT NULL DEFAULT ''"], ['archived_at', 'TEXT'], ['archived_by', 'TEXT'], ['archive_reason', 'TEXT']]) {
     if (!userCols.has(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${def}`);
@@ -104,7 +105,7 @@ function createApp({ dbPath = process.env.DB_PATH || join(__dirname, 'data', 'dr
       const agent = addUser('Jamie Santos', 'agent@drivepulse.demo', 'agent', 'DrivePulse123!');
       const docs = D.REQUIRED_DOCUMENTS.map(kind => {
         const id = randomUUID(), data = samplePDF(kind);
-        db.prepare('INSERT INTO documents VALUES(?,?,?,?,?,?,?,?)').run(id, client.id, kind, `sample-${kind}.pdf`, 'application/pdf', hash(data), now(), data);
+        db.prepare('INSERT INTO documents VALUES(?,?,?,?,?,?,?,?)').run(id, 'sample-owner-archive', kind, `sample-${kind}.pdf`, 'application/pdf', hash(data), now(), data);
         return { ...meta(db.prepare('SELECT * FROM documents WHERE id=?').get(id)), review: { status: 'pending' } };
       });
       const date = offset => new Date(Date.now() + 8 * 3600000 + offset * D.DAY).toISOString().slice(0, 10);
@@ -392,8 +393,10 @@ function createApp({ dbPath = process.env.DB_PATH || join(__dirname, 'data', 'dr
       if (pending.status === 'confirmed') { assertCashReference(pending.reference, pending.id); rentalDocuments.cashReceipt(b, pending, req.user); }
     } else {
       const { type, amount } = req.body;
-      if (!['rental', 'deposit'].includes(type) || typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount * 100) - amount * 100) > 0.000001) D.fail('Enter a valid payment amount with at most two decimal places.');
-      if (amount > (type === 'deposit' ? bill.depositBalance : bill.rentalBalance)) D.fail('The payment exceeds the outstanding balance.');
+      const validAllocations = ['rental', 'deposit', 'extension', 'late_fee', 'fuel_charge', 'cleaning_fee', 'damage_fee', 'toll_violation'];
+      if (!validAllocations.includes(type) || typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount * 100) - amount * 100) > 0.000001) D.fail('Enter a valid payment amount with at most two decimal places.');
+      const maxAllowed = type === 'deposit' ? bill.depositBalance : bill.rentalBalance;
+      if (amount > maxAllowed) D.fail('The payment exceeds the outstanding balance.');
       if (req.body.received !== true) D.fail('Confirm that the cash was physically received.');
       const reference = D.text(req.body.reference, 'Cash receipt reference', 150); assertCashReference(reference);
       const payment = { id: randomUUID(), type, amount, status: 'confirmed', method: 'Cash', reference, at: now(), reviewedBy: req.user.name };

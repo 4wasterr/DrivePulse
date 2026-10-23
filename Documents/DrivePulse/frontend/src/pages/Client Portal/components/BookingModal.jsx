@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { rentalDays, rentalPeriodError, isAvailable, requiredDocuments, prettyDate, locations, dateISO, money } from '../../../data.js'
+import { rentalDays, rentalPeriodError, getAvailabilityReason, requiredDocuments, prettyDate, locations, dateISO, money } from '../../../data.js'
 import Modal from '../../../components/ui/Modal.jsx'
 import Icon from '../../../components/ui/Icon.jsx'
 import UploadField from '../../../components/ui/UploadField.jsx'
@@ -21,7 +21,8 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
   function validateDates() {
     const problem = rentalPeriodError(dates)
     if (problem) return problem
-    if (!isAvailable(vehicle.id, dates, bookings)) return 'This vehicle is reserved during those dates. Try a different date range.'
+    const reason = getAvailabilityReason(vehicle.id, dates, bookings)
+    if (reason) return `Vehicle unavailable: ${reason}`
     return ''
   }
   async function next(e) {

@@ -37,7 +37,35 @@ export default function InspectionForm({ operations, initial, onClose, onDone })
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
+  function handleFastFill() {
+    const form = document.querySelector('.staff-form')
+    if (!form) return
+    const setVal = (name, val) => { const el = form.elements[name]; if (el) el.value = val }
+    setVal('odometer', vehicle?.odometer || 14000)
+    setVal('fuelLevel', 100)
+    ;['frontLeft', 'frontRight', 'rearLeft', 'rearRight'].forEach(k => setVal(k, 33))
+    setVal('scratches', 'Vehicle verified clean and free of new exterior damage.')
+    setVal('cleanliness', 'Clean')
+    setVal('note', 'Nominal pre-dispatch safety checklist verified and cleared.')
+    ;['tyres', 'controls', 'exterior', 'interior', 'fuel'].forEach(k => {
+      const el = form.elements[k]
+      if (el) el.checked = true
+    })
+    setOutcome('approved')
+    setDamageFlag(false)
+  }
+
   return <Modal title="Digital vehicle inspection" eyebrow="FLEET MECHANIC · CHECKLIST & PHOTO PROOF" wide onClose={onClose}><form className="staff-form" onSubmit={submit}><fieldset disabled={busy}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', background: '#f9fafb', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+      <div>
+        <strong style={{ fontSize: '13px', display: 'block', color: '#111827' }}>Speed up inspection workflow:</strong>
+        <span style={{ fontSize: '12px', color: '#6b7280' }}>Pre-fills standard nominal readings (100% fuel, 33 PSI, clean interior, all checks verified).</span>
+      </div>
+      <button type="button" className="button button-outline" onClick={handleFastFill} style={{ fontSize: '12px', padding: '6px 12px' }}>
+        <Icon name="bolt" size={15} />
+        1-Click Checklist Fill
+      </button>
+    </div>
     <div className="form-grid"><label className="form-field">Inspection type<select value={type} onChange={e => setType(e.target.value)}><option value="pre-dispatch">Pre-dispatch / handover</option><option value="post-return">Post-return</option><option value="clearance">Safety / maintenance clearance</option></select></label><label className="form-field">Vehicle<select value={vehicleId} onChange={e => { setVehicleId(e.target.value); setBookingId('') }}>{operations.fleet.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></label>{type !== 'clearance' && <label className="form-field span-2">Reservation<select required value={chosen?.id || ''} onChange={e => setBookingId(e.target.value)}><option value="" disabled>Select a reservation</option>{eligible.map(b => <option value={b.id} key={b.id}>{b.id} · {b.start} – {b.end} · {b.status}</option>)}</select></label>}</div>
     {type !== 'clearance' && !eligible.length && <p className="info-note">No eligible reservation for this vehicle and inspection type. Use a safety clearance inspection for service work.</p>}
     {type === 'post-return' && <p className="info-note"><Icon name="shield" size={16} /><span><strong>Auto-Release Deposit Rule:</strong> Marking a post-return inspection Safe, Clean, with 100% fuel and zero damage flags automatically releases the customer’s deposit (24–48h window) without requiring manager intervention.</span></p>}

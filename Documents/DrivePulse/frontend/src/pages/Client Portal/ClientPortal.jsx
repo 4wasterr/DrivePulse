@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { initialDates, requiredDocuments, rentalPeriodError, vehicles as baseVehicles, isAvailable, prettyDate, money } from '../../data.js'
+import { initialDates, requiredDocuments, rentalPeriodError, vehicles as baseVehicles, isAvailable, getAvailabilityReason, prettyDate, money } from '../../data.js'
 import { api, fetchDocument } from '../../api.js'
 import { downloadFile } from '../../storage.js'
 import VehicleCard from '../../components/fleet/VehicleCard.jsx'
@@ -90,8 +90,16 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
     catch (error) { notify(error.message) }
   }
   const filtered = vehicles.filter(v => (category === 'All cars' || v.category === category) && `${v.name} ${v.category} ${v.fuel}`.toLowerCase().includes(query.toLowerCase()) && v.rate <= maxRate && (seats === 'any' || v.seats >= Number(seats)) && (transmission === 'any' || v.transmission === transmission) && (!onlyAvailable || isAvailable(v.id, dates, availability))).sort((a, b) => sort === 'price-low' ? a.rate - b.rate : sort === 'price-high' ? b.rate - a.rate : sort === 'rating' ? Number(b.rating) - Number(a.rating) : 0)
-  const card = vehicle => <VehicleCard key={vehicle.id} vehicle={vehicle} available={isAvailable(vehicle.id, dates, availability)} onDetails={() => setModal({ type: 'vehicle', vehicle })} onReserve={() => openBooking(vehicle)} />
-  const publicCard = vehicle => <VehicleCard key={vehicle.id} vehicle={vehicle} available={isAvailable(vehicle.id, dates, availability)} onDetails={() => setModal({ type: 'vehicle', vehicle })} onReserve={() => user ? openBooking(vehicle) : onAuthenticate('fleet')} actionLabel={user ? 'View details for' : 'Sign in to reserve'} />
+  const card = vehicle => {
+    const reason = getAvailabilityReason(vehicle.id, dates, availability)
+    const available = reason === ''
+    return <VehicleCard key={vehicle.id} vehicle={vehicle} available={available} unavailabilityReason={reason} onDetails={() => setModal({ type: 'vehicle', vehicle, available, reason })} onReserve={() => openBooking(vehicle)} />
+  }
+  const publicCard = vehicle => {
+    const reason = getAvailabilityReason(vehicle.id, dates, availability)
+    const available = reason === ''
+    return <VehicleCard key={vehicle.id} vehicle={vehicle} available={available} unavailabilityReason={reason} onDetails={() => setModal({ type: 'vehicle', vehicle, available, reason })} onReserve={() => user ? openBooking(vehicle) : onAuthenticate('fleet')} actionLabel={user ? 'View details for' : 'Sign in to reserve'} />
+  }
 
   return <div id={page === 'home' ? 'home' : undefined} className={page === 'home' ? 'landing-shell' : 'app-shell'}>
     {page === 'home' ? <LandingPage user={user} onAuthenticate={onAuthenticate} renderVehicle={publicCard} searchBar={<SearchBar dates={dates} onChange={setDates} onSearch={search} />} onFeature={() => setModal({ type: 'vehicle', vehicle: vehicles.find(v => v.id === 'porsche-panamera') })} /> : <>
@@ -124,7 +132,53 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
     </>}
 
     {modal?.type === 'booking' && <BookingModal vehicle={modal.vehicle} initialDates={dates} bookings={availability} documents={documents} onDocument={onDocument} onReserve={reserve} onClose={() => setModal(null)} onViewTrips={() => { setModal(null); setBookingTab('Upcoming'); navigate('bookings') }} />}
-    {modal?.type === 'vehicle' && <Modal title={modal.vehicle.name} eyebrow={modal.vehicle.label.toUpperCase()} wide onClose={() => setModal(null)}><div className="vehicle-detail-layout"><img className="vehicle-detail-image" src={modal.vehicle.image} alt={modal.vehicle.name} /><div className="vehicle-detail-copy"><span className="rating"><Icon name="star" size={15} />{modal.vehicle.rating}<span className="muted"> · {modal.vehicle.trips} sample trips</span></span><h3>{modal.vehicle.tagline}</h3><p className="muted">{modal.vehicle.description}</p><div className="detail-spec-grid"><span><Icon name="users" />{modal.vehicle.seats} seats</span><span><Icon name="gear" />{modal.vehicle.transmission}</span><span><Icon name="fuel" />{modal.vehicle.fuel}</span><span><Icon name="car" />{modal.vehicle.category}</span></div><div className="detail-inclusions"><span><Icon name="check" size={15} />Air conditioning</span><span><Icon name="check" size={15} />Bluetooth audio</span><span><Icon name="check" size={15} />{modal.vehicle.luggage} bags</span></div><div className="detail-price"><span className="vehicle-price">{money(modal.vehicle.rate)}<small> / day</small></span><span className="small muted">+ {money(5000)} refundable deposit</span></div><button className="button button-dark full-width" disabled={user && !isAvailable(modal.vehicle.id, dates, availability)} onClick={() => user ? openBooking(modal.vehicle) : onAuthenticate('fleet')}>{user ? (isAvailable(modal.vehicle.id, dates, availability) ? 'Make this ride yours' : 'Reserved for your selected dates') : 'Sign in to reserve this ride'}<Icon name="arrow" size={18} /></button><p className="small muted">Selected dates: {prettyDate(dates.start)} – {prettyDate(dates.end)} · Photos are illustrative.</p></div></div></Modal>}
+    {modal?.type === 'vehicle' && (() => {
+      const reason = modal.reason !== undefined ? modal.reason : getAvailabilityReason(modal.vehicle.id, dates, availability)
+      const isCarAvailable = reason === ''
+      return <Modal title={modal.vehicle.name} eyebrow={modal.vehicle.label.toUpperCase()} wide onClose={() => setModal(null)}>
+        <div className="vehicle-detail-layout">
+          <img className="vehicle-detail-image" src={modal.vehicle.image} alt={modal.vehicle.name} />
+          <div className="vehicle-detail-copy">
+            <span className="rating"><Icon name="star" size={15} />{modal.vehicle.rating}<span className="muted"> · {modal.vehicle.trips} sample trips</span></span>
+            <h3>{modal.vehicle.tagline}</h3>
+            <p className="muted">{modal.vehicle.description}</p>
+            {!isCarAvailable && (
+              <div className="unavailability-callout" role="alert">
+                <Icon name="info" size={18} />
+                <div>
+                  <strong>Unavailable for selected dates:</strong>
+                  <p>{reason}</p>
+                </div>
+              </div>
+            )}
+            <div className="detail-spec-grid">
+              <span><Icon name="users" />{modal.vehicle.seats} seats</span>
+              <span><Icon name="gear" />{modal.vehicle.transmission}</span>
+              <span><Icon name="fuel" />{modal.vehicle.fuel}</span>
+              <span><Icon name="car" />{modal.vehicle.category}</span>
+            </div>
+            <div className="detail-inclusions">
+              <span><Icon name="check" size={15} />Air conditioning</span>
+              <span><Icon name="check" size={15} />Bluetooth audio</span>
+              <span><Icon name="check" size={15} />{modal.vehicle.luggage} bags</span>
+            </div>
+            <div className="detail-price">
+              <span className="vehicle-price">{money(modal.vehicle.rate)}<small> / day</small></span>
+              <span className="small muted">+ {money(5000)} refundable deposit</span>
+            </div>
+            <button
+              className="button button-dark full-width"
+              disabled={user && !isCarAvailable}
+              onClick={() => user ? openBooking(modal.vehicle) : onAuthenticate('fleet')}
+            >
+              {user ? (isCarAvailable ? 'Make this ride yours' : `Unavailable: ${reason}`) : 'Sign in to reserve this ride'}
+              <Icon name="arrow" size={18} />
+            </button>
+            <p className="small muted">Selected dates: {prettyDate(dates.start)} – {prettyDate(dates.end)} · Photos are illustrative.</p>
+          </div>
+        </div>
+      </Modal>
+    })()}
     {modal?.type === 'trip' && <Modal title="Every step of your journey." eyebrow={`${modal.booking.id}${modal.booking.sample ? ' · SAMPLE BOOKING' : ''}`} wide onClose={() => setModal(null)}><BookingRecords booking={bookings.find(b => b.id === modal.booking.id) || modal.booking} /><TripDetails booking={bookings.find(b => b.id === modal.booking.id) || modal.booking} />{(bookings.find(b => b.id === modal.booking.id) || modal.booking).dispatchPass && !(bookings.find(b => b.id === modal.booking.id) || modal.booking).dispatchPass.revokedAt && <button className="button button-dark full-width" onClick={() => downloadPass(bookings.find(b => b.id === modal.booking.id) || modal.booking)}><Icon name="download" />Download dispatch pass</button>}</Modal>}
     {modal?.type === 'profile' && <Modal title="Make yourself at home." eyebrow="YOUR CLIENT PROFILE" onClose={() => setModal(null)}><form onSubmit={async e => { e.preventDefault(); const data = new FormData(e.currentTarget); const name = String(data.get('name')).trim(); if (!name) return; try { await api('/profile', { method: 'PATCH', body: { name, email: String(data.get('email')).trim() } }); await onRefresh(); setModal(null); notify('Your profile has been updated.') } catch (error) { notify(error.message) } }}><div className="profile-intro"><span className="avatar large-avatar">{initials}</span><p className="muted">A few details to make your journey more personal.</p></div><label className="form-field">Full name<input required name="name" autoComplete="name" defaultValue={profile.name} maxLength={70} /></label><label className="form-field">Email address<input required name="email" type="email" autoComplete="email" defaultValue={profile.email} maxLength={120} /></label><div className="info-note"><Icon name="info" size={18} /><span>Updating your email also updates the email you use to sign in.</span></div><button className="button button-dark full-width" type="submit">Save my details<Icon name="check" size={17} /></button></form></Modal>}
     {modal?.type === 'help' && <Modal title="A smoother journey starts here." eyebrow="YOUR PERSONAL PIT STOP" onClose={() => setModal(null)}><p className="muted">A few helpful answers before you hit the road.</p>{user ? <ClientSupport bookings={bookings} tickets={workspace?.tickets || []} onRefresh={onRefresh} /> : <a className="button button-dark" href="#login">Sign in to contact the booking team</a>}<div className="faq-list">{[{ q: 'What do I need to book a vehicle?', a: 'Choose your dates and locations, upload a valid driver’s license and two different government-issued IDs, then pay the rental and deposit in cash at the counter. Your booking starts as Pending Approval.' }, { q: 'How is my quotation calculated?', a: 'The daily rate is charged for each started 24-hour period. A ₱5,000 refundable security deposit is added to the rental total. Fuel, tolls, and additional charges are excluded.' }, { q: 'How are security deposits released?', a: 'If the fleet mechanic marks a Clean Return with zero damage flags and full fuel, the system automatically schedules your deposit release within 24–48 hours. Only disputed or withheld deposits require Operations Manager approval.' }, { q: 'Can I get a rental contract or receipt?', a: 'Download your official rental contract and receipts from My documents, Payments & billing, or booking details. Open the HTML file, choose Print, then Save as PDF.' }].map(faq => <details key={faq.q}><summary>{faq.q}<Icon name="down" size={17} /></summary><p>{faq.a}</p></details>)}</div><button className="button button-dark full-width" onClick={() => { setModal(null); if (user) navigate('fleet'); else onAuthenticate('fleet') }}>Find my next ride<Icon name="arrow" size={17} /></button></Modal>}

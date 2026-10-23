@@ -9,7 +9,26 @@ export const vehicles = [
 
 export const locations = ['Makati City, Metro Manila', 'BGC, Taguig City', 'NAIA Terminal 3, Pasay', 'Quezon City, Metro Manila']
 export const statuses = ['Pending Approval', 'Ready for Dispatch', 'On Rental', 'Completed']
-export const requiredDocuments = [{ id: 'license', label: "Driver’s license" }, { id: 'government-1', label: 'Government ID 1' }, { id: 'government-2', label: 'Government ID 2' }]
+export const requiredDocuments = [
+  {
+    id: 'license',
+    label: "Driver's License",
+    description: 'Official LTO Driver’s License (Front & Back photo or PDF)',
+    examples: 'Valid Philippine or International Driver’s License'
+  },
+  {
+    id: 'government-1',
+    label: 'Primary Government ID',
+    description: 'Government photo identification with full legal name and birthdate',
+    examples: 'Philippine Passport, UMID, PhilSys National ID, or PRC ID'
+  },
+  {
+    id: 'government-2',
+    label: 'Secondary Government ID / Proof of Billing',
+    description: 'Secondary government identification or verified proof of address',
+    examples: 'SSS ID, GSIS, Postal ID, Voter’s ID, or recent Utility Statement'
+  }
+]
 export const money = (amount) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(amount)
 export const dateISO = (offset = 0) => {
   const date = new Date()
@@ -35,9 +54,40 @@ export function sampleBookings() {
   ]
 }
 
-export function isAvailable(vehicleId, dates, bookings) {
-  const start = tripTime(dates.start, dates.startTime)
-  const end = tripTime(dates.end, dates.endTime)
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return false
-  return !bookings.some(b => b.vehicleId === vehicleId && (b.blocked || !['Completed', 'Cancelled'].includes(b.status) && start < tripTime(b.end, b.endTime) && end > tripTime(b.start, b.startTime)))
+export function getAvailabilityReason(vehicleId, dates, bookings = []) {
+  if (!dates?.start || !dates?.end) return 'Please choose pick-up and return dates.'
+  const start = tripTime(dates.start, dates.startTime || '10:00')
+  const end = tripTime(dates.end, dates.endTime || '10:00')
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 'Please choose valid pick-up and return dates.'
+  if (end <= start) return 'Return must be after your pick-up date and time.'
+
+  // Operational fleet holds
+  const hold = bookings.find(b => b.blocked && b.vehicleId === vehicleId)
+  if (hold) {
+    if (hold.status === 'Maintenance') return 'Vehicle is currently in scheduled maintenance.'
+    if (hold.status === 'Under Inspection') return 'Vehicle is undergoing post-return inspection.'
+    if (hold.status === 'Out of Service') return 'Vehicle is temporarily out of service for repairs.'
+    if (hold.status === 'Overdue') return 'Vehicle is currently overdue on a previous rental.'
+    return `Vehicle is currently unavailable (${hold.status.toLowerCase()}).`
+  }
+
+  // Active rental conflict
+  const conflict = bookings.find(b =>
+    b.vehicleId === vehicleId &&
+    !b.blocked &&
+    !['Completed', 'Cancelled'].includes(b.status) &&
+    start < tripTime(b.end, b.endTime || '10:00') &&
+    end > tripTime(b.start, b.startTime || '10:00')
+  )
+
+  if (conflict) {
+    if (conflict.status === 'On Rental') return `Currently deployed on an active trip through ${prettyDate(conflict.end)}.`
+    return `Reserved by another customer for these dates (${prettyDate(conflict.start)} – ${prettyDate(conflict.end)}).`
+  }
+
+  return ''
+}
+
+export function isAvailable(vehicleId, dates, bookings = []) {
+  return getAvailabilityReason(vehicleId, dates, bookings) === ''
 }
