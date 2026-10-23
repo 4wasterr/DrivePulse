@@ -1,9 +1,9 @@
 const { randomUUID, createHash } = require('node:crypto');
 const D = require('./domain');
-const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const stamp = () => new Date().toISOString();
-const money = n => `PHP ${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
-const fmt = value => value ? new Date(value).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) + ' PHT' : 'Pending';
+const money = (n) => `PHP ${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+const fmt = (value) => value ? new Date(value).toLocaleString('en-PH', { timeZone: 'Asia/Manila' }) + ' PHT' : 'Pending';
 const DEFAULT_TERMS = `1. AUTHORIZED OPERATION: The vehicle shall be operated solely by the verified renter named herein. Driving under the influence, unauthorized subleasing, racing, or transporting contraband is strictly prohibited under Philippine law.
 
 2. FUEL & CLEANLINESS POLICY: The vehicle is dispatched with a 100% full tank / full charge and a clean interior. The renter agrees to return the vehicle with 100% full fuel / charge and in a clean condition.
@@ -17,45 +17,44 @@ const DEFAULT_TERMS = `1. AUTHORIZED OPERATION: The vehicle shall be operated so
 5. ACCIDENTS & ROAD INCIDENTS: In the event of any collision, mechanical malfunction, or traffic incident, the renter must notify DrivePulse within two (2) hours and secure an official police report.`;
 
 function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit }) {
-  db.exec(`CREATE TABLE IF NOT EXISTS rental_documents (id TEXT PRIMARY KEY, booking_id TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL);`);
-  function issue(b, kind, user, extra = {}) {
+  async function issue(b, kind, user, extra = {}) {
     const document = { id: `${kind.toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`, kind, bookingId: b.id, createdAt: stamp(), by: user.name, actorId: user.id, sample: !!b.sample,
-      renter: structuredClone(b.renter), vehicle: { ...D.FLEET.find(v => v.id === b.vehicleId) },
+      renter: structuredClone(b.renter), vehicle: { ...D.FLEET.find((v) => v.id === b.vehicleId) },
       schedule: { start: b.start, startTime: b.startTime, end: b.end, endTime: b.endTime, pickup: b.pickup, dropoff: b.dropoff },
       billing: { ...D.billing(b), rental: b.rental, deposit: b.deposit, lateFee: b.lateFee || 0 }, ...extra };
     document.digest = createHash('sha256').update(JSON.stringify(document)).digest('hex');
-    db.prepare('INSERT INTO rental_documents VALUES(?,?,?,?,?)').run(document.id, b.id, kind, document.createdAt, JSON.stringify(document));
+    await db.prepare('INSERT INTO rental_documents(id,booking_id,kind,created_at,payload) VALUES(?,?,?,?,?)').run(document.id, b.id, kind, document.createdAt, JSON.stringify(document));
     return { id: document.id, kind, createdAt: document.createdAt, by: user.name, digest: document.digest };
   }
-  function contract(b, user, customTerms = DEFAULT_TERMS) {
+  async function contract(b, user, customTerms = DEFAULT_TERMS) {
     const revision = (b.agreement?.revision || 0) + 1;
-    b.agreement = { ...issue(b, 'agreement', user, { terms: customTerms, signature: b.renter.name, consent: true, signatureMethod: 'System-issued rental contract', revision, supersedes: b.agreement?.id || null }), revision, terms: customTerms };
+    b.agreement = { ...(await issue(b, 'agreement', user, { terms: customTerms, signature: b.renter.name, consent: true, signatureMethod: 'System-issued rental contract', revision, supersedes: b.agreement?.id || null })), revision, terms: customTerms };
     delete b.agreementInvalidatedAt;
     return b.agreement;
   }
-  function receipt(b, kind, user) {
+  async function receipt(b, kind, user) {
     if (kind === 'return' && (!b.returnedAt || !b.returnInspection)) return;
     if (kind === 'release' && b.releaseReceipt || kind === 'return' && b.returnReceipt?.inspectionId === b.returnInspection.id) return;
     const inspection = kind === 'release' ? b.inspection : b.returnInspection;
     const previous = b[kind === 'release' ? 'releaseReceipt' : 'returnReceipt'];
-    b[kind === 'release' ? 'releaseReceipt' : 'returnReceipt'] = { ...issue(b, kind, user, { eventAt: kind === 'release' ? b.dispatchedAt : b.returnedAt, inspection: structuredClone(inspection), agreementId: b.agreement?.id || null, lateHours: b.lateHours || 0, hourlyLateRate: b.hourlyLateRate || 0, supersedes: previous?.id || null }), inspectionId: inspection?.id || null };
+    b[kind === 'release' ? 'releaseReceipt' : 'returnReceipt'] = { ...(await issue(b, kind, user, { eventAt: kind === 'release' ? b.dispatchedAt : b.returnedAt, inspection: structuredClone(inspection), agreementId: b.agreement?.id || null, lateHours: b.lateHours || 0, hourlyLateRate: b.hourlyLateRate || 0, supersedes: previous?.id || null })), inspectionId: inspection?.id || null };
   }
-  function cashReceipt(b, payment, user) {
-    payment.receipt = issue(b, 'cash', user, { payment: { id: payment.id, amount: payment.amount, type: payment.type, method: payment.method, reference: payment.reference, at: payment.reviewedAt || payment.at }, eventAt: payment.reviewedAt || payment.at });
+  async function cashReceipt(b, payment, user) {
+    payment.receipt = await issue(b, 'cash', user, { payment: { id: payment.id, amount: payment.amount, type: payment.type, method: payment.method, reference: payment.reference, at: payment.reviewedAt || payment.at }, eventAt: payment.reviewedAt || payment.at });
   }
   function register(app, role) {
-    app.post('/api/agent/bookings/:id/agreement', role('agent'), (req, res) => res.status(201).json(transaction(() => {
-      const b = getBooking(req.params.id);
+    app.post('/api/agent/bookings/:id/agreement', role('agent'), async (req, res) => res.status(201).json(await transaction(async () => {
+      const b = await getBooking(req.params.id);
       if (b.version !== req.body.version) D.fail('This reservation changed. Refresh and try again.', 409);
       if (['Completed', 'Cancelled'].includes(b.status)) D.fail('Closed reservations cannot receive a new agreement.');
       const terms = D.text(req.body.terms || DEFAULT_TERMS, 'Rental terms', 6000);
-      contract(b, req.user, terms);
-      b.version++; audit(b, req.user, 'Rental contract issued', `Revision ${b.agreement.revision}`); saveBooking(b); return b;
+      await contract(b, req.user, terms);
+      b.version++;await audit(b, req.user, 'Rental contract issued', `Revision ${b.agreement.revision}`);await saveBooking(b);return b;
     })));
-    app.get('/api/rental-documents/:id', role('client', 'agent', 'manager'), (req, res) => {
-      const row = db.prepare('SELECT * FROM rental_documents WHERE id=?').get(req.params.id);
+    app.get('/api/rental-documents/:id', role('client', 'agent', 'manager'), async (req, res) => {
+      const row = await db.prepare('SELECT * FROM rental_documents WHERE id=?').get(req.params.id);
       if (!row) D.fail('Issued document not found.', 404);
-      const b = getBooking(row.booking_id);
+      const b = await getBooking(row.booking_id);
       if (req.user.role === 'client' && b.ownerId !== req.user.id) D.fail('Issued document not found.', 404);
       const d = JSON.parse(row.payload);
       res.set('Content-Disposition', `attachment; filename="${d.id}.html"`).type('html').send(render(d));
@@ -75,15 +74,15 @@ function render(d) {
   }[d.kind] || 'DrivePulse Issued Document';
 
   const fields = [
-    ['Document Reference', d.id],
-    ['Reservation ID', d.bookingId],
-    ['Verified Renter', `${d.renter.name} · ${d.renter.email || 'In-Person Customer'}`],
-    ['Vehicle Description', `${d.vehicle.name} (${d.vehicle.category || 'Standard'})`],
-    ['Scheduled Pick-up', `${d.schedule.start} at ${d.schedule.startTime} PHT (${d.schedule.pickup})`],
-    ['Scheduled Return', `${d.schedule.end} at ${d.schedule.endTime} PHT (${d.schedule.dropoff})`],
-    ['Issuing Officer', d.by],
-    ['Date & Time Issued', fmt(d.createdAt)]
-  ];
+  ['Document Reference', d.id],
+  ['Reservation ID', d.bookingId],
+  ['Verified Renter', `${d.renter.name} · ${d.renter.email || 'In-Person Customer'}`],
+  ['Vehicle Description', `${d.vehicle.name} (${d.vehicle.category || 'Standard'})`],
+  ['Scheduled Pick-up', `${d.schedule.start} at ${d.schedule.startTime} PHT (${d.schedule.pickup})`],
+  ['Scheduled Return', `${d.schedule.end} at ${d.schedule.endTime} PHT (${d.schedule.dropoff})`],
+  ['Issuing Officer', d.by],
+  ['Date & Time Issued', fmt(d.createdAt)]];
+
   if (d.eventAt) fields.push(['Actual Event Timestamp', fmt(d.eventAt)]);
   const i = d.inspection;
   if (i) {

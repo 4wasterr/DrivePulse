@@ -1,13 +1,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createApp } = require('../app');
+const { createApp } = require('../application');
 const D = require('../domain');
+const { testDatabase } = require('./helpers/database');
 
 async function fixture(t, options = {}) {
-  const { app, db } = createApp({ dbPath: ':memory:', seedDemo: false, ...options });
+  const { app, db } = await createApp({ dbPath: ':memory:', database: await testDatabase(), seedDemo: false, ...options });
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
-  t.after(async () => { await new Promise(resolve => server.close(resolve)); db.close(); });
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); await db.close(); });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function request(path, { method = 'GET', body, cookie, headers = {} } = {}) {
     const binary = Buffer.isBuffer(body);
@@ -64,7 +65,7 @@ test('accounts use hashed passwords, role checks, protected sessions, and origin
   const session = await f.request('/session', { cookie: f.client.cookie });
   assert.equal(session.data.user.role, 'client'); assert.equal(session.data.user.name, 'alex');
   assert.ok(f.client.headers.get('set-cookie').includes('HttpOnly')); assert.ok(f.client.headers.get('set-cookie').includes('SameSite=Strict'));
-  const record = f.db.prepare('SELECT * FROM users WHERE email=?').get('alex@example.com');
+  const record = await f.db.prepare('SELECT * FROM users WHERE email=?').get('alex@example.com');
   assert.notEqual(record.password_hash, 'StrongPass123!'); assert.equal(record.password_hash.length, 128);
   assert.equal((await f.request('/workspace')).status, 401);
   assert.equal((await f.request('/auth/login', { method: 'POST', body: { email: 'alex@example.com', password: 'WrongPassword123!' } })).status, 401);
@@ -183,9 +184,9 @@ test('support conversations enforce ownership, support agent resolution, and det
 });
 
 test('agent self-registration can be disabled independently of client registration', async t => {
-  const { app, db } = createApp({ dbPath: ':memory:', seedDemo: false, allowAgentSignup: false });
+  const { app, db } = await createApp({ dbPath: ':memory:', database: await testDatabase(), seedDemo: false, allowAgentSignup: false });
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
-  t.after(async () => { await new Promise(resolve => server.close(resolve)); db.close(); });
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); await db.close(); });
   const response = await fetch(`http://127.0.0.1:${server.address().port}/api/auth/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'agent', name: 'Agent', email: 'agent@example.com', password: 'StrongPass123!' }) });
   assert.equal(response.status, 403);
 });
@@ -425,5 +426,5 @@ test('central audit is manager-only, immutable, filterable, stable when paginate
   assert.ok(filtered.data.records.length >= 1);
   const same = await f.request(`/manager/audit?through=${log.data.through}`, { cookie: f.manager.cookie });
   assert.deepEqual(same.data.records, log.data.records); assert.equal(same.data.total, log.data.total);
-  assert.throws(() => f.db.prepare('DELETE FROM audit_log WHERE sequence=?').run(log.data.records[0].sequence), /immutable/);
+  await assert.rejects(async () => await f.db.prepare('DELETE FROM audit_log WHERE sequence=?').run(log.data.records[0].sequence), /immutable/);
 });

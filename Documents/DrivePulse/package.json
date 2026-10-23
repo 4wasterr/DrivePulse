@@ -3,9 +3,18 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
+    "setup": "node scripts/setup.mjs",
     "dev": "node scripts/dev.mjs",
+    "start": "npm --prefix backend start",
+    "prebuild": "npm --prefix frontend ci --include=dev",
     "build": "npm --prefix frontend run build",
-    "test": "npm --prefix frontend test && npm --prefix backend test"
+    "test": "npm --prefix frontend test && npm --prefix backend test",
+    "lint": "npm --prefix frontend run lint",
+    "check": "npm run lint && npm test && npm run build",
+    "preflight": "node backend/scripts/preflight.js",
+    "package:deploy": "node scripts/package-deploy.mjs",
+    "db:migrate": "node backend/scripts/manage-db.js migrate",
+    "db:manager": "node backend/scripts/manage-db.js manager"
   },
-  "engines": { "node": ">=24" }
+  "engines": { "node": "24.x" }
 }

@@ -50,6 +50,6 @@ export function downloadFile(content, filename, type = 'text/plain') {
 export const validateFile = (file) => {
   if (!file) return 'Please choose a file.'
   if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return 'Choose a PDF, JPG, PNG, or WebP file.'
-  if (file.size > 5 * 1024 * 1024) return 'The file must be smaller than 5 MB.'
+  if (file.size > 4 * 1024 * 1024) return 'The file must be 4 MB or smaller.'
   return null
 }

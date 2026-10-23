@@ -38,10 +38,11 @@ test('operational holds block all dates and cannot appear as rentable vehicles',
   }
 })
 
-test('document uploads reject unsupported formats and files larger than 5 MB', () => {
+test('document uploads reject unsupported formats and files larger than 4 MB', () => {
   assert.equal(validateFile(new File(['sample'], 'license.pdf', { type: 'application/pdf' })), null)
   assert.equal(validateFile(new File(['sample'], 'id.png', { type: 'image/png' })), null)
   assert.match(validateFile(new File(['sample'], 'script.html', { type: 'text/html' })), /PDF/)
-  assert.match(validateFile({ type: 'application/pdf', size: 5 * 1024 * 1024 + 1 }), /5 MB/)
+  assert.equal(validateFile({ type: 'application/pdf', size: 4 * 1024 * 1024 }), null)
+  assert.match(validateFile({ type: 'application/pdf', size: 4 * 1024 * 1024 + 1 }), /4 MB/)
   assert.match(validateFile(undefined), /choose a file/)
 })

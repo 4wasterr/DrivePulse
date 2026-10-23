@@ -7,12 +7,27 @@ A React rental website with separate authenticated **Client**, **Booking Agent**
 Use Node.js 24 or later:
 
 ```sh
-npm --prefix frontend install
-npm --prefix backend install
+npm run setup
 npm run dev
 ```
 
 Open http://127.0.0.1:5173. The root command runs both Vite and the Express API. In Windows PowerShell with script execution disabled, use `npm.cmd` instead of `npm`.
+
+Setup creates `backend/.env` if it does not exist. With an empty `DATABASE_URL`, development uses `backend/data/drivepulse.sqlite`. Accounts, sessions, bookings, uploaded files, support conversations, and audit records persist across restarts. Supabase is not needed for local work. The database and environment file are excluded from deployment packages.
+
+Run `npm run check` to lint, run the SQLite and embedded PostgreSQL workflow tests, and build the frontend. The PostgreSQL tests run locally without a Supabase account. Generate a clean source archive with `npm run package:deploy`.
+
+## Deploy with Vercel and Supabase
+
+The application code is prepared for Vercel Services. **Production activation is pending your Supabase connection, database migration, and first manager account.** Follow [the deployment guide](docs/deployment.md) once Supabase is available.
+
+`vercel.json` routes `/api` to Express and everything else to the Vite frontend on the same domain. Both services use Node.js 24 and their committed lockfiles. Keep Vercel Root Directory at the folder containing this file: `Documents/DrivePulse` in the existing parent repository, or `.` in a separate DrivePulse repository.
+
+Production uses PostgreSQL through the backend-only `DATABASE_URL`. The Supabase JavaScript API keys are not required. Uploaded files are stored as private database bytes and downloaded only through authenticated API routes. The upload limit is 4 MB. Production refuses to use SQLite or an in-memory fallback. Missing database configuration produces HTTP 503.
+
+Use `backend/.env.production.example` for the required environment variables. Run `npm run db:migrate`, then `npm run db:manager` to create the first manager with a password entered privately. The manager creates other staff accounts through User Management. Demo accounts and public staff registration are disabled in production.
+
+Run `npm run preflight -- --connect` with the production environment loaded before deploying. See [Vercel Services](https://vercel.com/docs/services) and [Supabase connection guidance](https://supabase.com/docs/guides/database/connecting-to-postgres).
 
 ## Demo accounts
 

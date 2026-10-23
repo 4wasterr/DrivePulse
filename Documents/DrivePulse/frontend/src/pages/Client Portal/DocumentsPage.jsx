@@ -21,7 +21,7 @@ export default function ClientDocumentsPage({ documentCount, documents, onDocume
             <span className="count-pill">{documentCount} of 3 uploaded</span>
           </div>
           <p className="muted">
-            DrivePulse requires 3 distinct official identification files before vehicle dispatch: your official driver’s license and two separate government IDs or proof of address. Files can be JPG, PNG, WebP or PDF, up to 5 MB each.
+            DrivePulse requires 3 distinct official identification files before vehicle dispatch: your official driver’s license and two separate government IDs or proof of address. Files can be JPG, PNG, WebP or PDF, up to 4 MB each.
           </p>
           <div className="document-completion">
             <span style={{ width: `${(documentCount / 3) * 100}%` }} />
