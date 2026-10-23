@@ -13,7 +13,8 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
   const records = kind => db.prepare('SELECT payload FROM fleet_records WHERE kind=? ORDER BY rowid DESC').all(kind).map(r => JSON.parse(r.payload));
   const get = (kind, id) => { const r = db.prepare('SELECT payload FROM fleet_records WHERE kind=? AND id=?').get(kind, id); return r ? JSON.parse(r.payload) : null; };
   const save = (kind, value) => db.prepare('INSERT INTO fleet_records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET payload=excluded.payload').run(kind, value.id, JSON.stringify(value));
-  const vehicle = id => { const v = D.FLEET.find(v => v.id === id); if (!v) D.fail('Vehicle not found.', 404); return v; };
+  const allFleetDef = () => [...D.FLEET, ...records('dynamic_vehicle')];
+  const vehicle = id => { const v = allFleetDef().find(v => v.id === id); if (!v) D.fail('Vehicle not found.', 404); return v; };
   const state = id => {
     const base = vehicle(id), saved = get('vehicle', id);
     return saved ? { rate: base.rate, ...saved } : { id, status: 'Available', version: 1, rate: base.rate, odometer: null, fuelLevel: null, activity: [] };
@@ -34,7 +35,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     const s = state(b.vehicleId);
     if (s.status === 'Available') { s.status = 'Under Inspection'; changeState(s, user, 'Return awaiting inspection', b.id); }
   };
-  const fleet = (includeArchived = false) => D.FLEET.map(v => {
+  const fleet = (includeArchived = false) => allFleetDef().map(v => {
     const s = state(v.id), bookings = allBookings().filter(b => b.vehicleId === v.id);
     const active = bookings.find(b => b.status === 'On Rental');
     const pendingReturn = bookings.find(b => b.status === 'Completed' && b.returnedAt && !b.returnInspection);
@@ -245,6 +246,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
         role: 'mechanic',
         at: stamp(),
         outcome: 'approved',
+        status: 'approved',
         odometer: s.odometer || vehicle(b.vehicleId).odometer || 14000,
         fuelLevel: s.fuelLevel || 100,
         cleanliness: 'Clean',
@@ -430,6 +432,6 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     }
   }
 
-  return { register, fleet, present, dispatchBlocks, operationalBlocks, records, state, save, vehicleRate, recordReturn };
+  return { register, fleet, present, dispatchBlocks, operationalBlocks, records, state, save, vehicleRate, recordReturn, saveDynamicVehicle: v => save('dynamic_vehicle', v) };
 }
 module.exports = { createFleet };

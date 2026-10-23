@@ -17,10 +17,7 @@ const DEFAULT_TERMS = `1. AUTHORIZED OPERATION: The vehicle shall be operated so
 5. ACCIDENTS & ROAD INCIDENTS: In the event of any collision, mechanical malfunction, or traffic incident, the renter must notify DrivePulse within two (2) hours and secure an official police report.`;
 
 function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit }) {
-  db.exec(`CREATE TABLE IF NOT EXISTS rental_documents (id TEXT PRIMARY KEY, booking_id TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL);
-    CREATE INDEX IF NOT EXISTS rental_document_booking ON rental_documents(booking_id);
-    CREATE TRIGGER IF NOT EXISTS rental_document_no_update BEFORE UPDATE ON rental_documents BEGIN SELECT RAISE(ABORT,'Issued documents are immutable'); END;
-    CREATE TRIGGER IF NOT EXISTS rental_document_no_delete BEFORE DELETE ON rental_documents BEGIN SELECT RAISE(ABORT,'Issued documents are immutable'); END;`);
+  db.exec(`CREATE TABLE IF NOT EXISTS rental_documents (id TEXT PRIMARY KEY, booking_id TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL, payload TEXT NOT NULL);`);
   function issue(b, kind, user, extra = {}) {
     const document = { id: `${kind.toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`, kind, bookingId: b.id, createdAt: stamp(), by: user.name, actorId: user.id, sample: !!b.sample,
       renter: structuredClone(b.renter), vehicle: { ...D.FLEET.find(v => v.id === b.vehicleId) },

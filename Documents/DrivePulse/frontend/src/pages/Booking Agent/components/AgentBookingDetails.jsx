@@ -7,6 +7,7 @@ import IdViewerModal from '../../../components/ui/IdViewerModal.jsx'
 import UploadField from '../../../components/ui/UploadField.jsx'
 import { BookingRecords, IssuedLink } from '../../../components/operations/OperationalRecords.jsx'
 import { downloadPass } from '../../../dispatchPass.js'
+import { generateQRCodeSVG } from '../../../utils/qr.js'
 
 const documentKinds = [
   ['license', "Official Driver's License"],
@@ -132,10 +133,18 @@ export default function AgentBookingDetails({ booking, initialTab, onClose, onRe
         {booking.inspection?.status === 'approved' && booking.inspection?.role === 'mechanic' && <div className="info-note"><Icon name="check" /><span>Inspection approved by {booking.inspection.by} · {stamp(booking.inspection.at)}{booking.inspection.photos && <><br />{booking.inspection.odometer.toLocaleString()} km · Fuel / charge {booking.inspection.fuelLevel}% · Interior {booking.inspection.cleanliness}<br />{booking.inspection.photos.filter(p => !p.id.startsWith('sample-')).map(photo => <a className="text-link" key={photo.id} href={`/api/documents/${encodeURIComponent(photo.id)}`} target="_blank" rel="noreferrer">View {photo.view} condition photo </a>)}</>}</span></div>}
         {booking.dispatchPass && !booking.dispatchPass.revokedAt && !closed ? (
           <div className="digital-pass">
-            <div><span className="workspace-kicker">DIGITAL DISPATCH PASS</span><Icon name="shield" size={28} /></div>
-            <h3>{booking.dispatchPass.id}</h3>
-            <p>{booking.renter.name} · {vehicle.name}</p>
-            <span>Issued by {booking.dispatchPass.issuedBy} · {stamp(booking.dispatchPass.issuedAt)}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div><span className="workspace-kicker">DIGITAL DISPATCH PASS</span><Icon name="shield" size={28} /></div>
+                <h3>{booking.dispatchPass.id}</h3>
+                <p>{booking.renter.name} · {vehicle.name}</p>
+                <span>Issued by {booking.dispatchPass.issuedBy} · {stamp(booking.dispatchPass.issuedAt)}</span>
+              </div>
+              <div
+                style={{ background: '#fff', padding: '8px', borderRadius: '6px', border: '1px solid #e5e7eb', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                dangerouslySetInnerHTML={{ __html: generateQRCodeSVG(`DP-PASS:${booking.dispatchPass.id}:${booking.id}:${vehicle.name}`, { size: 90 }) }}
+              />
+            </div>
             <div className="digital-pass-actions">
               <button className="button button-dark" onClick={() => downloadPass(booking)}><Icon name="download" size={18} />Download pass</button>
               {booking.status === 'Ready for Dispatch' && <button className="button button-outline" disabled={busy || booking.dispatchBlocks.length > 0} onClick={() => mutate('dispatch', {}, 'Vehicle dispatched and release receipt issued.')}>Mark vehicle dispatched<Icon name="arrow" size={18} /></button>}

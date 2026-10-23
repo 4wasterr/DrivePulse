@@ -11,6 +11,8 @@ import FinancialRequest from '../../components/operations/FinancialRequest.jsx'
 import DecisionForm from './components/DecisionForm.jsx'
 import { money } from '../../data.js'
 import RiskForm from './components/RiskForm.jsx'
+import AddVehicleModal from './components/AddVehicleModal.jsx'
+import EscalateOverdueModal from './components/EscalateOverdueModal.jsx'
 
 const navigation = [
   ['overview', 'grid', 'Fleet & oversight'],
@@ -50,6 +52,8 @@ export default function ManagerPortal({ page, user, operations, onRefresh, onNav
     {dialog?.kind === 'risk-new' && <RiskForm bookings={bookings} onClose={() => setDialog(null)} onDone={done} />}
     {dialog?.kind === 'risk-override' && <DecisionForm title="Override driver risk flag" description={dialog.risk.description} path={`/manager/risks/${dialog.risk.id}/override`} version={dialog.risk.version} onClose={() => setDialog(null)} onDone={done} />}
     {dialog?.kind === 'flag-override' && <DecisionForm title="Override overdue alert" description={`${dialog.flag.bookingId}. Record why this alert can be acknowledged. The vehicle stays overdue and unavailable for a new booking.`} path={`/manager/flags/${dialog.flag.bookingId}/override`} version={dialog.flag.version} onClose={() => setDialog(null)} onDone={done} />}
+    {dialog?.kind === 'add-vehicle' && <AddVehicleModal onClose={() => setDialog(null)} onDone={done} />}
+    {dialog?.kind === 'escalate-overdue' && <EscalateOverdueModal bookingId={dialog.bookingId} onClose={() => setDialog(null)} onDone={done} />}
   </>
 
   return <StaffLayout user={user} navigation={navigation} section={section} title={title} approvals={approvals} notice={notice} error={error} setNotice={setNotice} setError={setError} onLogout={onLogout} dialogs={dialogs}>

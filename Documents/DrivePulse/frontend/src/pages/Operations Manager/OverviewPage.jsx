@@ -75,7 +75,10 @@ export default function ManagerOverviewPage({ operations, fleetFilters, onRefres
               <p>Return due {flag.end} at {flag.endTime} PHT</p>
             </div>
             <Tag>Overdue anomaly</Tag>
-            <button className="button button-outline" onClick={() => setDialog({ kind: 'flag-override', flag })}>Override alert</button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="button button-outline" onClick={() => setDialog({ kind: 'flag-override', flag })}>Override alert</button>
+              <button className="button button-dark" onClick={() => setDialog({ kind: 'escalate-overdue', bookingId: flag.bookingId })}>Escalate</button>
+            </div>
           </article>)}
           {thresholdAlerts.slice(0, 5).map(alert => <article className="staff-ledger-row" key={alert.id}>
             <div>

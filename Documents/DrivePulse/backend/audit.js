@@ -11,14 +11,7 @@ function createAudit(db) {
     actor_id TEXT, actor TEXT NOT NULL, role TEXT NOT NULL, action TEXT NOT NULL,
     resource TEXT NOT NULL, detail TEXT NOT NULL, status INTEGER NOT NULL,
     old_value TEXT NOT NULL DEFAULT '', new_value TEXT NOT NULL DEFAULT '',
-    ip TEXT NOT NULL DEFAULT '', alert_type TEXT NOT NULL DEFAULT '');
-    CREATE INDEX IF NOT EXISTS audit_at ON audit_log(at);
-    CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT,'Audit records are immutable'); END;
-    CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT,'Audit records are immutable'); END;`);
-  const existingCols = new Set(db.prepare('PRAGMA table_info(audit_log)').all().map(c => c.name));
-  for (const col of ['old_value', 'new_value', 'ip', 'alert_type']) {
-    if (!existingCols.has(col)) db.exec(`ALTER TABLE audit_log ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
-  }
+    ip TEXT NOT NULL DEFAULT '', alert_type TEXT NOT NULL DEFAULT '');`);
   const write = (user, action, resource = '', detail = '', status = 200, extra = {}) => {
     const at = new Date().toISOString();
     const hourPHT = new Date(Date.now() + 8 * 3600000).getUTCHours();

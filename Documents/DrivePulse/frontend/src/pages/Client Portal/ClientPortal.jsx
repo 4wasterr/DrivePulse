@@ -17,6 +17,7 @@ import BookingModal from './components/BookingModal.jsx'
 import Modal from '../../components/ui/Modal.jsx'
 import { BookingRecords } from '../../components/operations/OperationalRecords.jsx'
 import TripDetails from './components/TripDetails.jsx'
+import ExtensionModal from './components/ExtensionModal.jsx'
 import { downloadPass } from '../../dispatchPass.js'
 import ClientSupport from './components/ClientSupport.jsx'
 
@@ -179,7 +180,43 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
         </div>
       </Modal>
     })()}
-    {modal?.type === 'trip' && <Modal title="Every step of your journey." eyebrow={`${modal.booking.id}${modal.booking.sample ? ' · SAMPLE BOOKING' : ''}`} wide onClose={() => setModal(null)}><BookingRecords booking={bookings.find(b => b.id === modal.booking.id) || modal.booking} /><TripDetails booking={bookings.find(b => b.id === modal.booking.id) || modal.booking} />{(bookings.find(b => b.id === modal.booking.id) || modal.booking).dispatchPass && !(bookings.find(b => b.id === modal.booking.id) || modal.booking).dispatchPass.revokedAt && <button className="button button-dark full-width" onClick={() => downloadPass(bookings.find(b => b.id === modal.booking.id) || modal.booking)}><Icon name="download" />Download dispatch pass</button>}</Modal>}
+    {modal?.type === 'trip' && (() => {
+      const activeBooking = bookings.find(b => b.id === modal.booking.id) || modal.booking
+      const canExtend = ['On Rental', 'Ready for Dispatch'].includes(activeBooking.status)
+      return (
+        <Modal title="Every step of your journey." eyebrow={`${activeBooking.id}${activeBooking.sample ? ' · SAMPLE BOOKING' : ''}`} wide onClose={() => setModal(null)}>
+          <BookingRecords booking={activeBooking} />
+          <TripDetails booking={activeBooking} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px' }}>
+            {activeBooking.dispatchPass && !activeBooking.dispatchPass.revokedAt && (
+              <button className="button button-dark full-width" onClick={() => downloadPass(activeBooking)}>
+                <Icon name="download" />Download dispatch pass
+              </button>
+            )}
+            {canExtend && (
+              <button
+                className="button button-outline full-width"
+                onClick={() => setModal({ type: 'extend', booking: activeBooking })}
+              >
+                <Icon name="calendar" />Extend rental duration
+              </button>
+            )}
+          </div>
+        </Modal>
+      )
+    })()}
+    {modal?.type === 'extend' && (
+      <ExtensionModal
+        booking={modal.booking}
+        vehicle={vehicleFor(modal.booking)}
+        onClose={() => setModal(null)}
+        onSuccess={async () => {
+          await onRefresh()
+          setModal(null)
+          notify('Rental extension confirmed! Your return schedule and contract have been updated.')
+        }}
+      />
+    )}
     {modal?.type === 'profile' && <Modal title="Make yourself at home." eyebrow="YOUR CLIENT PROFILE" onClose={() => setModal(null)}><form onSubmit={async e => { e.preventDefault(); const data = new FormData(e.currentTarget); const name = String(data.get('name')).trim(); if (!name) return; try { await api('/profile', { method: 'PATCH', body: { name, email: String(data.get('email')).trim() } }); await onRefresh(); setModal(null); notify('Your profile has been updated.') } catch (error) { notify(error.message) } }}><div className="profile-intro"><span className="avatar large-avatar">{initials}</span><p className="muted">A few details to make your journey more personal.</p></div><label className="form-field">Full name<input required name="name" autoComplete="name" defaultValue={profile.name} maxLength={70} /></label><label className="form-field">Email address<input required name="email" type="email" autoComplete="email" defaultValue={profile.email} maxLength={120} /></label><div className="info-note"><Icon name="info" size={18} /><span>Updating your email also updates the email you use to sign in.</span></div><button className="button button-dark full-width" type="submit">Save my details<Icon name="check" size={17} /></button></form></Modal>}
     {modal?.type === 'help' && <Modal title="A smoother journey starts here." eyebrow="YOUR PERSONAL PIT STOP" onClose={() => setModal(null)}><p className="muted">A few helpful answers before you hit the road.</p>{user ? <ClientSupport bookings={bookings} tickets={workspace?.tickets || []} onRefresh={onRefresh} /> : <a className="button button-dark" href="#login">Sign in to contact the booking team</a>}<div className="faq-list">{[{ q: 'What do I need to book a vehicle?', a: 'Choose your dates and locations, upload a valid driver’s license and two different government-issued IDs, then pay the rental and deposit in cash at the counter. Your booking starts as Pending Approval.' }, { q: 'How is my quotation calculated?', a: 'The daily rate is charged for each started 24-hour period. A ₱5,000 refundable security deposit is added to the rental total. Fuel, tolls, and additional charges are excluded.' }, { q: 'How are security deposits released?', a: 'If the fleet mechanic marks a Clean Return with zero damage flags and full fuel, the system automatically schedules your deposit release within 24–48 hours. Only disputed or withheld deposits require Operations Manager approval.' }, { q: 'Can I get a rental contract or receipt?', a: 'Download your official rental contract and receipts from My documents, Payments & billing, or booking details. Open the HTML file, choose Print, then Save as PDF.' }].map(faq => <details key={faq.q}><summary>{faq.q}<Icon name="down" size={17} /></summary><p>{faq.a}</p></details>)}</div><button className="button button-dark full-width" onClick={() => { setModal(null); if (user) navigate('fleet'); else onAuthenticate('fleet') }}>Find my next ride<Icon name="arrow" size={17} /></button></Modal>}
     {toast && <div className="toast" role="status"><span><Icon name="check" size={17} /></span>{toast}<button aria-label="Dismiss notification" onClick={() => setToast('')}><Icon name="close" size={15} /></button></div>}

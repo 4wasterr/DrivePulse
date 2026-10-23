@@ -1,9 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const { DatabaseSync } = require('node:sqlite');
+const { createDatabase } = require('./db');
 const { randomUUID, randomBytes, scryptSync, timingSafeEqual, createHash } = require('node:crypto');
-const { mkdirSync } = require('node:fs');
-const { dirname, join } = require('node:path');
 const D = require('./domain');
 const { createFleet } = require('./fleet');
 const { createAudit } = require('./audit');
@@ -32,11 +30,9 @@ function samplePDF(label) {
   return Buffer.from(pdf);
 }
 
-function createApp({ dbPath = process.env.DB_PATH || join(__dirname, 'data', 'drivepulse.sqlite'), seedDemo = process.env.NODE_ENV !== 'production', allowAgentSignup = process.env.NODE_ENV !== 'production' || process.env.ALLOW_AGENT_SIGNUP === 'true' } = {}) {
-  if (dbPath !== ':memory:') mkdirSync(dirname(dbPath), { recursive: true });
-  const db = new DatabaseSync(dbPath);
-  db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
-    CREATE TABLE IF NOT EXISTS users (
+function createApp({ database = null, seedDemo = process.env.NODE_ENV !== 'production', allowAgentSignup = process.env.NODE_ENV !== 'production' || process.env.ALLOW_AGENT_SIGNUP === 'true' } = {}) {
+  const db = database || createDatabase();
+  db.exec(`CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL,
       salt TEXT NOT NULL, password_hash TEXT NOT NULL, saved TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL DEFAULT '', last_login_at TEXT NOT NULL DEFAULT '',
@@ -45,13 +41,9 @@ function createApp({ dbPath = process.env.DB_PATH || join(__dirname, 'data', 'dr
     CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS bookings (id TEXT PRIMARY KEY, owner_id TEXT, payload TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL, mime TEXT NOT NULL, fingerprint TEXT NOT NULL, uploaded_at TEXT NOT NULL, data BLOB NOT NULL);
-    CREATE INDEX IF NOT EXISTS document_owner ON documents(owner_id, kind, uploaded_at);
-    CREATE TABLE IF NOT EXISTS tickets (id TEXT PRIMARY KEY, owner_id TEXT, payload TEXT NOT NULL);`);
+    CREATE TABLE IF NOT EXISTS tickets (id TEXT PRIMARY KEY, owner_id TEXT, payload TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS vehicles (id TEXT PRIMARY KEY, model TEXT NOT NULL, brand TEXT NOT NULL, category TEXT NOT NULL, rate REAL NOT NULL, plate TEXT NOT NULL, transmission TEXT NOT NULL, seats INTEGER NOT NULL, fuel_type TEXT NOT NULL, tank_capacity INTEGER NOT NULL, mileage INTEGER NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL);`);
   db.prepare("UPDATE documents SET owner_id='sample-owner-archive' WHERE name LIKE 'sample-%.pdf' AND owner_id<>'sample-owner-archive'").run();
-  const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map(c => c.name));
-  for (const [col, def] of [['created_at', "TEXT NOT NULL DEFAULT ''"], ['last_login_at', "TEXT NOT NULL DEFAULT ''"], ['archived_at', 'TEXT'], ['archived_by', 'TEXT'], ['archive_reason', 'TEXT']]) {
-    if (!userCols.has(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${def}`);
-  }
 
   const rawBookings = () => db.prepare('SELECT payload FROM bookings').all().map(row => JSON.parse(row.payload));
   const allBookings = () => rawBookings().filter(b => !b.archivedAt);
@@ -431,6 +423,81 @@ function createApp({ dbPath = process.env.DB_PATH || join(__dirname, 'data', 'dr
     D.invalidatePass(b);
   })));
 
+  app.post('/api/bookings/:id/extend', requireUser, (req, res) => res.json(updateBooking(req, 'Rental extended (Client self-service)', b => {
+    if (req.user.role === 'client' && b.ownerId !== req.user.id) D.fail('You can only extend your own rentals.', 403);
+    if (!['On Rental', 'Ready for Dispatch'].includes(b.status)) D.fail('Only active or ready rentals can be extended.');
+    const updated = { ...b, end: req.body.end, endTime: req.body.endTime };
+    if (D.time(updated.end, updated.endTime) <= Math.max(D.time(b.end, b.endTime), Date.now())) D.fail('Choose a future return time later than the current return.');
+    const quotation = D.quote(updated, true, fleet.vehicleRate(b.vehicleId));
+    if (!D.available(allBookings(), updated, b.id)) D.fail('This vehicle is reserved by another customer for the requested extension dates.', 409);
+    b.extensions ||= [];
+    b.extensions.push({
+      oldEnd: b.end, oldEndTime: b.endTime,
+      newEnd: updated.end, newEndTime: updated.endTime,
+      additionalRental: quotation.rental - b.rental,
+      by: req.user.name, at: now(), clientInitiated: req.user.role === 'client'
+    });
+    b.end = updated.end; b.endTime = updated.endTime; b.days = quotation.days; b.rental = quotation.rental;
+    rentalDocuments.contract(b, req.user);
+    D.invalidatePass(b);
+  })));
+
+  app.post('/api/manager/bookings/:id/escalate-overdue', requireManager, (req, res) => res.json(transaction(() => {
+    const b = getBooking(req.params.id);
+    if (b.status !== 'On Rental') D.fail('Only active rentals can be escalated.', 400);
+    const nowTime = Date.now();
+    const returnTime = D.time(b.end, b.endTime);
+    if (returnTime >= nowTime) D.fail('Rental is not yet overdue.', 400);
+    const overdueHours = Math.ceil((nowTime - returnTime) / 3600000);
+    b.overdueEscalatedAt = now();
+    b.overdueEscalationNotice = {
+      issuedAt: now(),
+      issuedBy: req.user.name,
+      overdueHours,
+      actionRequired: 'Immediate vehicle return or legal demand turnover',
+      reference: `ESC-${randomUUID().slice(0, 8).toUpperCase()}`
+    };
+    saveBooking(b);
+    systemAudit.write(req.user, 'Overdue return escalated', b.id, `Escalated ${overdueHours}h overdue rental. Demand notice issued.`, 200, {
+      alertType: 'Policy override'
+    });
+    return b;
+  })));
+
+  app.get('/api/vehicles', (req, res) => {
+    res.json(fleet.fleet(true));
+  });
+
+  app.post('/api/manager/vehicles', requireManager, (req, res) => res.status(201).json(transaction(() => {
+    const input = req.body;
+    const model = D.text(input.model, 'Vehicle model');
+    const brand = D.text(input.brand, 'Vehicle brand');
+    const category = D.text(input.category || 'Sedan', 'Vehicle category');
+    const rate = Number(input.rate);
+    if (!Number.isFinite(rate) || rate < 500 || rate > 100000) D.fail('Daily rate must be between PHP 500 and PHP 100,000.');
+    const plate = D.text(input.plate, 'License plate number');
+    const id = (input.id || `${brand.toLowerCase()}-${model.toLowerCase()}`).replace(/[^a-z0-9_-]/g, '-').slice(0, 40);
+    
+    const existing = fleet.fleet(true);
+    if (existing.some(v => v.id === id || v.plate?.toLowerCase() === plate.toLowerCase())) {
+      D.fail('A vehicle with this ID or license plate already exists.', 409);
+    }
+    const vehicle = {
+      id, name: `${brand} ${model}`, model, brand, category, rate, plate,
+      transmission: input.transmission || 'Automatic',
+      seats: Number(input.seats || 5),
+      fuelType: input.fuelType || 'Gasoline',
+      tankCapacity: Number(input.tankCapacity || 50),
+      mileage: Number(input.mileage || 0),
+      status: 'Available',
+      createdAt: now(),
+      version: 1
+    };
+    fleet.saveDynamicVehicle(vehicle);
+    systemAudit.write(req.user, 'Vehicle added to fleet', id, `Added ${brand} ${model} (${plate}) at PHP ${rate}/day`);
+    return vehicle;
+  })));
+
   app.post('/api/agent/bookings/:id/cancel', requireAgent, (req, res) => res.json(updateBooking(req, 'Reservation cancelled', b => {
     if (!['Pending Approval', 'Ready for Dispatch'].includes(b.status)) D.fail('Only reservations awaiting dispatch can be cancelled.');
     b.cancellation = { reason: D.text(req.body.reason, 'Cancellation reason', 1000), by: req.user.name, at: now(), refundDue: D.billing(b).totalPaid };
@@ -469,7 +536,7 @@ function createApp({ dbPath = process.env.DB_PATH || join(__dirname, 'data', 'dr
     const rows = db.prepare('SELECT * FROM users ORDER BY created_at DESC, rowid DESC').all();
     const activeUsers = rows.filter(u => !u.archived_at).map(publicUser);
     const archivedUsers = rows.filter(u => u.archived_at).map(publicUser);
-    const authHistory = db.prepare("SELECT * FROM audit_log WHERE action IN ('User sign in','Failed login attempt','User sign out','Account registration','User account created','User account deactivated','User role updated') ORDER BY sequence DESC LIMIT 40").all();
+    const authHistory = db.prepare("SELECT * FROM audit_log WHERE action IN ('User sign in','Failed login attempt','Deactivated sign-in blocked','User sign out','Account registration','User account created','User account deactivated','User role updated') ORDER BY sequence DESC LIMIT 40").all();
     const successfulLogins = db.prepare("SELECT COUNT(*) AS count FROM audit_log WHERE action='User sign in'").get().count;
     const failedLogins = db.prepare("SELECT COUNT(*) AS count FROM audit_log WHERE action='Failed login attempt'").get().count;
     res.json({

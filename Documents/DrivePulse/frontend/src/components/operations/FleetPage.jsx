@@ -18,6 +18,11 @@ export default function FleetPage({ fleet, stages, mechanic, onRefresh, setDialo
         <h2>Fleet oversight <span className="workspace-result-count">{shownFleet.length} of {fleet.length} units</span></h2>
       </div>
       <div className="staff-card-actions">
+        {!mechanic && (
+          <button type="button" className="button button-dark" onClick={() => setDialog({ kind: 'add-vehicle' })}>
+            <Icon name="plus" size={16} />Add Vehicle
+          </button>
+        )}
         <button type="button" className={`button button-outline ${anomaliesOnly ? 'active' : ''}`} onClick={() => setAnomaliesOnly(!anomaliesOnly)}>
           <Icon name="shield" size={16} />{anomaliesOnly ? 'Showing anomalies only' : 'Drill-down anomalies'}
         </button>

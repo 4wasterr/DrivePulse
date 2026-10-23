@@ -37,6 +37,35 @@ export default function InspectionForm({ operations, initial, onClose, onDone })
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
+  const [damageZones, setDamageZones] = useState([])
+
+  const ZONES = [
+    { id: 'front-bumper', label: 'Front Bumper / Grille' },
+    { id: 'hood-windshield', label: 'Hood & Windshield' },
+    { id: 'left-front', label: 'Left Front Door / Fender' },
+    { id: 'left-rear', label: 'Left Rear Door / Quarter' },
+    { id: 'rear-bumper', label: 'Rear Bumper & Trunk' },
+    { id: 'right-rear', label: 'Right Rear Door / Quarter' },
+    { id: 'right-front', label: 'Right Front Door / Fender' },
+    { id: 'roof', label: 'Roof & Pillars' },
+    { id: 'cabin', label: 'Interior Cabin / Upholstery' }
+  ]
+
+  function toggleZone(zoneId) {
+    const next = damageZones.includes(zoneId) ? damageZones.filter(z => z !== zoneId) : [...damageZones, zoneId]
+    setDamageZones(next)
+    if (next.length > 0) {
+      setDamageFlag(true)
+      const names = next.map(id => ZONES.find(z => z.id === id)?.label).join(', ')
+      const form = document.querySelector('.staff-form')
+      if (form?.elements.scratches) form.elements.scratches.value = `Documented damage on: ${names}`
+    } else {
+      setDamageFlag(false)
+      const form = document.querySelector('.staff-form')
+      if (form?.elements.scratches) form.elements.scratches.value = 'No visible scratches or new exterior damage.'
+    }
+  }
+
   function handleFastFill() {
     const form = document.querySelector('.staff-form')
     if (!form) return
@@ -53,6 +82,7 @@ export default function InspectionForm({ operations, initial, onClose, onDone })
     })
     setOutcome('approved')
     setDamageFlag(false)
+    setDamageZones([])
   }
 
   return <Modal title="Digital vehicle inspection" eyebrow="FLEET MECHANIC · CHECKLIST & PHOTO PROOF" wide onClose={onClose}><form className="staff-form" onSubmit={submit}><fieldset disabled={busy}>
@@ -70,7 +100,41 @@ export default function InspectionForm({ operations, initial, onClose, onDone })
     {type !== 'clearance' && !eligible.length && <p className="info-note">No eligible reservation for this vehicle and inspection type. Use a safety clearance inspection for service work.</p>}
     {type === 'post-return' && <p className="info-note"><Icon name="shield" size={16} /><span><strong>Auto-Release Deposit Rule:</strong> Marking a post-return inspection Safe, Clean, with 100% fuel and zero damage flags automatically releases the customer’s deposit (24–48h window) without requiring manager intervention.</span></p>}
     <h3>01 / Readings at the vehicle</h3><div className="form-grid" key={vehicleId}><label className="form-field">Odometer (km)<input type="number" name="odometer" required min={vehicle?.odometer || 0} max="10000000" step="0.01" defaultValue={vehicle?.odometer ?? ''} /></label><label className="form-field">{vehicleId === 'tesla-3' ? 'Battery charge' : 'Fuel level'} (%)<input type="number" name="fuelLevel" required min="0" max="100" step="0.01" defaultValue="100" /></label>{[['frontLeft', 'Front left'], ['frontRight', 'Front right'], ['rearLeft', 'Rear left'], ['rearRight', 'Rear right']].map(([key, label]) => <label className="form-field" key={key}>{label} tire pressure (PSI)<input name={key} type="number" required min="0" max="100" step="0.1" defaultValue="33" /></label>)}</div>
-    <h3>02 / Condition & mandatory checks</h3><label className="form-field">Exterior scratches / condition<textarea name="scratches" required maxLength={1500} rows={2} placeholder="Describe each scratch and its location, or record no visible damage." defaultValue="No visible scratches or new exterior damage." /></label><label className="form-field">Interior cleanliness<select name="cleanliness"><option>Clean</option><option>Needs cleaning</option><option>Damaged</option></select></label>
+    <h3>02 / Condition & mandatory checks</h3>
+    <div style={{ marginBottom: '14px', background: '#f9fafb', padding: '12px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <span style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>Interactive 2D Damage Zone Locator:</span>
+        <span style={{ fontSize: '11px', color: damageZones.length ? '#b91c1c' : '#059669', fontWeight: 600 }}>
+          {damageZones.length ? `${damageZones.length} defect zone(s) marked` : 'All zones clear'}
+        </span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '6px' }}>
+        {ZONES.map(z => {
+          const marked = damageZones.includes(z.id)
+          return (
+            <button
+              key={z.id}
+              type="button"
+              onClick={() => toggleZone(z.id)}
+              style={{
+                fontSize: '11px',
+                padding: '6px 8px',
+                borderRadius: '6px',
+                border: marked ? '1px solid #ef4444' : '1px solid #d1d5db',
+                background: marked ? '#fee2e2' : '#ffffff',
+                color: marked ? '#991b1b' : '#374151',
+                cursor: 'pointer',
+                textAlign: 'center',
+                fontWeight: marked ? 600 : 400
+              }}
+            >
+              {marked ? '⚠️ ' : ''}{z.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+    <label className="form-field">Exterior scratches / condition<textarea name="scratches" required maxLength={1500} rows={2} placeholder="Describe each scratch and its location, or record no visible damage." defaultValue="No visible scratches or new exterior damage." /></label><label className="form-field">Interior cleanliness<select name="cleanliness"><option>Clean</option><option>Needs cleaning</option><option>Damaged</option></select></label>
     {type === 'post-return' && <label className="checkbox-label"><input type="checkbox" checked={damageFlag} onChange={e => setDamageFlag(e.target.checked)} />Flag return damage / dispute (holds deposit for Operations Manager exception review)</label>}
     <div className="staff-checklist">{[['tyres', 'Tires inspected and all four pressures recorded'], ['controls', 'Brakes, lights, controls, and safety equipment inspected'], ['exterior', 'Exterior scratches and existing damage documented'], ['interior', 'Interior cleanliness and condition assessed'], ['fuel', 'Fuel / battery level and mileage read at the vehicle']].map(([key, label]) => <label className="checkbox-label" key={key}><input type="checkbox" name={key} required />{label}</label>)}</div>
     <h3>03 / Condition photo proof</h3><p className="workspace-muted">Upload separate exterior and interior photos taken for this handover or return. JPG, PNG, or WebP; up to 5 MB each.</p><div className="form-grid">{['exterior', 'interior'].map(view => <label className="form-field staff-photo-input" key={view}><Icon name="camera" size={24} />{view === 'exterior' ? 'Exterior photo' : 'Interior photo'}<input type="file" name={`${view}Photo`} accept="image/jpeg,image/png,image/webp" required /></label>)}</div>
