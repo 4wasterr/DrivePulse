@@ -16,6 +16,7 @@
 .upload-stack { gap:20px; margin-block:28px; }
 .workspace-section-heading { flex-wrap:wrap; gap:20px; }
 .staff-toolbar,.staff-report-toolbar { gap:20px; }
+.user-directory-toolbar,.pill-tabs + .staff-toolbar { margin-top:1.5rem; }
 .staff-section { margin-bottom:32px; }
 .staff-vehicle-grid { gap:24px; }
 .staff-vehicle-copy { padding:24px; }

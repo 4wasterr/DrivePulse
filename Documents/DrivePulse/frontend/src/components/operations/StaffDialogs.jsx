@@ -56,7 +56,7 @@ function DecommissionModal({ vehicle, mechanic, onClose, onDone }) {
 
 export default function StaffDialogs({ dialog, setDialog, inspections, maintenance, mechanic, done }) {
   return <>
-    {dialog?.kind === 'report' && <ReportPreview report={dialog.report} onClose={() => setDialog(null)} onBack={() => setDialog(dialog.previous || null)} />}
+    {dialog?.kind === 'report' && <ReportPreview report={dialog.report} onClose={() => setDialog(null)} onBack={dialog.previous ? () => setDialog(dialog.previous) : undefined} />}
     {dialog?.kind === 'rate' && <RateModal vehicle={dialog.vehicle} onClose={() => setDialog(null)} onDone={done} />}
     {dialog?.kind === 'decommission' && <DecommissionModal vehicle={dialog.vehicle} mechanic={mechanic} onClose={() => setDialog(null)} onDone={done} />}
     {dialog?.kind === 'vehicle-history' && <Modal title={dialog.vehicle.name} eyebrow="VEHICLE HISTORY" wide onClose={() => setDialog(null)}>

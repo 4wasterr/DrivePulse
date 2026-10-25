@@ -19,6 +19,7 @@ export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSu
 
   const additionalDays = Math.max(0, rentalDays(booking.start, newEnd, booking.startTime, newEndTime) - booking.days)
   const additionalCost = additionalDays * (vehicle?.rate || 3500)
+  const scheduleProblem = extensionError(booking, newEnd, newEndTime)
 
   async function handleExtend(e) {
     e.preventDefault()
@@ -42,7 +43,7 @@ export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSu
   }
 
   return (
-    <Modal title="Extend your journey" eyebrow={`RESERVATION · ${booking.id}`} onClose={onClose} onBack={onBack} backDisabled={busy}>
+    <Modal title="Extend your journey" eyebrow={`RESERVATION · ${booking.id}`} onClose={onClose}>
       <ValidatedForm onSubmit={handleExtend} validate={form => [{ name: 'end', message: extensionError(booking, form.elements.namedItem('end').value, form.elements.namedItem('endTime').value) }]}>
         <div style={{ background: '#f9fafb', padding: '14px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -102,10 +103,10 @@ export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSu
         {error && <div className="error-banner" role="alert" style={{ marginBottom: '16px' }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button type="button" className="button button-outline" onClick={onClose} disabled={busy}>
+          <button type="button" className="button button-outline" onClick={onBack || onClose} disabled={busy}>
             Cancel
           </button>
-          <button type="submit" className="button button-dark" style={{ flex: 1 }} disabled={busy || additionalDays <= 0}>
+          <button type="submit" className="button button-dark" style={{ flex: 1 }} disabled={busy || additionalDays <= 0 || Boolean(scheduleProblem)}>
             <Icon name="check" size={17} />
             {busy ? 'Confirming extension…' : 'Confirm rental extension'}
           </button>

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import BrandMark from '../../components/ui/BrandMark.jsx'
 import Icon from '../../components/ui/Icon.jsx'
 import NotificationCenter from '../../components/ui/NotificationCenter.jsx'
-import BackButton from '../../components/ui/BackButton.jsx'
 import HeroCarousel from './HeroCarousel.jsx'
 import { workspaceHome, workspaceRoles } from '../../utils/roles.js'
 
@@ -16,7 +15,7 @@ function Brand() {
   return <a className="landing-brand" href="#home" aria-label="DrivePulse home"><BrandMark /><span>drivepulse.</span></a>
 }
 
-export default function LandingPage({ user, section = 'home', onBack }) {
+export default function LandingPage({ user, section = 'home' }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const role = workspaceRoles.find(role => role.id === user?.role)
   const destination = user ? '#' + workspaceHome(user.role) : '#login'
@@ -59,14 +58,12 @@ export default function LandingPage({ user, section = 'home', onBack }) {
       </div></HeroCarousel>
 
       <section className="landing-container landing-section" id="workspaces" aria-labelledby="workspaces-title">
-        {['workspaces', 'why-drivepulse'].includes(section) && <BackButton onBack={onBack} />}
         <div className="landing-section-heading"><div><p className="landing-eyebrow">BUILT AROUND YOUR ROLE</p><h2 id="workspaces-title">Four roles. One shared system.</h2></div><p>Each workspace focuses on the tasks its users need to complete.</p></div>
         <div className="landing-role-grid">{workspaceRoles.map(item => <article key={item.id} className="landing-role-card"><span className="landing-role-icon"><Icon name={item.icon} size={24} /></span><h3>{item.name}</h3><p>{item.description}</p><ul>{item.tasks.map(task => <li key={task}><Icon name="check" size={14} /><span>{task}</span></li>)}</ul></article>)}</div>
         <p className="landing-role-note"><Icon name="info" size={17} />You do not need to choose a role when signing in. Your account opens the appropriate workspace automatically.</p>
       </section>
 
       <section className="landing-how-section" id="how-it-works" aria-labelledby="how-title"><div className="landing-container">
-        {section === 'how-it-works' && <BackButton onBack={onBack} />}
         <div className="landing-section-heading"><div><p className="landing-eyebrow">GETTING STARTED</p><h2 id="how-title">A straightforward way in.</h2></div></div>
         <ol className="landing-steps">{steps.map(step => <li key={step.number}><span className="landing-step-number">{step.number}</span><Icon name={step.icon} size={24} /><h3>{step.title}</h3><p>{step.copy}</p></li>)}</ol>
       </div></section>

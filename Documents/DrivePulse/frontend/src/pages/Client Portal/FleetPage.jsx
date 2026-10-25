@@ -4,11 +4,11 @@ import Icon from '../../components/ui/Icon.jsx'
 import { money, prettyDate } from '../../data.js'
 import EmptyState from './components/EmptyState.jsx'
 
-export default function ClientFleetPage({ dates, setDates, search, category, setCategory, brand, setBrand, brands, query, setQuery, filtersOpen, setFiltersOpen, maxRate, setMaxRate, seats, setSeats, transmission, setTransmission, onlyAvailable, setOnlyAvailable, filtered, sort, setSort, card }) {
+export default function ClientFleetPage({ dates, setDates, category, setCategory, brand, setBrand, brands, query, setQuery, filtersOpen, setFiltersOpen, maxRate, setMaxRate, seats, setSeats, transmission, setTransmission, onlyAvailable, setOnlyAvailable, filtered, sort, setSort, card }) {
   function reset() { setMaxRate(100000); setSeats('any'); setTransmission('any'); setOnlyAvailable(false); setQuery(''); setCategory('All cars'); setBrand('all') }
   const filterKey = JSON.stringify({ category, brand, query, maxRate, seats, transmission, onlyAvailable, sort, dates })
-  return <section className="find-ride" aria-label="Find a Ride">
-    <SearchBar dates={dates} onChange={setDates} onSearch={search} />
+  return <section className="find-ride" aria-label="Explore the fleet">
+    <SearchBar dates={dates} onChange={setDates} />
     <div className="ride-filter-bar">
       <label className="form-field ride-search"><span>Find a vehicle</span><input id="fleet-search" type="search" placeholder="Name, model, fleet ID or plate" maxLength={150} value={query} onChange={e => setQuery(e.target.value)} /></label>
       <label className="form-field"><span>Category</span><select value={category} onChange={e => setCategory(e.target.value)}>{['All cars', 'Sedan', 'SUV', 'Van', 'Hatchback', 'Truck', 'Compact', 'Luxury', 'Electric'].map(c => <option key={c}>{c}</option>)}</select></label>

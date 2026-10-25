@@ -59,10 +59,15 @@ export function rentalPeriodError(dates) {
   return ''
 }
 export const initialDates = () => ({ start: dateISO(2), end: dateISO(5), startTime: '10:00', endTime: '10:00', pickup: locations[0], dropoff: locations[0] })
+export function formatPaymentStatus(status) {
+  if (!status) return ''
+  const cleaned = String(status).replace(/^Simulated\s*·\s*/i, '')
+  return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : ''
+}
 export function sampleBookings() {
   return [
-    { id: 'DP-10248', vehicleId: 'bmw-3', start: dateISO(8), end: dateISO(11), startTime: '10:00', endTime: '10:00', pickup: locations[0], dropoff: locations[0], days: 3, rental: 12600, deposit: 5000, total: 17600, status: 'Ready for Dispatch', payment: 'Demo checkout', paymentStatus: 'Simulated · paid', sample: true, createdAt: new Date().toISOString() },
-    { id: 'DP-10182', vehicleId: 'mercedes-c', start: dateISO(-15), end: dateISO(-13), startTime: '10:00', endTime: '10:00', pickup: locations[1], dropoff: locations[1], days: 2, rental: 11000, deposit: 5000, total: 16000, status: 'Completed', payment: 'Demo checkout', paymentStatus: 'Simulated · paid', sample: true, createdAt: new Date().toISOString() },
+    { id: 'DP-10248', vehicleId: 'bmw-3', start: dateISO(8), end: dateISO(11), startTime: '10:00', endTime: '10:00', pickup: locations[0], dropoff: locations[0], days: 3, rental: 12600, deposit: 5000, total: 17600, status: 'Ready for Dispatch', payment: 'Cash', paymentStatus: 'Paid', sample: true, createdAt: new Date().toISOString() },
+    { id: 'DP-10182', vehicleId: 'mercedes-c', start: dateISO(-15), end: dateISO(-13), startTime: '10:00', endTime: '10:00', pickup: locations[1], dropoff: locations[1], days: 2, rental: 11000, deposit: 5000, total: 16000, status: 'Completed', payment: 'Cash', paymentStatus: 'Paid', sample: true, createdAt: new Date().toISOString() },
   ]
 }
 

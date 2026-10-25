@@ -2,6 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { inputError, validDate, phtTime, extensionError, returnError, duplicateVehicleErrors } from '../../shared/validation.mjs'
 import { validateFile } from '../src/storage.js'
+import { dateISO, locations, formatPaymentStatus } from '../src/data.js'
+import { bookingStepError, canAdvanceBookingStep, duplicateDocumentsError } from '../src/utils/bookingSteps.js'
 
 test('names and contact details reject obvious mistakes while allowing common real formats', () => {
   for (const name of ['José O’Neill', "Anne-Marie D'Souza", '李 明', 'Prince', 'J. R. Cruz']) assert.equal(inputError(name, { kind: 'name', required: true }), '')
@@ -72,4 +74,57 @@ test('fleet identity checks ignore spacing and the vehicle currently being edite
   assert.ok(errors.every(error => error.message))
   assert.ok(duplicateVehicleErrors({ fleetCode: 'CAR-001' }, vehicles, 'car-one').every(error => !error.message))
   assert.ok(duplicateVehicleErrors({ fleetCode: '', plate: '' }, vehicles).every(error => !error.message))
+})
+
+test('multi-step booking progression guardrails block incomplete or invalid steps until valid', () => {
+  const validDates = {
+    pickup: locations[0],
+    dropoff: locations[0],
+    start: dateISO(3),
+    startTime: '10:00',
+    end: dateISO(6),
+    endTime: '10:00',
+  }
+  const validDocuments = {
+    license: { id: 'doc-1', name: 'license.png', size: 1200, fingerprint: 'fp-1' },
+    'government-1': { id: 'doc-2', name: 'passport.png', size: 1400, fingerprint: 'fp-2' },
+    'government-2': { id: 'doc-3', name: 'umid.png', size: 1600, fingerprint: 'fp-3' },
+  }
+
+  assert.equal(canAdvanceBookingStep({ step: 0, dates: { ...validDates, start: '' }, vehicleId: 'bmw-3' }), false)
+  assert.match(bookingStepError({ step: 0, dates: { ...validDates, pickup: '' }, vehicleId: 'bmw-3' }), /schedule/i)
+  assert.match(bookingStepError({ step: 0, dates: { ...validDates, end: dateISO(2) }, vehicleId: 'bmw-3' }), /after/i)
+  assert.match(
+    bookingStepError({
+      step: 0,
+      dates: validDates,
+      vehicleId: 'bmw-3',
+      bookings: [{ vehicleId: 'bmw-3', blocked: true, status: 'Maintenance' }],
+    }),
+    /unavailable/i
+  )
+  assert.equal(canAdvanceBookingStep({ step: 0, dates: validDates, vehicleId: 'bmw-3' }), true)
+
+  assert.equal(canAdvanceBookingStep({ step: 1, dates: validDates, documents: { license: validDocuments.license } }), false)
+  const duplicated = {
+    ...validDocuments,
+    'government-2': { ...validDocuments.license, id: 'doc-dup' },
+  }
+  assert.match(duplicateDocumentsError(duplicated), /three different documents/i)
+  assert.equal(canAdvanceBookingStep({ step: 1, dates: validDates, documents: duplicated }), false)
+  assert.equal(canAdvanceBookingStep({ step: 1, dates: validDates, documents: validDocuments }), true)
+
+  assert.equal(
+    canAdvanceBookingStep({ step: 2, dates: validDates, vehicleId: 'bmw-3', documents: validDocuments, preview: null, agreed: true }),
+    false
+  )
+  assert.equal(
+    canAdvanceBookingStep({ step: 2, dates: validDates, vehicleId: 'bmw-3', documents: validDocuments, preview: { digest: 'ok' }, agreed: false }),
+    false
+  )
+  assert.equal(
+    canAdvanceBookingStep({ step: 2, dates: validDates, vehicleId: 'bmw-3', documents: validDocuments, preview: { digest: 'ok' }, agreed: true }),
+    true
+  )
+  assert.equal(formatPaymentStatus('Simulated · paid'), 'Paid')
 })

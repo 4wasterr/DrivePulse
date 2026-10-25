@@ -5,11 +5,9 @@ import { api } from '../../api.js'
 import BrandMark from '../../components/ui/BrandMark.jsx'
 import Icon from '../../components/ui/Icon.jsx'
 import PasswordFields from '../../components/ui/PasswordFields.jsx'
-import BackButton from '../../components/ui/BackButton.jsx'
 import { validPassword } from '../../utils/password.js'
-import demoAccounts from '../../../../shared/demoAccounts.json'
 
-export default function AuthPage({ mode, onSuccess, config, onBack }) {
+export default function AuthPage({ mode, onSuccess }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const signup = mode === 'signup'
@@ -48,7 +46,6 @@ export default function AuthPage({ mode, onSuccess, config, onBack }) {
 
     <main className="auth-main"><div className="auth-form-wrap">
       <a className="auth-mobile-brand" href="#home"><BrandMark /><span>drivepulse.</span></a>
-      <BackButton onBack={onBack} />
       <p className="landing-eyebrow">{signup ? 'LET’S GET YOU STARTED' : 'GOOD TO SEE YOU AGAIN'}</p>
       <h1>{signup ? 'Create a client account.' : 'Welcome back.'}</h1>
       <p className="auth-description">{signup ? 'Register as a client to manage your rentals. Staff accounts are provided by your Admin.' : 'Clients, booking agents, fleet mechanics and operations managers all sign in here. Your account opens your assigned workspace.'}</p>
@@ -62,13 +59,6 @@ export default function AuthPage({ mode, onSuccess, config, onBack }) {
       </fieldset></ValidatedForm>
 
       <p className="auth-switch">{signup ? 'Already have an account?' : 'New client?'} <a href={signup ? '#login' : '#signup'}>{signup ? 'Sign in' : 'Create a client account'}<Icon name="diagonal" size={15} /></a></p>
-
-      {config.demo && !signup && <details className="auth-demo">
-        <summary>Demo accounts</summary>
-        <p>Use any of these accounts in the sign-in form above.</p>
-        <dl className="demo-credentials">{demoAccounts.map(({ label, username, password }) => <div key={username}><dt>{label}</dt><dd><span>Username <code>{username}</code></span><span>Password <code>{password}</code></span></dd></div>)}</dl>
-        <p>Demo payments are simulated.</p>
-      </details>}
 
       <div className="auth-footnote"><Icon name="shield" size={17} />Your account opens the workspace assigned to you.</div>
     </div></main>

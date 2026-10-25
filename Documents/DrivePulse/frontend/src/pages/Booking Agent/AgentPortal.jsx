@@ -11,7 +11,6 @@ import WalkInReservation from './components/WalkInReservation.jsx'
 import AgentBookingDetails from './components/AgentBookingDetails.jsx'
 import { api } from '../../api.js'
 import ReservationConfirmation from '../../components/operations/ReservationConfirmation.jsx'
-import BackButton from '../../components/ui/BackButton.jsx'
 
 const navigation = [
   ['agent-overview', 'grid', 'Overview'],
@@ -25,7 +24,7 @@ const headings = {
   'agent-calendar': ['A clear view of the road ahead.', 'Explore the fleet schedule and vehicle operational readiness. Select an open day to schedule a walk-in.'],
 }
 
-export default function AgentPortal({ page, user, workspace, availability, onRefresh, onNavigate, onLogout, onBack }) {
+export default function AgentPortal({ page, user, workspace, availability, onRefresh, onNavigate, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false), [dialog, setDialog] = useState(null), [notice, setNotice] = useState(''), [error, setError] = useState('')
   const [query, setQuery] = useState(''), [status, setStatus] = useState('All statuses'), [channel, setChannel] = useState('All channels')
   const bookings = workspace.bookings
@@ -89,10 +88,9 @@ export default function AgentPortal({ page, user, workspace, availability, onRef
     <main className="agent-main">
       <header className="agent-topbar">
         <div><button className="icon-button agent-mobile-menu" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><span>Staff workspace</span><Icon name="chevron" size={13} /><strong>{navigation.find(([id]) => id === activePage)?.[2] || 'Overview'}</strong></div>
-        <div><NotificationCenter /><span className="agent-development-tag">DEVELOPMENT</span><span className="agent-topbar-date"><Icon name="calendar" size={17} />{new Date().toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
+        <div><NotificationCenter /><span className="agent-topbar-date"><Icon name="calendar" size={17} />{new Date().toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
       </header>
       <div className="agent-page" key={activePage}>
-        <BackButton onBack={onBack} />
         <section className="agent-page-heading"><div><p className="workspace-kicker">{activePage === 'agent-overview' ? `WELCOME BACK, ${user.name.split(' ')[0].toUpperCase()}` : 'YOUR FRONT DESK, CONNECTED'}</p><h1>{title[0]}</h1><p>{title[1]}</p></div>{actions}</section>
         {notice && <div className="workspace-notice" role="status"><Icon name="check" size={18} /><span>{notice}</span><button className="icon-button" aria-label="Dismiss update" onClick={() => setNotice('')}><Icon name="close" size={16} /></button></div>}
         {error && <p className="error-banner" role="alert">{error}</p>}

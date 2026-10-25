@@ -7,12 +7,15 @@
 .brand-period { color: #111; }
 .workspace-label { margin-top: 38px; color: #686868; }
 .primary-nav a, .saved-nav { min-height: 54px; font-size: 16px; color: #626262; padding: 14px 15px; }
-.primary-nav a > .icon, .saved-nav > .icon { width: 23px; height: 23px; }
+.primary-nav a > .icon, .saved-nav > .icon { width: 23px; height: 23px; color: #475569; transition: color .18s ease; }
+.sidebar-help > .icon, .sidebar-auth-action > .icon { color: #475569; transition: color .18s ease; }
 .primary-nav a.active, .saved-nav.active { background: #111; color: #fff; box-shadow: none; }
-.primary-nav a.active > .icon { color: #fff; }
+.primary-nav a.active > .icon, .saved-nav.active > .icon { color: #fff; }
 .active .nav-count { background: #fff; color: #111; }
 .primary-nav a:hover, .saved-nav:hover { background: #ededed; color: #111; }
+.primary-nav a:not(.active):hover > .icon, .saved-nav:not(.active):hover > .icon, .sidebar-help:hover > .icon, .sidebar-auth-action:hover > .icon { color: #0f172a; }
 .primary-nav a.active:hover, .saved-nav.active:hover { background: #292929; color: #fff; }
+.primary-nav a.active:hover > .icon, .saved-nav.active:hover > .icon { color: #fff; }
 .sidebar-bottom { padding-top: 30px; }
 .help-card { background: #f0f0f0; padding: 20px; }
 .help-card button, .sidebar-help { min-height: 44px; font-size: 14px; }

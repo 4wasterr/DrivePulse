@@ -5,6 +5,7 @@
 .staff-metrics .agent-stat > span:last-child { font-size: 13px; }
 .staff-metrics .staff-value { font-size: clamp(21px,2.1vw,34px); overflow-wrap: anywhere; }
 .staff-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 24px; }
+.pill-tabs + .staff-toolbar,.user-directory-toolbar { margin-top: 1.5rem; }
 .staff-toolbar select,.staff-search { border: 1px solid #ddd; border-radius: 7px; min-height: 43px; background: #fff; color: #555; font: inherit; font-size: 14px; }
 .staff-toolbar select { padding: 10px 14px; }
 .staff-search { display: flex; align-items: center; padding: 0 13px; gap: 9px; width: min(100%,310px); }

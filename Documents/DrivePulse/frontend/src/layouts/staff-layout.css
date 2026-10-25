@@ -7,8 +7,11 @@
 .agent-workspace-label > strong { display: block; font-size: 13px; font-weight: 500; color: #666; }
 .agent-sidebar nav { display: flex; flex-direction: column; gap: 6px; }
 .agent-sidebar nav a { display: flex; align-items: center; gap: 12px; padding: 13px 13px; min-height: 51px; font-size: 14px; border-radius: 8px; color: #707070; }
+.agent-sidebar nav a > .icon, .agent-home-link > .icon, .agent-signout > .icon { color: #475569; transition: color .18s ease; }
 .agent-sidebar nav a:hover { background: #eee; color: #111; }
+.agent-sidebar nav a:not(.active):hover > .icon, .agent-home-link:hover > .icon, .agent-signout:hover > .icon { color: #0f172a; }
 .agent-sidebar nav a.active { color: #fff; background: #171717; }
+.agent-sidebar nav a.active > .icon, .agent-sidebar nav a.active:hover > .icon { color: #fff; }
 .agent-sidebar nav a > span { flex: 1; }
 .agent-sidebar nav a > small { font-size: 11px; background: #eee; border-radius: 4px; color: #333; padding: 1px 6px; }
 .agent-sidebar-bottom { margin-top: auto; padding-top: 35px; }

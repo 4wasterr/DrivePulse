@@ -29,6 +29,8 @@ input[data-validation-error]:focus-visible,select[data-validation-error]:focus-v
 .agent-table tbody tr,.booking-detail-panel,.step-content { animation:row-enter .24s ease-out; }
 .modal[open] { animation:modal-in .25s cubic-bezier(.2,.7,.25,1); }
 .primary-nav a,.agent-sidebar nav a,.pill-tabs button,.booking-detail-tabs button { transition:background-color .18s,color .18s,border-color .18s,box-shadow .18s; }
+:is([data-theme="dark"], .dark) :is(.primary-nav a:not(.active), .saved-nav:not(.active), .agent-sidebar nav a:not(.active), .sidebar-help, .sidebar-auth-action, .agent-home-link, .agent-signout) > .icon { color:#94a3b8; }
+:is([data-theme="dark"], .dark) :is(.primary-nav a.active, .saved-nav.active, .agent-sidebar nav a.active, .primary-nav a:hover, .saved-nav:hover, .agent-sidebar nav a:hover, .sidebar-help:hover, .sidebar-auth-action:hover, .agent-home-link:hover, .agent-signout:hover) > .icon { color:#ffffff; }
 .vehicle-card,.landing-role-card { transition:transform .2s,box-shadow .2s,border-color .2s; }
 input,select,textarea { transition:border-color .18s,box-shadow .18s,background-color .18s; }
 .button:active:not(:disabled),.back-button:active:not(:disabled) { transform:translateY(1px); }

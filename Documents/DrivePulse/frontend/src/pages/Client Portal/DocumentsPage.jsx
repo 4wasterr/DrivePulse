@@ -119,7 +119,7 @@ export default function ClientDocumentsPage({ documentCount, documents, onDocume
               <span className="file-symbol"><Icon name="file" /></span>
               <div>
                 <strong>{vehicleFor(b).name}</strong>
-                <small>{b.id} · {prettyDate(b.start)} to {prettyDate(b.end)}{b.sample ? ' · Sample' : ''} · {b.status}</small>
+                <small>{b.id} · {prettyDate(b.start)} to {prettyDate(b.end)} · {b.status}</small>
               </div>
               <BookingRecords booking={b} />
             </div>

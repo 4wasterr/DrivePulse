@@ -6,7 +6,6 @@ import VehicleCard from '../../components/fleet/VehicleCard.jsx'
 import BrandMark from '../../components/ui/BrandMark.jsx'
 import Icon from '../../components/ui/Icon.jsx'
 import NotificationCenter from '../../components/ui/NotificationCenter.jsx'
-import BackButton from '../../components/ui/BackButton.jsx'
 import { vehicleFor } from '../../utils/vehicles.js'
 import ClientOverviewPage from './OverviewPage.jsx'
 import ClientFleetPage from './FleetPage.jsx'
@@ -26,7 +25,7 @@ const titles = { overview: 'A good day for a great drive.', fleet: 'Find your ki
 
 const readPage = () => navigation.some(n => n.id === window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'overview'
 
-export default function ClientPortal({ user, workspace, availability, rates = {}, onRefresh, onLogout, onAuthenticate, onBack }) {
+export default function ClientPortal({ user, workspace, availability, rates = {}, onRefresh, onLogout, onAuthenticate }) {
   const [page, setPage] = useState(readPage)
   const bookings = workspace?.bookings || []
   const documents = workspace?.documents || {}
@@ -103,19 +102,18 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
       <a className="brand" href="#home" onClick={() => navigate('home')} aria-label="DrivePulse home"><span className="brand-mark"><BrandMark /></span><span>drivepulse<span className="brand-period">.</span></span></a>
       <div className="workspace-label">YOUR OPEN ROAD</div>
       <nav className="primary-nav" aria-label="Main navigation">{navigation.map(item => <a key={item.id} href={`#${item.id}`} onClick={() => navigate(item.id)} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined}><Icon name={item.icon} size={19} /><span>{item.label}</span>{item.id === 'bookings' && upcoming.length > 0 && <span className="nav-count">{upcoming.length}</span>}</a>)}</nav>
-      <div className="sidebar-bottom"><button className="sidebar-auth-action" onClick={() => onLogout().catch(error => notify(error.message))}><Icon name="logout" size={18} />Log Out</button><button className="profile-button" onClick={() => setModal({ type: 'profile' })}><span className="avatar">{initials}</span><span><strong>{profile.name}</strong><small>Client account</small></span><Icon name="settings" size={18} /></button><div className="preview-caption"><i />DrivePulse development workspace</div></div>
+      <div className="sidebar-bottom"><button className="sidebar-auth-action" onClick={() => onLogout().catch(error => notify(error.message))}><Icon name="logout" size={18} />Log Out</button><button className="profile-button" onClick={() => setModal({ type: 'profile' })}><span className="avatar">{initials}</span><span><strong>{profile.name}</strong><small>Client account</small></span><Icon name="settings" size={18} /></button></div>
     </aside>
 
     <main className="main-content">
       <header className="topbar"><div className="breadcrumb"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><span>Client portal</span><Icon name="chevron" size={12} /><strong>{navigation.find(n => n.id === page)?.label}</strong></div><div className="topbar-actions"><span className="topbar-location"><Icon name="pin" size={15} />Metro Manila, PH</span><span className="topbar-separator" /><button className="icon-button" aria-label="Search vehicles" onClick={() => { navigate('fleet'); setTimeout(() => document.getElementById('fleet-search')?.focus(), 50) }}><Icon name="search" size={19} /></button><NotificationCenter /><button className="avatar topbar-avatar" onClick={() => user ? setModal({ type: 'profile' }) : onAuthenticate('overview')} aria-label="View profile">{initials}</button></div></header>
 
       <div className="page-content" key={page}>
-        <BackButton onBack={onBack} />
         <section className="page-heading"><div><p className="greeting"><Icon name="sun" size={15} />{page === 'overview' ? `Good to see you, ${profile.name.split(' ')[0]}.` : 'A little freedom goes a long way.'}</p><h1>{titles[page]}</h1></div><span className="today-date"><Icon name="calendar" size={16} />{new Date().toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', year: 'numeric' })}</span></section>
 
         {page === 'overview' && <ClientOverviewPage navigate={navigate} setModal={setModal} dates={dates} setDates={setDates} search={search} card={card} upcoming={upcoming} nextTrip={nextTrip} documentCount={documentCount} />}
 
-        {page === 'fleet' && <ClientFleetPage brand={brand} setBrand={setBrand} brands={brands} dates={dates} setDates={setDates} search={search} category={category} setCategory={setCategory} query={query} setQuery={setQuery} filtersOpen={filtersOpen} setFiltersOpen={setFiltersOpen} maxRate={maxRate} setMaxRate={setMaxRate} seats={seats} setSeats={setSeats} transmission={transmission} setTransmission={setTransmission} onlyAvailable={onlyAvailable} setOnlyAvailable={setOnlyAvailable} filtered={filtered} sort={sort} setSort={setSort} card={card} navigate={navigate} />}
+        {page === 'fleet' && <ClientFleetPage brand={brand} setBrand={setBrand} brands={brands} dates={dates} setDates={setDates} category={category} setCategory={setCategory} query={query} setQuery={setQuery} filtersOpen={filtersOpen} setFiltersOpen={setFiltersOpen} maxRate={maxRate} setMaxRate={setMaxRate} seats={seats} setSeats={setSeats} transmission={transmission} setTransmission={setTransmission} onlyAvailable={onlyAvailable} setOnlyAvailable={setOnlyAvailable} filtered={filtered} sort={sort} setSort={setSort} card={card} navigate={navigate} />}
 
         {page === 'bookings' && <ClientBookingsPage bookingTab={bookingTab} setBookingTab={setBookingTab} upcoming={upcoming} completed={completed} bookings={bookings} navigate={navigate} setModal={setModal} />}
 
@@ -126,7 +124,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
       </div>
     </main>
 
-    {modal?.type === 'booking' && <BookingModal vehicle={modal.vehicle} initialDates={dates} bookings={availability} documents={documents} onDocument={onDocument} onReserve={reserve} onClose={() => setModal(null)} onBack={() => setModal(modal.previous)} onViewTrips={() => { setModal(null); setBookingTab('Upcoming'); navigate('bookings') }} />}
+    {modal?.type === 'booking' && <BookingModal vehicle={modal.vehicle} initialDates={dates} bookings={availability} documents={documents} onDocument={onDocument} onReserve={reserve} onClose={() => setModal(null)} onBack={modal.previous ? () => setModal(modal.previous) : undefined} onViewTrips={() => { setModal(null); setBookingTab('Upcoming'); navigate('bookings') }} />}
     {modal?.type === 'vehicle' && (() => {
       const reason = modal.reason !== undefined ? modal.reason : getAvailabilityReason(modal.vehicle.id, dates, availability)
       const isCarAvailable = reason === ''
@@ -134,7 +132,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
         <div className="vehicle-detail-layout">
           <img className="vehicle-detail-image" src={modal.vehicle.image} alt={modal.vehicle.name} />
           <div className="vehicle-detail-copy">
-            <span className="rating"><Icon name="star" size={15} />{modal.vehicle.rating}<span className="muted"> · {modal.vehicle.trips} sample trips</span></span>
+            <span className="rating"><Icon name="star" size={15} />{modal.vehicle.rating}<span className="muted"> · {modal.vehicle.trips} trips</span></span>
             <h3>{modal.vehicle.tagline}</h3>
             <p className="muted">{modal.vehicle.description}</p>
             {!isCarAvailable && (
@@ -169,7 +167,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
               {user ? (isCarAvailable ? 'Make this ride yours' : `Unavailable: ${reason}`) : 'Sign in to reserve this ride'}
               <Icon name="arrow" size={18} />
             </button>
-            <p className="small muted">Selected dates: {prettyDate(dates.start)} – {prettyDate(dates.end)} · Photos are illustrative.</p>
+            <p className="small muted">Selected dates: {prettyDate(dates.start)} – {prettyDate(dates.end)}</p>
           </div>
         </div>
       </Modal>
@@ -178,7 +176,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
       const activeBooking = bookings.find(b => b.id === modal.booking.id) || modal.booking
       const canExtend = ['On Rental', 'Ready for Dispatch'].includes(activeBooking.status)
       return (
-        <Modal title="Every step of your journey." eyebrow={`${activeBooking.id}${activeBooking.sample ? ' · SAMPLE BOOKING' : ''}`} wide onClose={() => setModal(null)}>
+        <Modal title="Every step of your journey." eyebrow={activeBooking.id} wide onClose={() => setModal(null)}>
           <BookingRecords booking={activeBooking} />
           <TripDetails booking={activeBooking} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px' }}>

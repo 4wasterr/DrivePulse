@@ -33,7 +33,7 @@ const titles = {
   'manager-archives': ['Clean records. Controlled retention.', 'Restore or permanently purge soft-deleted bookings, deactivated users, and decommissioned vehicles.']
 }
 
-export default function ManagerPortal({ page, user, operations, onRefresh, onNavigate, onLogout, onBack }) {
+export default function ManagerPortal({ page, user, operations, onRefresh, onNavigate, onLogout }) {
   const [dialog, setDialog] = useState(null), [notice, setNotice] = useState(''), [error, setError] = useState('')
   const [filter, setFilter] = useState('All statuses'), [query, setQuery] = useState('')
   const fleetFilters = { filter, setFilter, query, setQuery }
@@ -58,7 +58,7 @@ export default function ManagerPortal({ page, user, operations, onRefresh, onNav
     {dialog?.kind === 'escalate-overdue' && <EscalateOverdueModal bookingId={dialog.bookingId} onClose={() => setDialog(null)} onDone={done} />}
   </>
 
-  return <StaffLayout user={user} navigation={navigation} section={section} title={title} approvals={approvals} notice={notice} error={error} setNotice={setNotice} setError={setError} onLogout={onLogout} onBack={onBack} dialogs={dialogs}>
+  return <StaffLayout user={user} navigation={navigation} section={section} title={title} approvals={approvals} notice={notice} error={error} setNotice={setNotice} setError={setError} onLogout={onLogout} dialogs={dialogs}>
     {section === 'overview' && <ManagerOverviewPage operations={operations} fleetFilters={fleetFilters} onRefresh={onRefresh} setDialog={setDialog} onSection={goSection} />}
     {section === 'approvals' && <ApprovalPanel approvals={approvals} bookings={bookings} flags={flags} risks={risks} setDialog={setDialog} onRequest={() => setDialog({ kind: 'financial-request' })} onReview={a => setDialog({ kind: 'approval-review', approval: a })} />}
     {section === 'analytics' && <Analytics />}

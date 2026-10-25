@@ -32,10 +32,15 @@
 .rental-terms > div { white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; color:#555; line-height:1.8; margin-top:15px; }
 .confirmation-actions { display:flex; flex-wrap:wrap; gap:12px; border-top:1px solid #ddd; margin-top:24px; padding-top:18px; }
 .booking-form, .booking-layout > *, .find-ride { min-width:0; }
-.find-ride .trip-search { grid-template-columns:repeat(3,minmax(0,1fr)); align-items:end; gap:18px; }
+.trip-search { grid-template-columns:minmax(175px,1.35fr) minmax(130px,1fr) minmax(105px,.8fr) minmax(130px,1fr) minmax(105px,.8fr) auto; align-items:end; }
+.trip-search.trip-search-inline, .find-ride .trip-search.trip-search-inline { grid-template-columns:minmax(190px,1.45fr) repeat(4,minmax(115px,1fr)); align-items:end; gap:18px; }
+.trip-search.trip-search-inline .search-field:last-of-type { border-right:0; padding-right:0; }
 .find-ride .search-field { min-width:0; padding-right:0; border-right:0; }
 .find-ride .search-field input, .find-ride .search-field select { width:100%; min-width:0; box-sizing:border-box; }
 .find-ride .trip-search .search-submit { align-self:stretch; }
+.step-guardrail-message { display:flex; align-items:center; gap:8px; margin-top:14px; padding:10px 12px; border:1px solid #e6b6ae; border-radius:8px; background:#fff5f2; color:#842f24; font-size:13px; line-height:1.5; }
+.booking-upload-item { display:flex; flex-direction:column; gap:6px; }
+.step-field-hint { display:block; padding-left:4px; font-size:12px; color:#64748b; }
 .ride-filter-bar { position:sticky; top:12px; z-index:12; display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.5fr) auto; gap:16px; align-items:end; padding:20px; background:#fff; border:1px solid #ddd; border-radius:10px; margin:20px 0; box-shadow:0 4px 15px #00000005; }
 .ride-filter-bar .form-field, .ride-extra-filters .form-field { min-width:0; margin:0; }
 .ride-filter-bar .form-field > span { min-height:20px; font-size:12px; overflow-wrap:anywhere; }
@@ -63,10 +68,14 @@
 .find-ride .results-header { gap:16px; flex-wrap:wrap; }
 .find-ride .results-header > * { min-width:0; }
 .find-ride .data-pagination { grid-column:1 / -1; }
-.topbar-actions > .global-notification-button { display:inline-flex; align-items:center; justify-content:center; }
+.topbar-actions .global-notification-button { display:inline-flex; align-items:center; justify-content:center; }
 @media(min-width:768px) { .ride-fleet-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(min-width:1024px) { .ride-fleet-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media(max-width:1250px) {
+  .trip-search, .trip-search.trip-search-inline, .find-ride .trip-search.trip-search-inline { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .trip-search .location-field, .trip-search .search-submit { grid-column:1 / -1; }
+  .trip-search .location-field { border-right:0; border-bottom:1px solid #e0e0e0; padding-bottom:14px; }
+  .trip-search .search-field:nth-of-type(3) { border-right:0; padding-right:0; }
   .ride-filter-bar { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .ride-filter-bar .ride-search { grid-column:span 2; }
   .maintenance-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -75,13 +84,15 @@
 @media(max-width:767px) {
   .ride-filter-bar { position:static; grid-template-columns:repeat(2,minmax(0,1fr)); padding:16px; }
   .ride-filter-bar .ride-search, .ride-filter-bar .ride-price { grid-column:1 / -1; }
-  .find-ride .trip-search { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .find-ride .trip-search, .find-ride .trip-search.trip-search-inline { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .vehicle-identity { grid-template-columns:minmax(0,1fr); gap:12px; }
   .customer-details-form .walkin-layout { grid-template-columns:minmax(0,1fr); }
 }
 @media(max-width:480px) {
   .customer-details-form .customer-details-grid, .maintenance-filters, .agreement-details, .ride-extra-filters { grid-template-columns:minmax(0,1fr); }
   .customer-details-grid .span-2 { grid-column:auto; }
-  .find-ride .trip-search { grid-template-columns:minmax(0,1fr); }
+  .trip-search, .trip-search.trip-search-inline, .find-ride .trip-search, .find-ride .trip-search.trip-search-inline { grid-template-columns:minmax(0,1fr); }
+  .trip-search .location-field, .trip-search .search-submit { grid-column:auto; }
+  .trip-search .search-field { border-right:0; padding-right:0; }
   .confirmation-actions > * { width:100%; }
 }

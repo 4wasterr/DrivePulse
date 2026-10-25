@@ -18,18 +18,33 @@ button:disabled { cursor:default; opacity:.5; }
 .vehicle-image-field .form-field { flex:1; min-width:180px; }
 .vehicle-image-field input { width:100%; padding:10px; }
 .vehicle-renewal-dates { font-size:12px; line-height:1.6; }
+.notification-center { position:relative; display:inline-flex; align-items:center; flex-shrink:0; }
 .global-notification-button { position:relative; flex-shrink:0; }
-.global-notification-button > span { position:absolute; right:-6px; top:-5px; background:#314b34; color:white; border-radius:14px; padding:2px 5px; min-width:18px; font-size:10px; line-height:14px; }
-.notification-actions { display:flex; gap:16px; justify-content:space-between; align-items:center; flex-wrap:wrap; margin:12px 0 18px; }
-.notification-actions p { color:#666; font-size:14px; }
-.global-notification { display:flex; align-items:flex-start; gap:14px; padding:18px 12px; border-top:1px solid #ddd; border-left:3px solid #79916a; background:#f5f7f2; }
+.global-notification-button > span { position:absolute; right:-6px; top:-5px; background:#314b34; color:#fff; border-radius:14px; padding:2px 5px; min-width:18px; font-size:10px; line-height:14px; text-align:center; }
+.notification-dropdown { position:absolute; top:calc(100% + 10px); right:0; z-index:95; width:clamp(320px, 88vw, 400px); max-width:420px; max-height:min(500px, calc(100dvh - 96px)); display:flex; flex-direction:column; overflow:hidden; background:#fff; color:#171717; font-size:13px; text-align:left; border:1px solid #dcdcdc; border-radius:14px; box-shadow:0 18px 48px rgba(15, 23, 42, 0.16); animation:float-in .18s ease-out; }
+.notification-dropdown-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 16px 12px; border-bottom:1px solid #ececec; background:#fafafa; flex-shrink:0; }
+.notification-dropdown-header .eyebrow { font-size:10px; letter-spacing:1.4px; margin-bottom:3px; color:#64748b; }
+.notification-dropdown-header h2 { font-size:17px; font-weight:650; line-height:1.25; letter-spacing:-.4px; margin:0; color:#111827; }
+.notification-header-controls { display:inline-flex; align-items:center; gap:8px; flex-shrink:0; }
+.notification-mark-all { font-size:12px; min-height:30px; padding:4px 6px; color:#334155; font-weight:500; }
+.notification-close { width:30px; height:30px; min-width:30px; border-radius:8px; color:#64748b; }
+.notification-error { margin:10px 14px 0; padding:9px 12px; font-size:12px; flex-shrink:0; }
+.notification-dropdown-body { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; }
+.notification-empty { margin:0; padding:28px 18px; text-align:center; font-size:13px; line-height:1.6; color:#64748b; }
+.global-notification { display:flex; align-items:flex-start; gap:11px; padding:13px 16px; border-top:1px solid #ececec; border-left:3px solid #79916a; background:#f5f7f2; font-size:13px; }
+.notification-dropdown-body .global-notification:first-child { border-top:0; }
+.global-notification > .icon { margin-top:2px; flex-shrink:0; color:#475569; }
 .global-notification > div { flex:1; min-width:0; }
-.global-notification p { margin:7px 0; color:#555; line-height:1.6; overflow-wrap:anywhere; }
-.global-notification small { color:#777; }
+.global-notification strong { display:block; font-size:13px; line-height:1.4; color:#1e293b; }
+.global-notification p { margin:4px 0 6px; color:#475569; font-size:12.5px; line-height:1.5; overflow-wrap:anywhere; }
+.global-notification small { display:block; font-size:11px; color:#64748b; }
+.global-notification .text-link { font-size:12px; min-height:28px; align-self:flex-start; flex-shrink:0; }
 .global-notification.urgent { border-left-color:#a44232; }
 .global-notification.warning { border-left-color:#a98031; }
 .global-notification.is-read { background:#fff; }
 .global-notification.is-read strong { font-weight:500; }
+.notification-dropdown-body .data-pagination { padding:10px 14px; gap:8px; font-size:12px; border-top:1px solid #ececec; background:#fafafa; }
+.notification-dropdown-body .data-pagination button { min-height:30px; padding:5px 10px; font-size:12px; }
 .agent-sidebar, .sidebar { height:100vh; height:100dvh; overflow:hidden; box-sizing:border-box; }
 .agent-sidebar nav, .sidebar .primary-nav { min-height:0; overflow-y:auto; overscroll-behavior:contain; flex:1; }
 .agent-sidebar-bottom, .sidebar-bottom { flex-shrink:0; padding-top:12px; margin-top:auto; }
@@ -55,4 +70,10 @@ button:disabled { cursor:default; opacity:.5; }
   .data-pagination { font-size:12px; }
   .global-notification { flex-wrap:wrap; }
   .vehicle-image-field img { width:100%; height:170px; }
+}
+@media (max-width:520px) {
+  .notification-dropdown { position:fixed; top:72px; right:12px; left:12px; width:auto; max-width:400px; margin-left:auto; max-height:min(460px, calc(100dvh - 88px)); }
+}
+@media (max-width:480px) {
+  .general-landing .landing-header-actions .global-notification-button { width:34px; min-width:34px; height:34px; }
 }
