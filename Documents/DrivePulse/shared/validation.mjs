@@ -3,7 +3,10 @@ const controlCharacters = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u
 export function inputError(value, { kind = 'text', label = 'This field', required = false, maxLength = 2000, minLength = 0, min, max, step } = {}) {
   const raw = typeof value === 'string' ? value : value == null ? '' : String(value)
   const clean = kind === 'password' ? raw : raw.trim()
-  if (!clean.trim()) return required ? `${label} is required. Enter a value rather than spaces.` : ''
+  if (!clean.trim()) {
+    if (!required) return ''
+    return raw.length > 0 ? `Enter a valid ${label.toLowerCase()} without blank spaces.` : `${label} is required.`
+  }
   if (typeof value === 'object' || typeof value === 'boolean') return `Enter a valid ${label.toLowerCase()}.`
   if (controlCharacters.test(clean)) return `${label} contains an unsupported control character.`
   if (clean.length > maxLength) return `Keep ${label.toLowerCase()} to ${maxLength} characters or fewer.`

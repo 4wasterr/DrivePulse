@@ -5,10 +5,16 @@
 .form-field > .field-validation-message,.search-field > .field-validation-message { margin-top:0; }
 .field-validation-message.sr-only { min-height:0; margin:0; }
 .agent-table-scroll { position:relative; }
-.validation-summary { grid-column:1 / -1; flex:0 0 100%; width:100%; padding:14px 16px; margin-bottom:20px; border:1px solid #e6b6ae; border-radius:9px; color:#842f24; background:#fff5f2; font-size:13px; line-height:1.65; animation:feedback-enter .18s ease-out; }
-.validation-summary > strong { display:block; margin-bottom:5px; font-weight:600; }
-.validation-summary ul { margin:0; padding-left:18px; display:grid; gap:5px; }
-.validation-summary button { text-align:left; background:transparent; color:inherit; padding:0; font-size:inherit; line-height:inherit; }
+.validation-summary { grid-column:1 / -1; flex:0 0 100%; width:100%; display:flex; flex-direction:column; gap:10px; padding:12px 15px; margin-bottom:20px; border:1px solid #f0c9c1; border-left:3px solid #b84e3c; border-radius:10px; color:#7c2d23; background:#fff8f6; font-size:13px; line-height:1.5; animation:feedback-enter .18s ease-out; }
+.validation-summary.is-single { flex-direction:row; align-items:flex-start; gap:10px; }
+.validation-summary > .icon, .validation-summary-header > .icon { color:#b84e3c; flex-shrink:0; margin-top:1px; }
+.validation-summary-header { display:flex; align-items:center; gap:8px; }
+.validation-summary-header > strong { font-weight:600; color:#6e241b; }
+.validation-summary ul { list-style:none; margin:0; padding:0 0 0 4px; display:grid; gap:6px; }
+.validation-summary li { display:flex; align-items:flex-start; gap:9px; }
+.validation-summary li::before { content:''; width:5px; height:5px; border-radius:50%; background:#b84e3c; margin-top:7px; flex-shrink:0; }
+.validation-summary button { display:inline; text-align:left; background:transparent; color:inherit; padding:0; font:inherit; font-size:13px; line-height:1.5; }
+.validation-summary button strong { font-weight:600; color:#6e241b; }
 .validation-summary button:hover { text-decoration:underline; text-underline-offset:3px; }
 input[data-validation-error],select[data-validation-error],textarea[data-validation-error] { border-color:#b84e3c !important; box-shadow:0 0 0 1px #b84e3c30; }
 input[data-validation-error]:focus-visible,select[data-validation-error]:focus-visible,textarea[data-validation-error]:focus-visible { outline-color:#b84e3c; }

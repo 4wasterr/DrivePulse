@@ -26,7 +26,8 @@
 .fleet-stage-metrics { gap:16px; }
 .agent-stat > span:nth-last-child(2),.agent-stat > span:last-child { line-height:1.6; }
 .agent-table th,.agent-table td { padding-inline:16px; line-height:1.6; }
-.auth-form .password-fields > .form-field { margin:8px 0 10px; }
+.auth-form > fieldset > .form-field { margin-bottom:12px; gap:6px; }
+.auth-form .password-fields > .form-field { margin:8px 0 10px; gap:6px; }
 .password-fields > .field-validation-message { margin-top:8px; }
 .auth-form .error-banner { margin-block:18px; }
 .auth-form .button[type=submit] { margin-top:16px; }

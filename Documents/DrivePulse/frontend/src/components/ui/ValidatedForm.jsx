@@ -4,6 +4,20 @@ import { rentalPeriodError } from '../../data.js'
 import { validateFile } from '../../storage.js'
 import { validPassword } from '../../utils/password.js'
 import { FormValidationContext } from './formValidationContext.js'
+import Icon from './Icon.jsx'
+
+function formatSummaryMessage(label, message) {
+  if (!label || !message) return message
+  if (message.toLowerCase() === `${label.toLowerCase()} is required.`) {
+    return 'Please enter a value.'
+  }
+  const prefix = `${label} `
+  if (message.toLowerCase().startsWith(prefix.toLowerCase())) {
+    const rest = message.slice(prefix.length)
+    return rest.charAt(0).toUpperCase() + rest.slice(1)
+  }
+  return message
+}
 
 const controls = form => [...form.elements].filter(field => ['INPUT', 'SELECT', 'TEXTAREA'].includes(field.tagName) && !field.matches(':disabled') && !['hidden', 'submit', 'button', 'reset', 'range'].includes(field.type) && !field.readOnly)
 
@@ -103,7 +117,31 @@ export default function ValidatedForm({ onSubmit, onChange, onChangeCapture, onB
     submittingPointer.current = event.target.closest('button,input')?.type === 'submit'
     onPointerDownCapture?.(event)
   }} onPointerUpCapture={event => { submittingPointer.current = false; onPointerUpCapture?.(event) }} onPointerCancelCapture={() => { submittingPointer.current = false }}>
-    {submitted && errors.length > 0 && <div className="validation-summary" role="alert"><strong>Please check {errors.length === 1 ? 'this field' : 'these fields'}.</strong><ul>{errors.map(error => <li key={error.id}><button type="button" onClick={() => error.field.focus()}><strong>{error.label}:</strong> {error.message}</button></li>)}</ul></div>}
+    {submitted && errors.length === 1 && (
+      <div className="validation-summary is-single" role="alert">
+        <Icon name="info" size={16} />
+        <button type="button" onClick={() => errors[0].field.focus()}>
+          <strong>{errors[0].label}:</strong> {formatSummaryMessage(errors[0].label, errors[0].message)}
+        </button>
+      </div>
+    )}
+    {submitted && errors.length > 1 && (
+      <div className="validation-summary" role="alert">
+        <div className="validation-summary-header">
+          <Icon name="info" size={16} />
+          <strong>Please check the highlighted fields ({errors.length})</strong>
+        </div>
+        <ul>
+          {errors.map(error => (
+            <li key={error.id}>
+              <button type="button" onClick={() => error.field.focus()}>
+                <strong>{error.label}:</strong> {formatSummaryMessage(error.label, error.message)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
     {children}
   </form></FormValidationContext.Provider>
 }
