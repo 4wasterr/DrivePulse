@@ -35,8 +35,8 @@ function samplePDF(label) {
   return Buffer.from(pdf);
 }
 
-async function createApp({ app = express(), database = null, dbPath, seedDemo = process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL, allowAgentSignup = process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL && process.env.ALLOW_AGENT_SIGNUP !== 'false' || process.env.ALLOW_AGENT_SIGNUP === 'true' } = {}) {
-  if (process.env.NODE_ENV === 'production' && (seedDemo || allowAgentSignup)) throw new Error('Demo data and staff self-registration must be disabled in production.');
+async function createApp({ app = express(), database = null, dbPath, seedDemo = process.env.ENABLE_DEMO_ACCOUNTS === 'true' || process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL, allowAgentSignup = process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL && process.env.ALLOW_AGENT_SIGNUP !== 'false' || process.env.ALLOW_AGENT_SIGNUP === 'true' } = {}) {
+  if (process.env.NODE_ENV === 'production' && (allowAgentSignup || seedDemo && process.env.ENABLE_DEMO_ACCOUNTS !== 'true')) throw new Error('Demo data and staff self-registration must be disabled in production.');
   const db = database || createDatabase({ filename: dbPath });
   await db.initialize();
   await db.prepare("UPDATE documents SET owner_id='sample-owner-archive' WHERE name LIKE 'sample-%.pdf' AND owner_id<>'sample-owner-archive'").run();
@@ -265,7 +265,7 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     const identifier = D.text(signup ? req.body.email : req.body.username ?? req.body.email, signup ? 'Email' : 'Email or username', 160).toLowerCase();
     const identifierError = inputError(identifier, { kind: signup ? 'email' : 'login-identifier' });
     if (identifierError) D.fail(identifierError);
-    const demoAccount = !signup && seedDemo ? demoAccounts.find(account => account.username === identifier) : null;
+    const demoAccount = !signup ? demoAccounts.find(account => account.username === identifier) : null;
     const email = demoAccount?.email || identifier, password = typeof req.body.password === 'string' ? req.body.password : '';
     if (!password.trim() || password.length > 128) D.fail('Enter your password (up to 128 characters).');
     const existing = await db.prepare('SELECT * FROM users WHERE email=?').get(email);
