@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../components/ui/Pagination.jsx'
 import Icon from '../../components/ui/Icon.jsx'
 import FleetPage from '../../components/operations/FleetPage.jsx'
 import Tag from '../../components/workspace/StaffTag.jsx'
@@ -60,7 +61,7 @@ export default function ManagerOverviewPage({ operations, fleetFilters, onRefres
         <p className="workspace-muted">No suspicious threshold events or unreviewed operational anomalies detected. Normal workflows are running automatically.</p>
       ) : (
         <div>
-          {pendingDecommissions.map(v => <article className="staff-ledger-row" key={`decom-${v.id}`}>
+          {<PaginatedList>{pendingDecommissions.map(v => <article className="staff-ledger-row" key={`decom-${v.id}`}>
             <div>
               <h3>Decommission approval needed · {v.name}</h3>
               <p>Requested by {v.decommissionRequested.by}: {v.decommissionRequested.reason}</p>
@@ -68,8 +69,8 @@ export default function ManagerOverviewPage({ operations, fleetFilters, onRefres
             </div>
             <Tag>Decommission request</Tag>
             <button className="button button-dark" onClick={() => setDialog({ kind: 'decommission', vehicle: v })}>Confirm decommission</button>
-          </article>)}
-          {unreviewedOverdue.map(flag => <article className="staff-ledger-row" key={flag.id}>
+          </article>)}</PaginatedList>}
+          {<PaginatedList>{unreviewedOverdue.map(flag => <article className="staff-ledger-row" key={flag.id}>
             <div>
               <h3>Overdue unit · {flag.bookingId}</h3>
               <p>Return due {flag.end} at {flag.endTime} PHT</p>
@@ -79,7 +80,7 @@ export default function ManagerOverviewPage({ operations, fleetFilters, onRefres
               <button className="button button-outline" onClick={() => setDialog({ kind: 'flag-override', flag })}>Override alert</button>
               <button className="button button-dark" onClick={() => setDialog({ kind: 'escalate-overdue', bookingId: flag.bookingId })}>Escalate</button>
             </div>
-          </article>)}
+          </article>)}</PaginatedList>}
           {thresholdAlerts.slice(0, 5).map(alert => <article className="staff-ledger-row" key={alert.id}>
             <div>
               <h3>{alert.action} <small>· {alert.resource}</small></h3>

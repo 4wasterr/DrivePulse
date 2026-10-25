@@ -24,11 +24,14 @@ test('availability blocks overlaps but permits an exact handover and ignores com
 
 test('invalid, past, and inverted rental periods cannot proceed', () => {
   assert.match(rentalPeriodError({ start: '', end: '' }), /valid/)
+  assert.match(rentalPeriodError({ start: '2099-02-31', end: '2099-03-05' }), /valid/)
   assert.match(rentalPeriodError({ start: '2000-01-01', end: '2000-01-02' }), /future/)
   assert.match(rentalPeriodError({ start: '2099-01-03', end: '2099-01-02' }), /after/)
   assert.match(rentalPeriodError({ start: '2099-01-03', end: '2099-01-03' }), /after/)
   assert.equal(rentalPeriodError({ start: '2099-01-03', end: '2099-01-03', startTime: '10:00', endTime: '16:00' }), '')
   assert.equal(rentalPeriodError(initialDates()), '')
+  assert.equal(rentalPeriodError({ start: '2099-01-01', end: '2100-01-02' }), '')
+  assert.match(rentalPeriodError({ start: '2099-01-01', end: '2100-01-03' }), /366/)
 })
 
 test('operational holds block all dates and cannot appear as rentable vehicles', () => {

@@ -1,10 +1,13 @@
+import ValidatedField from '../../../components/ui/ValidatedField.jsx'
+import ValidatedForm from '../../../components/ui/ValidatedForm.jsx'
 import { useState } from 'react'
 import Modal from '../../../components/ui/Modal.jsx'
 import Icon from '../../../components/ui/Icon.jsx'
 import { api } from '../../../api.js'
 import { prettyDate, money, rentalDays, dateISO } from '../../../data.js'
+import { extensionError } from '../../../../../shared/validation.mjs'
 
-export default function ExtensionModal({ booking, vehicle, onClose, onSuccess }) {
+export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSuccess }) {
   const [newEnd, setNewEnd] = useState(() => {
     const cur = new Date(Date.parse(`${booking.end}T12:00:00Z`))
     cur.setDate(cur.getDate() + 1)
@@ -39,8 +42,8 @@ export default function ExtensionModal({ booking, vehicle, onClose, onSuccess })
   }
 
   return (
-    <Modal title="Extend your journey" eyebrow={`RESERVATION · ${booking.id}`} onClose={onClose}>
-      <form onSubmit={handleExtend}>
+    <Modal title="Extend your journey" eyebrow={`RESERVATION · ${booking.id}`} onClose={onClose} onBack={onBack} backDisabled={busy}>
+      <ValidatedForm onSubmit={handleExtend} validate={form => [{ name: 'end', message: extensionError(booking, form.elements.namedItem('end').value, form.elements.namedItem('endTime').value) }]}>
         <div style={{ background: '#f9fafb', padding: '14px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
             <span style={{ fontSize: '13px', color: '#6b7280' }}>Vehicle:</span>
@@ -61,8 +64,9 @@ export default function ExtensionModal({ booking, vehicle, onClose, onSuccess })
         <div className="form-grid" style={{ marginBottom: '16px' }}>
           <label className="form-field">
             New return date
-            <input
+            <ValidatedField
               type="date"
+              name="end"
               required
               min={booking.end || dateISO()}
               value={newEnd}
@@ -71,8 +75,9 @@ export default function ExtensionModal({ booking, vehicle, onClose, onSuccess })
           </label>
           <label className="form-field">
             New return time
-            <input
+            <ValidatedField
               type="time"
+              name="endTime"
               required
               value={newEndTime}
               onChange={e => setNewEndTime(e.target.value)}
@@ -105,7 +110,7 @@ export default function ExtensionModal({ booking, vehicle, onClose, onSuccess })
             {busy ? 'Confirming extension…' : 'Confirm rental extension'}
           </button>
         </div>
-      </form>
+      </ValidatedForm>
     </Modal>
   )
 }

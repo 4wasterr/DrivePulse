@@ -60,7 +60,7 @@ class PostgresDatabase {
   }
   async initialize() {
     const { rows } = await this.query('SELECT version FROM schema_version WHERE version=1');
-    if (!rows.length) throw new Error('Run npm run db:migrate before starting the production API.');
+    if (!rows.length) throw Object.assign(new Error('Run npm run db:migrate before starting the production API.'), { code: 'DATABASE_SCHEMA_MISSING' });
   }
   exec(sql) { return this.query(sql); }
   prepare(sql) {
@@ -101,14 +101,14 @@ function createDatabase({ filename = process.env.DATABASE_PATH || 'data/drivepul
     const { Pool, types } = require('pg');
     types.setTypeParser(20, value => Number(value));
     const connection = new URL(env.DATABASE_URL);
-    if (!['postgres:', 'postgresql:'].includes(connection.protocol)) throw new Error('DATABASE_URL must be a PostgreSQL connection URL.');
+    if (!['postgres:', 'postgresql:'].includes(connection.protocol)) throw Object.assign(new Error('DATABASE_URL must be a PostgreSQL connection URL.'), { code: 'DATABASE_URL_INVALID' });
     const local = ['localhost', '127.0.0.1', '[::1]'].includes(connection.hostname);
     const ssl = local ? false : { rejectUnauthorized: true, ...(env.DATABASE_CA_CERT ? { ca: env.DATABASE_CA_CERT.replace(/\\n/g, '\n') } : {}), ...(env.DATABASE_CA_PATH ? { ca: readFileSync(env.DATABASE_CA_PATH, 'utf8') } : {}) };
     for (const key of ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']) connection.searchParams.delete(key);
     return new PostgresDatabase(new Pool({ connectionString: connection.toString(), ssl, max: 3, connectionTimeoutMillis: 10000, idleTimeoutMillis: 10000, allowExitOnIdle: true }));
   }
   if (env.NODE_ENV === 'production' || env.VERCEL) {
-    throw new Error('DATABASE_URL is required for deployment. Local SQLite is only available in development.');
+    throw Object.assign(new Error('DATABASE_URL is required for deployment. Local SQLite is only available in development.'), { code: 'DATABASE_URL_REQUIRED' });
   }
   const location = filename === ':memory:' || isAbsolute(filename) ? filename : resolve(__dirname, filename);
   return new SQLiteDatabase(location);

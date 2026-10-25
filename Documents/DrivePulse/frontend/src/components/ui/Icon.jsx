@@ -1,5 +1,7 @@
 export default function Icon({ name, size = 20, className = '', ...props }) {
   const paths = {
+    eye: <><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
+    'eye-off': <><path d="m3 3 18 18M10 5c6-1 12 7 12 7s-2 4-6 6M6 6c-3 2-4 6-4 6s4 7 10 7c2 0 3-1 4-1" /></>,
     chart: <><path d="M3 3v18h18M7 16v-4m5 4V7m5 9V4" /></>,
     camera: <><path d="M3 7h4l2-3h6l2 3h4v13H3z" /><circle cx="12" cy="13" r="4" /></>,
     refresh: <><path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 13 3M18 18A8 8 0 0 1 5 15" /></>,
@@ -12,6 +14,9 @@ export default function Icon({ name, size = 20, className = '', ...props }) {
     arrow: <path d="M4 12h16m-6-6 6 6-6 6" />,
     diagonal: <path d="M6 18 18 6M6 6h12v12" />,
     chevron: <path d="m9 5 7 7-7 7" />,
+    arrowLeft: <path d="M20 12H4m7-7-7 7 7 7" />,
+    pause: <path d="M9 5v14M15 5v14" />,
+    play: <path d="m8 4 12 8-12 8Z" />,
     down: <path d="m6 9 6 6 6-6" />,
     pin: <><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z" /><circle cx="12" cy="10" r="2.5" /></>,
     search: <><circle cx="10.5" cy="10.5" r="7" /><path d="m16 16 5 5" /></>,

@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../components/ui/Pagination.jsx'
 import { useState } from 'react'
 import { requiredDocuments, prettyDate } from '../../data.js'
 import UploadField from '../../components/ui/UploadField.jsx'
@@ -113,7 +114,7 @@ export default function ClientDocumentsPage({ documentCount, documents, onDocume
         </p>
 
         {bookings.length ? (
-          bookings.map(b => (
+          <PaginatedList>{bookings.map(b => (
             <div className="generated-row" key={b.id}>
               <span className="file-symbol"><Icon name="file" /></span>
               <div>
@@ -122,7 +123,7 @@ export default function ClientDocumentsPage({ documentCount, documents, onDocume
               </div>
               <BookingRecords booking={b} />
             </div>
-          ))
+          ))}</PaginatedList>
         ) : (
           <p className="workspace-muted">No reservations on file yet. Book a vehicle to generate your official rental contract.</p>
         )}

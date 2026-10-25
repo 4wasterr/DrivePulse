@@ -21,7 +21,7 @@ const titles = {
   'mechanic-maintenance': ['Keep the next journey moving.', 'Log repair work, maintenance costs, and service clearance holds.']
 }
 
-export default function MechanicPortal({ page, user, operations, onRefresh, onLogout }) {
+export default function MechanicPortal({ page, user, operations, onRefresh, onLogout, onBack }) {
   const [dialog, setDialog] = useState(null), [notice, setNotice] = useState(''), [error, setError] = useState('')
   const [filter, setFilter] = useState('All statuses'), [query, setQuery] = useState('')
   const fleetFilters = { filter, setFilter, query, setQuery }
@@ -30,7 +30,7 @@ export default function MechanicPortal({ page, user, operations, onRefresh, onLo
   const title = titles[`${user.role}-${section}`] || titles['mechanic-overview']
   const { fleet, bookings, inspections, maintenance, approvals } = operations
   const queue = bookings.flatMap(b => ['Pending Approval', 'Ready for Dispatch'].includes(b.status) && b.inspection?.role !== 'mechanic' || ['Pending Approval', 'Ready for Dispatch'].includes(b.status) && b.inspection?.status !== 'approved' ? [{ ...b, inspectionType: 'pre-dispatch' }] : (b.status === 'Completed' && b.returnedAt) && b.returnInspection?.status !== 'approved' ? [{ ...b, inspectionType: 'post-return' }] : [])
-  const openWork = maintenance.filter(m => m.status !== 'Completed')
+  const openWork = maintenance.filter(m => !m.archivedAt && m.status !== 'Completed')
   async function done(message) { await onRefresh(); setDialog(null); setNotice(message); setError('') }
   const dialogs = <>
     <StaffDialogs dialog={dialog} setDialog={setDialog} inspections={inspections} maintenance={maintenance} mechanic={true} done={done} />
@@ -39,9 +39,9 @@ export default function MechanicPortal({ page, user, operations, onRefresh, onLo
     {dialog?.kind === 'service-update' && <ServiceUpdate record={dialog.record} onClose={() => setDialog(null)} onDone={done} />}
     {dialog?.kind === 'status' && <StatusForm vehicle={dialog.vehicle} onClose={() => setDialog(null)} onDone={done} />}
   </>
-  return <StaffLayout user={user} navigation={navigation} section={section} title={title} approvals={approvals} notice={notice} error={error} setNotice={setNotice} setError={setError} onLogout={onLogout} dialogs={dialogs} actions={<button className="button button-dark" onClick={() => setDialog({ kind: section === 'maintenance' ? 'maintenance' : 'inspection' })}><Icon name={section === 'maintenance' ? 'settings' : 'shield'} size={18} />{section === 'maintenance' ? 'Log work order' : 'New inspection'}</button>}>
+  return <StaffLayout user={user} navigation={navigation} section={section} title={title} approvals={approvals} notice={notice} error={error} setNotice={setNotice} setError={setError} onLogout={onLogout} onBack={onBack} dialogs={dialogs} actions={<button className="button button-dark" onClick={() => setDialog({ kind: section === 'maintenance' ? 'maintenance' : 'inspection' })}><Icon name={section === 'maintenance' ? 'settings' : 'shield'} size={18} />{section === 'maintenance' ? 'Log work order' : 'New inspection'}</button>}>
     {section === 'overview' && <MechanicOverviewPage operations={operations} queue={queue} openWork={openWork} fleetFilters={fleetFilters} onRefresh={onRefresh} setDialog={setDialog} />}
     {section === 'inspections' && <InspectionsPage queue={queue} inspections={inspections} setDialog={setDialog} />}
-    {section === 'maintenance' && <MaintenancePage maintenance={maintenance} openWork={openWork} setDialog={setDialog} />}
+    {section === 'maintenance' && <MaintenancePage maintenance={maintenance} openWork={openWork} setDialog={setDialog} onDone={done} />}
   </StaffLayout>
 }

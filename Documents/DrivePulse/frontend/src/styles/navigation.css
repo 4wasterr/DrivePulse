@@ -1,0 +1,7 @@
+.back-button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:9px 14px; border:1px solid #dce1d4; border-radius:8px; background:#fff; color:#46513a; font-size:13px; font-weight:550; cursor:pointer; transition:background .2s,border-color .2s; }
+.back-button:hover { background:#f0f3e9; border-color:#aebc99; }
+.back-button:focus-visible { outline:2px solid #63764a; outline-offset:4px; }
+.back-button:disabled { opacity:.5; cursor:wait; }
+.agent-page > .back-button,.page-content > .back-button,.auth-form-wrap > .back-button,.role-gate > .back-button { margin-bottom:20px; }
+.modal-inner > .back-button { margin-bottom:18px; }
+.general-landing .landing-section > .back-button,.general-landing .landing-how-section > .landing-container > .back-button { margin-bottom:24px; }

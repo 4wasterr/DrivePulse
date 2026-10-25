@@ -16,6 +16,7 @@ export default function VehicleCard({ vehicle, onDetails, onReserve, available, 
         <span className="rating"><Icon name="star" size={13} />{vehicle.rating}</span>
       </div>
       <p className="vehicle-tagline">{vehicle.tagline}</p>
+      <p className="small muted">{vehicle.fleetCode || vehicle.id}{vehicle.plate ? ` · ${vehicle.plate}` : ''}</p>
       {!available && unavailabilityReason && (
         <div className="vehicle-unavailable-banner">
           <Icon name="info" size={13} />

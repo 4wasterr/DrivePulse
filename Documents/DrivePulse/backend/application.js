@@ -6,7 +6,11 @@ const { randomUUID, randomBytes, scryptSync, timingSafeEqual, createHash } = req
 const D = require('./domain');
 const { createFleet } = require('./fleet');
 const { createAudit } = require('./audit');
-const { createRentalDocuments } = require('./rentalDocuments');
+const { createRentalDocuments, DEFAULT_TERMS } = require('./rentalDocuments');
+const { validPassword, PASSWORD_ERROR, isAdmin } = require('./security');
+const { vehicleProfile, renewalNotices, expiryDate } = require('./vehicleProfile');
+const demoAccounts = require('../shared/demoAccounts.json');
+const { inputError } = require('../shared/validation.mjs');
 
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const now = () => new Date().toISOString();
@@ -79,10 +83,25 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     return await fleet.present(booking);
   });
 
-  if (seedDemo && !(await db.prepare('SELECT id FROM users WHERE email=?').get('client@drivepulse.demo'))) {
+  const seedReservations = seedDemo && !(await db.prepare('SELECT id FROM users WHERE email=?').get('client@drivepulse.demo'));
+  if (seedDemo) {
     await transaction(async () => {
-      const client = await addUser('Alex Morgan', 'client@drivepulse.demo', 'client', 'DrivePulse123!');
-      const agent = await addUser('Jamie Santos', 'agent@drivepulse.demo', 'agent', 'DrivePulse123!');
+      for (const account of demoAccounts) {
+        const existing = await db.prepare('SELECT * FROM users WHERE email=?').get(account.email);
+        if (!existing) await addUser(account.name, account.email, account.role, account.password);
+        // Upgrade only the original demo password; preserve manager changes and deactivations.
+        else if (existing.role === account.role && !existing.archived_at && timingSafeEqual(scryptSync('DrivePulse123!', existing.salt, 64), Buffer.from(existing.password_hash, 'hex'))) {
+          const record = passwordRecord(account.password);
+          await db.prepare('UPDATE users SET salt=?,password_hash=? WHERE id=?').run(record.salt, record.passwordHash, existing.id);
+          await db.prepare('DELETE FROM sessions WHERE user_id=?').run(existing.id);
+        }
+      }
+    });
+  }
+  if (seedReservations) {
+    await transaction(async () => {
+      const client = await db.prepare('SELECT * FROM users WHERE email=?').get('client@drivepulse.demo');
+      const agent = await db.prepare('SELECT * FROM users WHERE email=?').get('agent@drivepulse.demo');
       const docs = await asyncMap(D.REQUIRED_DOCUMENTS, async (kind) => {
         const id = randomUUID(),data = samplePDF(kind);
         await db.prepare('INSERT INTO documents(id,owner_id,kind,name,mime,fingerprint,uploaded_at,data) VALUES(?,?,?,?,?,?,?,?)').run(id, 'sample-owner-archive', kind, `sample-${kind}.pdf`, 'application/pdf', hash(data), now(), data);
@@ -110,12 +129,6 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
       }
       await saveTicket({ id: `Q-${randomUUID().slice(0, 8)}`, ownerId: client.id, bookingId: 'DP-10248', subject: 'Can I extend my rental?', category: 'Extension', status: 'open', createdAt: now(), version: 1, messages: [{ id: randomUUID(), by: client.name, role: 'client', message: 'Could you help me add one extra day to this reservation?', at: now() }] });
     });
-  }
-
-  if (seedDemo) {
-    for (const [role, name] of [['mechanic', 'Riley Cruz'], ['manager', 'Sam Reyes']]) {
-      if (!(await db.prepare('SELECT id FROM users WHERE email=?').get(`${role}@drivepulse.demo`))) await addUser(name, `${role}@drivepulse.demo`, role, 'DrivePulse123!');
-    }
   }
 
   app.disable('x-powered-by');
@@ -150,7 +163,28 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
   const requireUser = (req, res, next) => req.user ? next() : res.status(401).json({ error: 'Sign in to continue.' });
   const requireAgent = (req, res, next) => !req.user ? res.status(401).json({ error: 'Sign in to continue.' }) : req.user.role !== 'agent' ? res.status(403).json({ error: 'This action requires a booking-agent account.' }) : next();
   const requireManager = (req, res, next) => !req.user ? res.status(401).json({ error: 'Sign in to continue.' }) : req.user.role !== 'manager' ? res.status(403).json({ error: 'This action requires an operations-manager account.' }) : next();
+  const requireAdmin = (req, res, next) => !req.user ? res.status(401).json({ error: 'Sign in to continue.' }) : !isAdmin(req.user) ? res.status(403).json({ error: 'Only an Admin can edit user profiles.' }) : next();
   const requireClient = (req, res, next) => !req.user ? res.status(401).json({ error: 'Sign in to continue.' }) : req.user.role !== 'client' ? res.status(403).json({ error: 'Use a client account to book a personal rental.' }) : next();
+
+  app.post('/api/vehicle-images', requireManager, express.raw({ type: () => true, limit: '4mb' }), async (req, res) => {
+    const mime = req.get('content-type')?.split(';')[0], data = req.body;
+    if (!Buffer.isBuffer(data) || !data.length) D.fail('Choose a non-empty vehicle photo.');
+    const valid = mime === 'image/png' ? data.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) : mime === 'image/jpeg' ? data[0] === 255 && data[1] === 216 && data[2] === 255 : mime === 'image/webp' ? data.subarray(0,4).toString() === 'RIFF' && data.subarray(8,12).toString() === 'WEBP' : false;
+    if (!valid) D.fail('Upload a valid JPG, PNG, or WebP vehicle photo (up to 4 MB).');
+    const id = randomUUID();
+    let name;
+    try { name = decodeURIComponent(req.get('x-file-name') || 'vehicle-photo'); } catch { D.fail('Invalid file name.'); }
+    name = D.text(name.replace(/[\r\n/\\]/g, '_'), 'File name', 180);
+    await db.prepare('INSERT INTO documents(id,owner_id,kind,name,mime,fingerprint,uploaded_at,data) VALUES(?,?,?,?,?,?,?,?)').run(id, req.user.id, 'vehicle-image', name, mime, hash(data), now(), data);
+    res.status(201).json({ id, url: `/api/vehicle-images/${id}` });
+  });
+  app.get('/api/vehicle-images/:id', async (req, res) => {
+    const doc = await db.prepare("SELECT * FROM documents WHERE id=? AND kind='vehicle-image'").get(req.params.id);
+    // Only attached profile photos are public; staged uploads stay private.
+    const attached = (await fleet.fleet()).some(v => v.imageId === req.params.id);
+    if (!doc || !attached && (!isAdmin(req.user) || doc.owner_id !== req.user.id)) D.fail('Vehicle image not found.', 404);
+    res.type(doc.mime).send(Buffer.from(doc.data));
+  });
 
   app.post('/api/documents/:kind', requireUser, express.raw({ type: () => true, limit: '4mb' }), async (req, res) => {
     const condition = req.params.kind === 'condition';
@@ -227,11 +261,16 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
       started_at=CASE WHEN auth_attempts.started_at<? THEN excluded.started_at ELSE auth_attempts.started_at END
       RETURNING attempts`).get(address, at, cutoff, cutoff);
     if (attempt.attempts > 25) D.fail('Too many attempts. Please try again in 15 minutes.', 429);
-    const email = D.text(req.body.email, 'Email', 160).toLowerCase(),password = typeof req.body.password === 'string' ? req.body.password : '';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) D.fail('Enter a valid email address.');
-    if (password.length < 8 || password.length > 128) D.fail('Use a password between 8 and 128 characters.');
+    const signup = req.params.action === 'signup';
+    const identifier = D.text(signup ? req.body.email : req.body.username ?? req.body.email, signup ? 'Email' : 'Email or username', 160).toLowerCase();
+    const identifierError = inputError(identifier, { kind: signup ? 'email' : 'login-identifier' });
+    if (identifierError) D.fail(identifierError);
+    const demoAccount = !signup && seedDemo ? demoAccounts.find(account => account.username === identifier) : null;
+    const email = demoAccount?.email || identifier, password = typeof req.body.password === 'string' ? req.body.password : '';
+    if (!password.trim() || password.length > 128) D.fail('Enter your password (up to 128 characters).');
     const existing = await db.prepare('SELECT * FROM users WHERE email=?').get(email);
     if (req.params.action === 'signup') {
+      if (!validPassword(password)) D.fail(PASSWORD_ERROR);
       if (!['client', 'agent', 'mechanic', 'manager'].includes(req.body.role)) D.fail('Choose a valid account type.');
       if (existing) D.fail('An account already uses this email. Sign in instead.', 409);
       if (req.body.role !== 'client' && !allowAgentSignup) D.fail('Ask your administrator to create a staff account.', 403);
@@ -244,16 +283,16 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
       return res.status(201).json({ user: await createSession(user, res) });
     }
     const candidate = scryptSync(password, existing?.salt || 'missing-account-salt', 64);
-    if (!existing || !timingSafeEqual(candidate, Buffer.from(existing.password_hash, 'hex'))) {
+    if (!existing || demoAccount && existing.role !== demoAccount.role || !timingSafeEqual(candidate, Buffer.from(existing.password_hash, 'hex'))) {
       await systemAudit.write(
         { id: existing?.id || null, name: email, role: existing?.role || 'anonymous' },
         'Failed login attempt',
         `Account: ${email}`,
-        'Invalid email or password attempt',
+        'Invalid username, email or password attempt',
         401,
         { ip: address, alertType: 'Failed login attempt' }
       );
-      D.fail('Email or password is incorrect.', 401);
+      D.fail('Email, username or password is incorrect.', 401);
     }
     if (existing.archived_at) {
       await systemAudit.write(
@@ -297,7 +336,37 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     });
   });
 
-  app.patch('/api/profile', requireUser, async (req, res) => {
+  const notificationsFor = async user => {
+    const bookings = (await allBookings()).filter(b => user.role !== 'client' || b.ownerId === user.id);
+    const activeFleet = await fleet.fleet();
+    const notices = renewalNotices(activeFleet.filter(v => user.role !== 'client' || bookings.some(b => b.vehicleId === v.id)));
+    if (user.role !== 'mechanic') {
+      for (const b of bookings) {
+        for (const payment of (b.payments || []).filter(p => p.type === 'deposit')) notices.push({ id: `deposit-payment:${payment.id}:${payment.status}`, category: 'deposit', severity: 'info', title: `Security Deposit · ${payment.status === 'confirmed' ? 'received' : payment.status}`, message: `${b.id} · PHP ${payment.amount} · ${payment.status === 'pending' ? 'Awaiting payment verification' : 'Payment status updated'}`, at: payment.reviewedAt || payment.at });
+      }
+      const approvals = (await fleet.records('approval')).filter(a => bookings.some(b => b.id === a.bookingId));
+      for (const a of approvals) notices.push({ id: `deposit:${a.id}:${a.status}`, category: a.type === 'deposit' ? 'deposit' : 'system', severity: 'info', title: `${a.type === 'deposit' ? 'Security Deposit' : 'Rental payment return'} · ${a.status}`, message: `${a.bookingId} · PHP ${a.amount} · ${a.disbursement ? 'Cash release recorded' : a.status === 'pending' ? 'Awaiting approval' : 'Decision recorded'}`, at: a.reviewedAt || a.at });
+    }
+    if (isAdmin(user)) {
+      for (const alert of await systemAudit.alerts(40)) notices.push({ id: `system:${alert.id}`, category: 'system', severity: 'warning', title: alert.alert_type || alert.action, message: `${alert.action} · ${alert.detail}`, at: alert.at });
+    } else {
+      for (const b of bookings.filter(b => b.status === 'On Rental' && D.time(b.end, b.endTime) < Date.now())) notices.push({ id: `overdue:${b.id}:${b.end}:${b.endTime}`, category: 'system', severity: 'urgent', title: 'Vehicle return overdue', message: `${b.id} · Scheduled return ${b.end} ${b.endTime} PHT` });
+    }
+    const read = await db.prepare("SELECT payload FROM fleet_records WHERE kind='notification-read' AND id=?").get(user.id);
+    const ids = new Set(read ? JSON.parse(read.payload).ids : []);
+    const priority = { urgent: 0, warning: 1, info: 2 };
+    return notices.map(n => ({ ...n, read: ids.has(n.id) })).sort((a, b) => Number(a.read) - Number(b.read) || priority[a.severity] - priority[b.severity] || (a.days ?? Infinity) - (b.days ?? Infinity) || (b.at || '').localeCompare(a.at || ''));
+  };
+  app.get('/api/notifications', requireUser, async (req, res) => res.json(await notificationsFor(req.user)));
+  app.post('/api/notifications/read', requireUser, async (req, res) => res.json(await transaction(async () => {
+    if (!Array.isArray(req.body.ids) || req.body.ids.length > 300 || req.body.ids.some(id => typeof id !== 'string')) D.fail('Choose valid notifications.');
+    const notices = await notificationsFor(req.user), allowed = new Set(notices.map(n => n.id));
+    if (req.body.ids.some(id => !allowed.has(id))) D.fail('Notification not found.', 404);
+    await fleet.save('notification-read', { id: req.user.id, ids: [...new Set([...notices.filter(n => n.read).map(n => n.id), ...req.body.ids])] });
+    return { ok: true };
+  })));
+
+  app.patch('/api/profile', requireAdmin, async (req, res) => {
     const name = D.text(req.body.name, 'Full name', 70);
     const email = D.text(req.body.email, 'Email', 160).toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) D.fail('Enter a valid email address.');
@@ -318,11 +387,33 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     res.set('Content-Type', doc.mime);res.set('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(doc.name)}`);res.send(Buffer.from(doc.data));
   });
 
+  const agreementPreview = async (input, user) => {
+    const vehicle = (await fleet.fleet()).find(v => v.id === input.vehicleId);
+    if (!vehicle) D.fail('Choose an active fleet vehicle.', 404);
+    const blocks = await fleet.operationalBlocks(vehicle.id);
+    if (blocks.length || vehicle.status === 'Overdue') D.fail(blocks.join(' ') || 'This vehicle is overdue and unavailable.', 409);
+    const quote = D.quote(input, false, vehicle.rate, vehicle);
+    if (!D.available(await allBookings(), input)) D.fail('This vehicle is already reserved for those dates.', 409);
+    const preview = {
+      vehicle: { id: vehicle.id, fleetCode: vehicle.fleetCode, plate: vehicle.plate || '', name: vehicle.name },
+      renter: { name: user.name, email: user.email },
+      schedule: Object.fromEntries(['start', 'end', 'startTime', 'endTime', 'pickup', 'dropoff'].map(key => [key, input[key]])),
+      quote: { ...quote, dailyRate: vehicle.rate }, terms: DEFAULT_TERMS
+    };
+    return { ...preview, digest: hash(JSON.stringify(preview)) };
+  };
+  app.post('/api/bookings/agreement-preview', requireClient, async (req, res) => res.json(await agreementPreview(req.body, req.user)));
+
   const createBooking = async (req, walkin) => await transaction(async () => {
     const input = req.body;
     const blocks = await fleet.operationalBlocks(input.vehicleId);
     if (blocks.length) D.fail(blocks.join(' '), 409);
-    const quotation = D.quote(input, false, await fleet.vehicleRate(input.vehicleId));
+    const quotation = D.quote(input, false, await fleet.vehicleRate(input.vehicleId), await fleet.vehicle(input.vehicleId));
+    if (!walkin && input.agreementPreviewDigest) {
+      const preview = await agreementPreview(input, req.user);
+      if (input.agreementPreviewDigest !== preview.digest) D.fail('The rental agreement changed. Review the updated vehicle, dates and quotation before submitting again.', 409);
+      if (input.agreed !== true) D.fail('Accept the rental terms before confirming your reservation.');
+    }
     if ((await fleet.fleet()).some((v) => v.id === input.vehicleId && v.status === 'Overdue')) D.fail('This vehicle is overdue and must be returned before another reservation can be made.', 409);
     if (!D.available(await allBookings(), input)) D.fail('This vehicle is already reserved for those dates.', 409);
     let ownerId = req.user.id,renter = publicUser(req.user),docs = [];
@@ -339,10 +430,15 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
       if (new Set(docs.map((d) => d.fingerprint)).size !== 3) D.fail('Your license and two IDs must be different files.');
     }
     const booking = { id: `DP-${randomUUID().slice(0, 8).toUpperCase()}`, ownerId, renter, vehicleId: input.vehicleId, start: input.start, end: input.end, startTime: input.startTime, endTime: input.endTime, pickup: input.pickup, dropoff: input.dropoff, ...quotation, source: walkin ? 'Walk-in' : 'Online', status: 'Pending Approval', version: 1, documents: docs, payments: [], lateFee: 0, createdAt: now(), activity: [], note: D.text(input.note, 'Reservation note', 1000, false), payment: 'Cash' };
+    booking.dailyRate = await fleet.vehicleRate(input.vehicleId);
+    const selected = (await fleet.fleet()).find(v => v.id === input.vehicleId);
+    booking.vehicle = { id: selected.id, name: selected.name, fleetCode: selected.fleetCode, plate: selected.plate || '' };
+    if (!walkin && input.agreementPreviewDigest) booking.agreementAcceptance = { digest: input.agreementPreviewDigest, by: req.user.id, at: now() };
     if (!walkin) {
       booking.payments = ['rental', 'deposit'].map((type) => ({ id: randomUUID(), type, amount: booking[type], status: 'pending', method: 'Cash', reference: 'Awaiting cash at the counter', at: now() }));
     }
     await rentalDocuments.contract(booking, req.user);
+    booking.confirmation = await rentalDocuments.issue(booking, 'confirmation', req.user, { terms: booking.agreement.terms, agreementId: booking.agreement.id, signature: renter.name, bookingStatus: booking.status });
     await audit(booking, req.user, walkin ? 'Walk-in scheduled' : 'Online booking received', '', { oldValue: null, newValue: { id: booking.id, vehicleId: booking.vehicleId, total: booking.total } });
     await saveBooking(booking);
     return await fleet.present(booking);
@@ -424,10 +520,10 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     if (['Cancelled', 'Completed'].includes(b.status)) D.fail('Closed reservations cannot be extended.');
     const updated = { ...b, end: req.body.end, endTime: req.body.endTime };
     if (D.time(updated.end, updated.endTime) <= Math.max(D.time(b.end, b.endTime), Date.now())) D.fail('Choose a future return time later than the current return.');
-    const quotation = D.quote(updated, true, await fleet.vehicleRate(b.vehicleId));
+    const quotation = D.quote(updated, true, await fleet.vehicleRate(b.vehicleId), await fleet.vehicle(b.vehicleId));
     if (!D.available(await allBookings(), updated, b.id)) D.fail('This extension overlaps another reservation.', 409);
     b.extensions ||= [];b.extensions.push({ oldEnd: b.end, oldEndTime: b.endTime, newEnd: updated.end, newEndTime: updated.endTime, additionalRental: quotation.rental - b.rental, by: req.user.name, at: now() });
-    b.end = updated.end;b.endTime = updated.endTime;b.days = quotation.days;b.rental = quotation.rental;
+    b.end = updated.end;b.endTime = updated.endTime;b.days = quotation.days;b.rental = quotation.rental;b.dailyRate = quotation.rental / quotation.days;
     await rentalDocuments.contract(b, req.user);
     D.invalidatePass(b);
   })));
@@ -437,7 +533,7 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     if (!['On Rental', 'Ready for Dispatch'].includes(b.status)) D.fail('Only active or ready rentals can be extended.');
     const updated = { ...b, end: req.body.end, endTime: req.body.endTime };
     if (D.time(updated.end, updated.endTime) <= Math.max(D.time(b.end, b.endTime), Date.now())) D.fail('Choose a future return time later than the current return.');
-    const quotation = D.quote(updated, true, await fleet.vehicleRate(b.vehicleId));
+    const quotation = D.quote(updated, true, await fleet.vehicleRate(b.vehicleId), await fleet.vehicle(b.vehicleId));
     if (!D.available(await allBookings(), updated, b.id)) D.fail('This vehicle is reserved by another customer for the requested extension dates.', 409);
     b.extensions ||= [];
     b.extensions.push({
@@ -446,7 +542,7 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
       additionalRental: quotation.rental - b.rental,
       by: req.user.name, at: now(), clientInitiated: req.user.role === 'client'
     });
-    b.end = updated.end;b.endTime = updated.endTime;b.days = quotation.days;b.rental = quotation.rental;
+    b.end = updated.end;b.endTime = updated.endTime;b.days = quotation.days;b.rental = quotation.rental;b.dailyRate = quotation.rental / quotation.days;
     await rentalDocuments.contract(b, req.user);
     D.invalidatePass(b);
   })));
@@ -479,32 +575,52 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
 
   app.post('/api/manager/vehicles', requireManager, async (req, res) => res.status(201).json(await transaction(async () => {
     const input = req.body;
-    const model = D.text(input.model, 'Vehicle model');
-    const brand = D.text(input.brand, 'Vehicle brand');
-    const category = D.text(input.category || 'Sedan', 'Vehicle category');
-    const rate = Number(input.rate);
-    if (!Number.isFinite(rate) || rate < 500 || rate > 100000) D.fail('Daily rate must be between PHP 500 and PHP 100,000.');
-    const plate = D.text(input.plate, 'License plate number');
-    const id = (input.id || `${brand.toLowerCase()}-${model.toLowerCase()}`).replace(/[^a-z0-9_-]/g, '-').slice(0, 40);
-
     const existing = await fleet.fleet(true);
-    if (existing.some((v) => v.id === id || v.plate?.toLowerCase() === plate.toLowerCase())) {
-      D.fail('A vehicle with this ID or license plate already exists.', 409);
-    }
+    const profile = vehicleProfile(input, existing);
+    const imageId = await validateVehicleImage(input.imageId, req.user);
     const vehicle = {
-      id, name: `${brand} ${model}`, model, brand, category, rate, plate,
-      transmission: input.transmission || 'Automatic',
-      seats: Number(input.seats || 5),
-      fuelType: input.fuelType || 'Gasoline',
-      tankCapacity: Number(input.tankCapacity || 50),
-      mileage: Number(input.mileage || 0),
+      ...profile, id: randomUUID(), imageId,
       status: 'Available',
       createdAt: now(),
       version: 1
     };
+    await reserveVehicleIdentifier('fleet-code', vehicle.fleetCode, vehicle.id);
+    await reserveVehicleIdentifier('vehicle-plate', vehicle.plate, vehicle.id);
     await fleet.saveDynamicVehicle(vehicle);
-    await systemAudit.write(req.user, 'Vehicle added to fleet', id, `Added ${brand} ${model} (${plate}) at PHP ${rate}/day`);
+    await systemAudit.write(req.user, 'Vehicle added to fleet', vehicle.id, `Added ${vehicle.name} (${vehicle.fleetCode}) at PHP ${vehicle.rate}/day`);
     return vehicle;
+  })));
+
+  async function reserveVehicleIdentifier(kind, value, vehicleId) {
+    const id = value.replace(/[^a-z0-9]/gi, '').toUpperCase();
+    const inserted = await db.prepare('INSERT INTO fleet_records(kind,id,payload) VALUES(?,?,?) ON CONFLICT(kind,id) DO NOTHING RETURNING id').get(kind, id, JSON.stringify({ id, vehicleId }));
+    if (!inserted) {
+      const row = await db.prepare('SELECT payload FROM fleet_records WHERE kind=? AND id=?').get(kind, id);
+      if (JSON.parse(row.payload).vehicleId !== vehicleId) D.fail('This fleet code or plate is already assigned to another vehicle.', 409);
+    }
+  }
+
+  async function validateVehicleImage(id, user, previousId) {
+    if (!id) return null;
+    if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id)) D.fail('Choose a valid uploaded vehicle image.');
+    const doc = await db.prepare("SELECT * FROM documents WHERE id=? AND kind='vehicle-image'").get(id);
+    if (!doc || doc.owner_id !== user.id && id !== previousId) D.fail('Choose a vehicle image uploaded by your account.');
+    return id;
+  }
+  app.patch('/api/manager/vehicles/:id/profile', requireManager, async (req, res) => res.json(await transaction(async () => {
+    const s = await fleet.state(req.params.id), current = (await fleet.fleet(true)).find(v => v.id === s.id);
+    if (s.archivedAt) D.fail('Restore this vehicle before editing it.', 409);
+    if (req.body.version !== s.version) D.fail('This vehicle changed. Refresh and try again.', 409);
+    const profile = { ...current, ...req.body };
+    const fleetCode = D.text(profile.fleetCode, 'Fleet code', 30).toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9 _-]{1,29}$/.test(fleetCode)) D.fail('Use 2–30 letters, numbers, spaces, hyphens or underscores for the fleet code.');
+    const normalize = value => String(value || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+    if ((await fleet.fleet(true)).some(v => v.id !== s.id && (normalize(v.fleetCode) === normalize(fleetCode) || normalize(v.id) === normalize(fleetCode)))) D.fail('This fleet code is already in use.', 409);
+    const changes = { fleetCode, registrationExpiry: expiryDate(profile.registrationExpiry, 'OR/CR registration expiry'), insuranceExpiry: expiryDate(profile.insuranceExpiry, 'insurance expiry'), imageId: await validateVehicleImage(profile.imageId, req.user, current.imageId) };
+    await reserveVehicleIdentifier('fleet-code', fleetCode, s.id);
+    Object.assign(s, changes);
+    await fleet.changeState(s, req.user, 'Vehicle profile updated', 'Fleet code, photo and renewal dates updated.', { oldValue: { fleetCode: current.fleetCode, registrationExpiry: current.registrationExpiry, insuranceExpiry: current.insuranceExpiry }, newValue: changes });
+    return (await fleet.fleet()).find(v => v.id === s.id);
   })));
 
   app.post('/api/agent/bookings/:id/cancel', requireAgent, async (req, res) => res.json(await updateBooking(req, 'Reservation cancelled', (b) => {
@@ -545,7 +661,7 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     const rows = await db.prepare('SELECT * FROM users ORDER BY created_at DESC, rowid DESC').all();
     const activeUsers = rows.filter((u) => !u.archived_at).map(publicUser);
     const archivedUsers = rows.filter((u) => u.archived_at).map(publicUser);
-    const authHistory = await db.prepare("SELECT * FROM audit_log WHERE action IN ('User sign in','Failed login attempt','Deactivated sign-in blocked','User sign out','Account registration','User account created','User account deactivated','User role updated') ORDER BY sequence DESC LIMIT 40").all();
+    const authHistory = await db.prepare("SELECT * FROM audit_log WHERE action IN ('User sign in','Failed login attempt','Deactivated sign-in blocked','User sign out','Account registration','User account created','User account deactivated','User role updated','Profile updated','User password reset','Archived account restored') ORDER BY sequence DESC").all();
     const successfulLogins = (await db.prepare("SELECT COUNT(*) AS count FROM audit_log WHERE action='User sign in'").get()).count;
     const failedLogins = (await db.prepare("SELECT COUNT(*) AS count FROM audit_log WHERE action='Failed login attempt'").get()).count;
     res.json({
@@ -570,23 +686,38 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     const password = typeof req.body.password === 'string' ? req.body.password : '';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) D.fail('Enter a valid email address.');
     if (!['client', 'agent', 'mechanic', 'manager'].includes(role)) D.fail('Choose a valid role.');
-    if (password.length < 8 || password.length > 128) D.fail('Use a password between 8 and 128 characters.');
+    if (!validPassword(password)) D.fail(PASSWORD_ERROR);
     if (await db.prepare('SELECT id FROM users WHERE email=?').get(email)) D.fail('An account already uses this email.', 409);
     const created = await addUser(name, email, role, password);
     await systemAudit.write(req.user, 'User account created', `user:${created.id}`, `${name} (${role})`, 200, { oldValue: null, newValue: { name, email, role } });
     return publicUser(created);
   })));
 
-  app.patch('/api/manager/users/:id', requireManager, async (req, res) => res.json(await transaction(async () => {
+  app.post('/api/manager/users/:id/password', requireAdmin, async (req, res) => res.json(await transaction(async () => {
+    const target = await db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+    if (!target || target.archived_at) D.fail('Active user not found.', 404);
+    if (!validPassword(req.body.password)) D.fail(PASSWORD_ERROR);
+    const record = passwordRecord(req.body.password);
+    await db.prepare('UPDATE users SET salt=?,password_hash=? WHERE id=?').run(record.salt, record.passwordHash, target.id);
+    await db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+    await systemAudit.write(req.user, 'User password reset', `user:${target.id}`, 'Password reset by Admin; active sessions revoked.');
+    return { ok: true };
+  })));
+
+  app.patch('/api/manager/users/:id', requireAdmin, async (req, res) => res.json(await transaction(async () => {
     const target = await db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
     if (!target) D.fail('User not found.', 404);
     const role = req.body.role || target.role;
-    const name = req.body.name ? D.text(req.body.name, 'Full name', 70) : target.name;
+    const name = req.body.name === undefined ? target.name : D.text(req.body.name, 'Full name', 70);
+    const email = req.body.email === undefined ? target.email : D.text(req.body.email, 'Email', 160).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) D.fail('Enter a valid email address.');
+    if (await db.prepare('SELECT id FROM users WHERE email=? AND id<>?').get(email, target.id)) D.fail('This email is already registered.', 409);
     if (!['client', 'agent', 'mechanic', 'manager'].includes(role)) D.fail('Choose a valid role.');
     if (target.id === req.user.id && role !== 'manager') D.fail('You cannot remove your own operations-manager role.');
-    const oldVal = { name: target.name, role: target.role };
-    await db.prepare('UPDATE users SET name=?,role=? WHERE id=?').run(name, role, target.id);
-    await systemAudit.write(req.user, 'User role updated', `user:${target.id}`, `${target.email}: ${oldVal.role} → ${role}`, 200, { oldValue: oldVal, newValue: { name, role } });
+    const oldVal = { name: target.name, role: target.role, email: target.email };
+    await db.prepare('UPDATE users SET name=?,role=?,email=? WHERE id=?').run(name, role, email, target.id);
+    if (role !== target.role || email !== target.email) await db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+    await systemAudit.write(req.user, role !== target.role ? 'User role updated' : 'Profile updated', `user:${target.id}`, `${target.email}: ${oldVal.role} → ${role}`, 200, { oldValue: oldVal, newValue: { name, role, email } });
     return publicUser(await db.prepare('SELECT * FROM users WHERE id=?').get(target.id));
   })));
 
@@ -664,7 +795,7 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
       const u = await db.prepare('SELECT * FROM users WHERE id=?').get(id);
       if (!u || !u.archived_at) D.fail('Deactivate the user account before permanently purging it.', 409);
       await db.prepare('DELETE FROM sessions WHERE user_id=?').run(id);
-      await db.prepare('DELETE FROM documents WHERE owner_id=?').run(id);
+      await db.prepare("DELETE FROM documents WHERE owner_id=? AND kind<>'vehicle-image'").run(id);
       await db.prepare('DELETE FROM tickets WHERE owner_id=?').run(id);
       await db.prepare('UPDATE bookings SET owner_id=NULL WHERE owner_id=?').run(id);
       await db.prepare('DELETE FROM users WHERE id=?').run(id);

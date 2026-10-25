@@ -1,3 +1,4 @@
+import ValidatedField from './ValidatedField.jsx'
 import { useId, useState } from 'react'
 import { validateFile } from '../../storage.js'
 import { uploadDocument } from '../../api.js'
@@ -24,7 +25,7 @@ export default function UploadField({ documentId, label, value, onUpload, bookin
       <span className="upload-copy"><strong>{label}</strong><span>{busy ? 'Saving your file…' : value ? value.name : 'Drop a file here or click to browse'}</span></span>
       <span className="upload-action">{value ? 'Replace' : 'Upload'}<Icon name="diagonal" size={15} /></span>
     </label>
-    <input className="sr-only" id={inputId} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { upload(e.target.files[0]); e.target.value = '' }} />
+    <ValidatedField className="sr-only" id={inputId} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { upload(e.target.files[0]); e.target.value = '' }} />
     {error && <p className="field-error" role="alert">{error}</p>}
   </div>
 }

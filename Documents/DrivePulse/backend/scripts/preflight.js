@@ -1,5 +1,6 @@
 require('dotenv').config({ path: require('node:path').join(__dirname, '../.env'), quiet: true });
 const { createDatabase } = require('../db');
+const { databaseDiagnostic } = require('../database-errors');
 
 function validateProduction(env) {
   const problems = [];
@@ -44,7 +45,7 @@ async function main() {
 
 if (require.main === module) main().catch(error => {
   // Never print connection errors, which can contain credentials.
-  console.error(error.message.startsWith('Initial manager') || error.message.startsWith('Use a production') ? error.message : 'Database verification failed. Check the connection, TLS certificate, and migration.');
+  console.error(error.message.startsWith('Initial manager') || error.message.startsWith('Use a production') ? error.message : 'Database verification failed. ' + databaseDiagnostic(error));
   process.exitCode = 1;
 });
 module.exports = { validateProduction };

@@ -1,0 +1,6 @@
+[
+  { "role": "client", "label": "Client", "name": "Alex Morgan", "email": "client@drivepulse.demo", "username": "demo", "password": "demo" },
+  { "role": "agent", "label": "Booking agent", "name": "Jamie Santos", "email": "agent@drivepulse.demo", "username": "bkagent", "password": "bkagent" },
+  { "role": "mechanic", "label": "Fleet mechanic", "name": "Riley Cruz", "email": "mechanic@drivepulse.demo", "username": "flmechanic", "password": "mechanic" },
+  { "role": "manager", "label": "Operations manager", "name": "Sam Reyes", "email": "manager@drivepulse.demo", "username": "opmanager", "password": "opmanager" }
+]

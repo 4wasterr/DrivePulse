@@ -1,9 +1,11 @@
 require('dotenv').config({ path: require('node:path').join(__dirname, '../.env'), quiet: true });
 const { createDatabase } = require('../db');
+const { databaseDiagnostic } = require('../database-errors');
 const { randomBytes, randomUUID, scryptSync } = require('node:crypto');
 const { createAudit } = require('../audit');
 const { createInterface } = require('node:readline/promises');
 const { Writable } = require('node:stream');
+const { validPassword } = require('../security');
 
 async function credentials() {
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
@@ -21,7 +23,7 @@ async function credentials() {
     finally { secret.close(); process.stdout.write('\n'); }
   }
   name = name.trim(); email = email.trim().toLowerCase();
-  if (!name || name.length > 70 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 160 || password.length < 12 || password.length > 128) throw new Error('INVALID_MANAGER');
+  if (!name || name.length > 70 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 160 || password.length < 12 || !validPassword(password)) throw new Error('INVALID_MANAGER');
   return { name, email, password };
 }
 
@@ -53,11 +55,11 @@ async function main() {
 
 main().catch(error => {
   const messages = {
-    INVALID_MANAGER: 'Enter a valid name, email, and a password of 12–128 characters.',
+    INVALID_MANAGER: 'Enter a valid name, email, and a password of 12–128 characters with uppercase, lowercase, and special characters.',
     MANAGER_EXISTS: 'An active manager already exists. Create additional staff through User Management.',
     EMAIL_EXISTS: 'That email already belongs to an account. No changes were made.',
     INVALID_COMMAND: 'Use npm run db:migrate or npm run db:manager.'
   };
-  console.error(messages[error.message] || 'Database operation failed. Check DATABASE_URL, TLS, and the schema. No credentials were printed.');
+  console.error(messages[error.message] || 'Database operation failed. ' + databaseDiagnostic(error));
   process.exitCode = 1;
 });

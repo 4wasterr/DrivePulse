@@ -1,3 +1,4 @@
+import { PaginatedList } from '../../components/ui/Pagination.jsx'
 import { useState } from 'react'
 import Icon from '../../components/ui/Icon.jsx'
 import { money, prettyDate } from '../../data.js'
@@ -16,9 +17,9 @@ export default function ApprovalPanel({ approvals, bookings, flags = [], risks =
       <div className="workspace-section-heading">
         <div>
           <p className="workspace-kicker">BY-EXCEPTION FINANCIAL CONTROLS</p>
-          <h2>Disputed deposits & refund approvals</h2>
+          <h2>Security Deposit approvals</h2>
         </div>
-        <button className="button button-dark" onClick={onRequest}>Log exception / refund<Icon name="wallet" size={17} /></button>
+        <button className="button button-dark" onClick={onRequest}>Security Deposit exception<Icon name="wallet" size={17} /></button>
       </div>
       <div className="staff-toolbar">
         <select aria-label="Filter financial approvals" value={filter} onChange={e => setFilter(e.target.value)}>
@@ -30,9 +31,9 @@ export default function ApprovalPanel({ approvals, bookings, flags = [], risks =
         </select>
         <span className="workspace-muted">Auto-Release active: Clean returns with 0 damage & 100% fuel release automatically (24–48h).</span>
       </div>
-      {shown.length ? shown.map(a => <article className="staff-ledger-row" key={a.id}>
+      {shown.length ? <PaginatedList>{shown.map(a => <article className="staff-ledger-row" key={a.id}>
         <div>
-          <h3>{a.type === 'deposit' ? (a.autoReleased ? 'Auto-released security deposit' : 'Disputed / manual deposit release') : 'Cancelled rental refund'} · {money(a.amount)}</h3>
+          <h3>{a.type === 'deposit' ? (a.autoReleased ? 'Auto-released security deposit' : 'Disputed / manual deposit release') : 'Cancelled rental payment return'} · {money(a.amount)}</h3>
           <p>{a.bookingId} · {bookings.find(b => b.id === a.bookingId)?.renter.name || 'Customer'}{a.withheldAmount > 0 ? ` · Withheld for damage/fuel: ${money(a.withheldAmount)}` : ''}</p>
           <p>{a.reason}</p>
           <small>Logged by {a.by} · {fmt(a.at)}</small>
@@ -43,7 +44,7 @@ export default function ApprovalPanel({ approvals, bookings, flags = [], risks =
         <Tag>{a.status}</Tag>
         {a.disbursement?.receipt && <IssuedLink record={a.disbursement.receipt}>Release receipt</IssuedLink>}
         {a.status === 'pending' && <button className="button button-dark" onClick={() => onReview(a)}>Approve / reject</button>}
-      </article>) : <Empty>No financial exception requests in this view.</Empty>}
+      </article>)}</PaginatedList> : <Empty>No financial exception requests in this view.</Empty>}
     </section>
 
     <section className="workspace-surface staff-section">
@@ -54,7 +55,7 @@ export default function ApprovalPanel({ approvals, bookings, flags = [], risks =
         </div>
         <Icon name="clock" />
       </div>
-      {flags.length ? flags.map(flag => <article className="staff-ledger-row" key={flag.id}>
+      {flags.length ? <PaginatedList>{flags.map(flag => <article className="staff-ledger-row" key={flag.id}>
         <div>
           <h3>{flag.bookingId} · {vehicleName(flag.vehicleId)}</h3>
           <p>Return due {prettyDate(flag.end)} at {flag.endTime} PHT</p>
@@ -62,7 +63,7 @@ export default function ApprovalPanel({ approvals, bookings, flags = [], risks =
         </div>
         <Tag>{flag.override ? 'Reviewed' : 'Overdue'}</Tag>
         {!flag.override && <button className="button button-outline" onClick={() => setDialog({ kind: 'flag-override', flag })}>Override alert</button>}
-      </article>) : <Empty>No overdue system flags.</Empty>}
+      </article>)}</PaginatedList> : <Empty>No overdue system flags.</Empty>}
     </section>
 
     <section className="workspace-surface">
@@ -73,7 +74,7 @@ export default function ApprovalPanel({ approvals, bookings, flags = [], risks =
         </div>
         <button className="button button-outline" onClick={() => setDialog({ kind: 'risk-new' })}>Log driver risk<Icon name="shield" size={17} /></button>
       </div>
-      {risks.length ? risks.map(r => <article className="staff-ledger-row" key={r.id}>
+      {risks.length ? <PaginatedList>{risks.map(r => <article className="staff-ledger-row" key={r.id}>
         <div>
           <h3>{r.driver} · {r.bookingId}</h3>
           <p>{r.description}</p>
@@ -83,7 +84,7 @@ export default function ApprovalPanel({ approvals, bookings, flags = [], risks =
         <Tag>{r.severity}</Tag>
         <Tag>{r.status}</Tag>
         {r.status === 'open' && <button className="button button-outline" onClick={() => setDialog({ kind: 'risk-override', risk: r })}>Override risk</button>}
-      </article>) : <Empty>No driver risk flags logged.</Empty>}
+      </article>)}</PaginatedList> : <Empty>No driver risk flags logged.</Empty>}
     </section>
   </>
 }

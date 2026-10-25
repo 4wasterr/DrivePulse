@@ -31,14 +31,14 @@ Run `npm run preflight -- --connect` with the production environment loaded befo
 
 ## Demo accounts
 
-Sign in at `#login` using email and password:
+In local demo mode, sign in at `#login` using a username (or the email shown below) and its password:
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Client (End-User) | `client@drivepulse.demo` | `DrivePulse123!` |
-| Booking Agent (Front Desk) | `agent@drivepulse.demo` | `DrivePulse123!` |
-| Fleet Mechanic (Yard / Field) | `mechanic@drivepulse.demo` | `DrivePulse123!` |
-| Operations Manager (Governance & Admin) | `manager@drivepulse.demo` | `DrivePulse123!` |
+| Role | Username | Email | Password |
+| --- | --- | --- | --- |
+| Client (End-User) | `demo` | `client@drivepulse.demo` | `demo` |
+| Booking Agent (Front Desk) | `bkagent` | `agent@drivepulse.demo` | `bkagent` |
+| Fleet Mechanic (Yard / Field) | `flmechanic` | `mechanic@drivepulse.demo` | `mechanic` |
+| Operations Manager (Governance & Admin) | `opmanager` | `manager@drivepulse.demo` | `opmanager` |
 
 ## User Roles & System Responsibilities
 

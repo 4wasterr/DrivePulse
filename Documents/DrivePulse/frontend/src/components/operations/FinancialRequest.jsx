@@ -1,3 +1,5 @@
+import ValidatedField from '../ui/ValidatedField.jsx'
+import ValidatedForm from '../ui/ValidatedForm.jsx'
 import { useState } from 'react'
 import Modal from '../ui/Modal.jsx'
 import Empty from '../workspace/StaffEmpty.jsx'
@@ -44,7 +46,7 @@ const COMMON_DISPUTES = [
   },
   {
     id: 'cancellation_fee',
-    label: 'Cancelled Booking (Partial Refund with Processing Fee)',
+    label: 'Cancelled Booking (Partial Payment Return with Processing Fee)',
     suggestedDeduction: 1000,
     template: 'Reservation cancelled by client. Releasing refundable balance minus non-refundable processing charge.'
   },
@@ -89,17 +91,20 @@ export default function FinancialRequest({ bookings, onClose, onDone }) {
   }
 
   const withheld = Math.max(0, available - Number(releaseAmount || 0))
+  const selectedPreset = COMMON_DISPUTES.find(d => d.id === disputeType)
+  const reasonPrefix = `[${selectedPreset?.label || 'Dispute'}] `
+  const reasonSuffix = withheld > 0 ? ` (Withheld: PHP ${withheld.toLocaleString()})` : ''
 
   return (
     <Modal title="Submit financial exception / dispute" eyebrow="OPERATIONS MANAGER EXCEPTION REVIEW" onClose={onClose}>
       <p className="workspace-muted">
-        Clean returns with zero damage flags and 100% fuel auto-release deposits within 24–48 hours. Submit this request only for <strong>disputed/withheld deposits</strong> (e.g. damage or fuel deductions) or <strong>cancelled booking refunds</strong>.
+        Clean returns with zero damage flags and 100% fuel auto-release deposits within 24–48 hours. Submit this request only for <strong>disputed/withheld deposits</strong> (e.g. damage or fuel deductions) or <strong>cancelled booking payment returns</strong>.
       </p>
 
       {!eligible.length ? (
         <Empty>No returned or cancelled reservations have unreleased funds requiring manual exception review.</Empty>
       ) : (
-        <form
+        <ValidatedForm
           className="staff-form"
           onSubmit={async e => {
             e.preventDefault()
@@ -107,8 +112,7 @@ export default function FinancialRequest({ bookings, onClose, onDone }) {
             setBusy(true)
             setError('')
             try {
-              const selectedPreset = COMMON_DISPUTES.find(d => d.id === disputeType)
-              const formattedReason = `[${selectedPreset?.label || 'Dispute'}] ${data.get('reason')}${withheld > 0 ? ` (Withheld: PHP ${withheld.toLocaleString()})` : ''}`
+              const formattedReason = reasonPrefix + data.get('reason').trim() + reasonSuffix
               await api('/operations/approvals', {
                 method: 'POST',
                 body: {
@@ -131,18 +135,18 @@ export default function FinancialRequest({ bookings, onClose, onDone }) {
           <fieldset disabled={busy}>
             <label className="form-field">
               Reservation
-              <select value={bookingId} onChange={e => handleBookingChange(e.target.value)}>
+              <ValidatedField as="select" value={bookingId} onChange={e => handleBookingChange(e.target.value)}>
                 {eligible.map(item => (
                   <option key={item.id} value={item.id}>
-                    {item.id} · {item.renter.name} · {item.status} ({item.refundableDeposit > 0 ? `Deposit PHP ${item.refundableDeposit}` : `Rental refund PHP ${item.refundableRental}`})
+                    {item.id} · {item.renter.name} · {item.status} ({item.refundableDeposit > 0 ? `Deposit PHP ${item.refundableDeposit}` : `Rental payment return PHP ${item.refundableRental}`})
                   </option>
                 ))}
-              </select>
+              </ValidatedField>
             </label>
 
             <label className="form-field">
               Allocation category
-              <select
+              <ValidatedField as="select"
                 value={allocation}
                 onChange={e => {
                   const nextAlloc = e.target.value
@@ -152,19 +156,19 @@ export default function FinancialRequest({ bookings, onClose, onDone }) {
                 }}
               >
                 <option value="deposit">Security Deposit Withholding / Partial Release</option>
-                {b?.status === 'Cancelled' && <option value="refund">Cancelled Rental Refund Allocation</option>}
-              </select>
+                {b?.status === 'Cancelled' && <option value="refund">Cancelled Rental Payment Return</option>}
+              </ValidatedField>
             </label>
 
             <label className="form-field">
               Common dispute category
-              <select value={disputeType} onChange={e => onDisputeChange(e.target.value)}>
+              <ValidatedField as="select" value={disputeType} onChange={e => onDisputeChange(e.target.value)}>
                 {COMMON_DISPUTES.map(d => (
                   <option key={d.id} value={d.id}>
                     {d.label}
                   </option>
                 ))}
-              </select>
+              </ValidatedField>
             </label>
 
             <div className="detail-balance-grid" style={{ margin: '14px 0' }}>
@@ -184,7 +188,7 @@ export default function FinancialRequest({ bookings, onClose, onDone }) {
 
             <label className="form-field">
               Net release amount to customer (PHP)
-              <input
+              <ValidatedField
                 name="amount"
                 type="number"
                 required
@@ -192,16 +196,16 @@ export default function FinancialRequest({ bookings, onClose, onDone }) {
                 step="0.01"
                 max={available || 0}
                 value={releaseAmount}
-                onChange={e => setReleaseAmount(Number(e.target.value))}
+                onChange={e => setReleaseAmount(e.target.value)}
               />
             </label>
 
             <label className="form-field">
               Detailed dispute & exception notes
-              <textarea
+              <ValidatedField as="textarea"
                 name="reason"
                 required
-                maxLength={1500}
+                maxLength={1500 - reasonPrefix.length - reasonSuffix.length}
                 rows={3}
                 value={reasonText}
                 onChange={e => setReasonText(e.target.value)}
@@ -215,7 +219,7 @@ export default function FinancialRequest({ bookings, onClose, onDone }) {
               <Icon name="arrow" size={18} />
             </button>
           </fieldset>
-        </form>
+        </ValidatedForm>
       )}
     </Modal>
   )

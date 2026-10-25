@@ -1,0 +1,87 @@
+.vehicle-identity { display:grid; grid-template-columns:minmax(0,2fr) repeat(2,minmax(0,1fr)); gap:16px; padding:16px; margin:12px 0 20px; background:#f4f5f1; border:1px solid #dde2d6; border-radius:9px; }
+.vehicle-identity > div { min-width:0; }
+.vehicle-identity span { display:block; font-size:11px; color:#66705d; margin-bottom:6px; }
+.vehicle-identity strong, .vehicle-identity h3 { overflow-wrap:anywhere; font-size:16px; margin:0; line-height:1.4; color:#263021; }
+.inspection-selector { border:0; padding:0; min-width:0; }
+.inspection-form h3 { margin:24px 0 14px; }
+.inspection-form .staff-checklist { display:grid; gap:12px; }
+.inspection-form .checkbox-label { align-items:flex-start; }
+.inspection-footer { display:flex; justify-content:flex-end; border-top:1px solid #ddd; margin-top:22px; padding-top:18px; }
+.maintenance-filters { display:grid; grid-template-columns:minmax(220px,2fr) repeat(2,minmax(145px,1fr)) auto; align-items:end; gap:16px; padding:22px 0 14px; }
+.maintenance-filters .form-field { margin:0; min-width:0; }
+.maintenance-search { display:flex; align-items:center; position:relative; }
+.maintenance-search > .icon { position:absolute; left:11px; }
+.maintenance-search > input { padding-left:40px !important; }
+.maintenance-board > .pill-tabs { display:flex; flex-wrap:wrap; }
+.customer-details-form .customer-details-grid { align-items:start; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 18px; }
+.customer-details-grid .form-field { display:grid; grid-template-rows:minmax(24px,auto) auto; gap:8px; min-width:0; margin:0; }
+.customer-details-grid .field-label { display:flex; flex-wrap:wrap; align-items:baseline; align-content:end; min-height:42px; gap:4px 8px; line-height:1.5; }
+.customer-details-grid input, .customer-details-grid select, .customer-details-grid textarea { box-sizing:border-box; min-width:0; width:100%; margin:0; font:inherit; }
+.customer-details-grid input, .customer-details-grid select { height:46px; }
+.customer-details-grid textarea { resize:vertical; min-height:90px; padding:12px; border:1px solid #ddd; border-radius:7px; }
+.customer-details-form .walkin-layout > *, .customer-details-form .walkin-quote { min-width:0; }
+.agreement-details { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; padding:18px 0; }
+.agreement-details > div { min-width:0; }
+.agreement-details dt { color:#777; font-size:12px; margin-bottom:5px; }
+.agreement-details dd { margin:0; overflow-wrap:anywhere; color:#292929; line-height:1.6; }
+.agreement-details small { display:block; font-size:12px; color:#777; }
+.rental-agreement-summary { min-width:0; margin:20px 0; }
+.rental-agreement-summary > h3 { margin-bottom:15px; }
+.rental-terms { border:1px solid #ddd; border-radius:8px; background:#fafafa; padding:16px; }
+.rental-terms summary { cursor:pointer; font-weight:600; font-size:14px; }
+.rental-terms > div { white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; color:#555; line-height:1.8; margin-top:15px; }
+.confirmation-actions { display:flex; flex-wrap:wrap; gap:12px; border-top:1px solid #ddd; margin-top:24px; padding-top:18px; }
+.booking-form, .booking-layout > *, .find-ride { min-width:0; }
+.find-ride .trip-search { grid-template-columns:repeat(3,minmax(0,1fr)); align-items:end; gap:18px; }
+.find-ride .search-field { min-width:0; padding-right:0; border-right:0; }
+.find-ride .search-field input, .find-ride .search-field select { width:100%; min-width:0; box-sizing:border-box; }
+.find-ride .trip-search .search-submit { align-self:stretch; }
+.ride-filter-bar { position:sticky; top:12px; z-index:12; display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.5fr) auto; gap:16px; align-items:end; padding:20px; background:#fff; border:1px solid #ddd; border-radius:10px; margin:20px 0; box-shadow:0 4px 15px #00000005; }
+.ride-filter-bar .form-field, .ride-extra-filters .form-field { min-width:0; margin:0; }
+.ride-filter-bar .form-field > span { min-height:20px; font-size:12px; overflow-wrap:anywhere; }
+.ride-filter-bar input, .ride-filter-bar select { min-width:0; max-width:100%; }
+.ride-filter-bar input[type=range] { width:100%; height:42px; }
+.ride-filter-bar > .button { min-height:44px; white-space:normal; }
+.ride-extra-filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)) minmax(0,1.5fr) auto; gap:18px; align-items:end; padding:18px; border:1px solid #ddd; border-radius:8px; background:#f4f4f4; }
+.ride-extra-filters .checkbox-label { min-width:0; white-space:normal; align-self:center; }
+.ride-fleet-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; align-items:stretch; }
+.ride-fleet-grid .vehicle-card { display:flex; flex-direction:column; height:100%; min-width:0; }
+.ride-fleet-grid .vehicle-image { aspect-ratio:16 / 10; height:auto; min-height:0; flex-shrink:0; }
+.ride-fleet-grid .vehicle-image > img { display:block; width:100%; height:100%; object-fit:cover; }
+.ride-fleet-grid .vehicle-content { flex:1; display:flex; flex-direction:column; padding:18px; min-width:0; }
+.ride-fleet-grid .vehicle-title-row { align-items:flex-start; gap:8px; }
+.ride-fleet-grid .vehicle-name { text-align:left; white-space:normal; overflow-wrap:anywhere; min-width:0; line-height:1.4; }
+.ride-fleet-grid .rating { flex-shrink:0; }
+.ride-fleet-grid .vehicle-tagline { min-height:2.8em; line-height:1.4; margin-bottom:8px; }
+.ride-fleet-grid .vehicle-content > .small { overflow-wrap:anywhere; margin-bottom:12px; }
+.ride-fleet-grid .vehicle-specs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin-top:auto; gap:8px; padding:16px 0; }
+.ride-fleet-grid .vehicle-specs > span { min-width:0; flex-wrap:wrap; overflow-wrap:anywhere; align-content:flex-start; font-size:12px; }
+.ride-fleet-grid .vehicle-card-footer { margin-top:0; gap:12px; flex-wrap:wrap; }
+.ride-fleet-grid .vehicle-price { font-size:clamp(18px,2vw,24px); }
+.ride-fleet-grid .vehicle-price small { font-size:12px; }
+.ride-fleet-grid .availability { max-width:calc(100% - 20px); white-space:normal; overflow-wrap:anywhere; }
+.find-ride .results-header { gap:16px; flex-wrap:wrap; }
+.find-ride .results-header > * { min-width:0; }
+.find-ride .data-pagination { grid-column:1 / -1; }
+.topbar-actions > .global-notification-button { display:inline-flex; align-items:center; justify-content:center; }
+@media(min-width:768px) { .ride-fleet-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(min-width:1024px) { .ride-fleet-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media(max-width:1250px) {
+  .ride-filter-bar { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .ride-filter-bar .ride-search { grid-column:span 2; }
+  .maintenance-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .ride-extra-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:767px) {
+  .ride-filter-bar { position:static; grid-template-columns:repeat(2,minmax(0,1fr)); padding:16px; }
+  .ride-filter-bar .ride-search, .ride-filter-bar .ride-price { grid-column:1 / -1; }
+  .find-ride .trip-search { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .vehicle-identity { grid-template-columns:minmax(0,1fr); gap:12px; }
+  .customer-details-form .walkin-layout { grid-template-columns:minmax(0,1fr); }
+}
+@media(max-width:480px) {
+  .customer-details-form .customer-details-grid, .maintenance-filters, .agreement-details, .ride-extra-filters { grid-template-columns:minmax(0,1fr); }
+  .customer-details-grid .span-2 { grid-column:auto; }
+  .find-ride .trip-search { grid-template-columns:minmax(0,1fr); }
+  .confirmation-actions > * { width:100%; }
+}

@@ -1,6 +1,7 @@
+import ValidatedField from '../../components/ui/ValidatedField.jsx'
+import ValidatedForm from '../../components/ui/ValidatedForm.jsx'
 import { useState, useEffect } from 'react'
 import { api } from '../../api.js'
-import { exportCSV } from '../../utils/csv.js'
 import Tag from '../../components/workspace/StaffTag.jsx'
 
 const fmt = value => value ? new Date(value).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'medium', timeStyle: 'short' }) : 'Pending'
@@ -8,8 +9,8 @@ const fmt = value => value ? new Date(value).toLocaleString('en-PH', { timeZone:
 export default function AuditLog() {
   const [filters, setFilters] = useState({ q: '', role: '', start: '', end: '', alertsOnly: '', mutationsOnly: '' })
   const [query, setQuery] = useState('page=1')
-  const [result, setResult] = useState({ records: [], alerts: [], total: 0, page: 1, size: 50 })
-  const [error, setError] = useState(''), [busy, setBusy] = useState(false)
+  const [result, setResult] = useState({ records: [], alerts: [], total: 0, page: 1, size: 10 })
+  const [error, setError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -21,18 +22,6 @@ export default function AuditLog() {
     const p = new URLSearchParams({ page })
     Object.entries(nextFilters).forEach(([k, v]) => { if (v) p.set(k, v) })
     return p.toString()
-  }
-
-  async function exportAll() {
-    setBusy(true); setError('')
-    try {
-      const selected = new URLSearchParams(query), all = []; selected.set('through', result.through); let page = 1, batch
-      do { selected.set('page', page++); batch = await api(`/manager/audit?${selected}`); all.push(...batch.records) } while (all.length < batch.total && batch.records.length)
-      exportCSV([
-        ['Sequence', 'Time (UTC)', 'Actor ID', 'Actor', 'Role', 'IP', 'Alert Flag', 'Action', 'Target / Resource', 'Old Value', 'New Value', 'Event Details'],
-        ...all.map(r => [r.sequence, r.at, r.actor_id || 'anonymous', r.actor, r.role, r.ip || '', r.alert_type || '', r.action, r.resource, r.old_value || '', r.new_value || '', r.detail])
-      ], 'DrivePulse-audit.csv')
-    } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
   return <>
@@ -62,20 +51,19 @@ export default function AuditLog() {
           <h2>Activity & security audit logs</h2>
           <p className="workspace-muted">Append-only operational history of all data mutations (old vs. new values), actor IDs, and authentication events.</p>
         </div>
-        <button className="button button-outline" disabled={busy} onClick={exportAll}>{busy ? 'Exporting…' : 'Export matching CSV'}</button>
       </div>
-      <form className="audit-filters" onSubmit={e => { e.preventDefault(); setQuery(params(1)) }}>
-        <label className="form-field">Search<input value={filters.q} onChange={e => setFilters({ ...filters, q: e.target.value })} placeholder="Actor, action, target, or value" maxLength={150} /></label>
-        <label className="form-field">Role<select value={filters.role} onChange={e => setFilters({ ...filters, role: e.target.value })}><option value="">All roles</option>{['client', 'agent', 'mechanic', 'manager', 'anonymous'].map(r => <option key={r}>{r}</option>)}</select></label>
-        <label className="form-field">Scope<select value={filters.alertsOnly ? 'alerts' : filters.mutationsOnly ? 'mutations' : ''} onChange={e => {
+      <ValidatedForm className="audit-filters" validation="date-range" onSubmit={e => { e.preventDefault(); setQuery(params(1)) }}>
+        <label className="form-field">Search<ValidatedField value={filters.q} onChange={e => setFilters({ ...filters, q: e.target.value })} placeholder="Actor, action, target, or value" maxLength={150} /></label>
+        <label className="form-field">Role<ValidatedField as="select" value={filters.role} onChange={e => setFilters({ ...filters, role: e.target.value })}><option value="">All roles</option>{['client', 'agent', 'mechanic', 'manager', 'anonymous'].map(r => <option key={r}>{r}</option>)}</ValidatedField></label>
+        <label className="form-field">Scope<ValidatedField as="select" value={filters.alertsOnly ? 'alerts' : filters.mutationsOnly ? 'mutations' : ''} onChange={e => {
           const val = e.target.value
           const next = { ...filters, alertsOnly: val === 'alerts' ? 'true' : '', mutationsOnly: val === 'mutations' ? 'true' : '' }
           setFilters(next); setQuery(params(1, next))
-        }}><option value="">All activity logs</option><option value="alerts">Threshold alerts only</option><option value="mutations">Data mutations (Old → New)</option></select></label>
-        <label className="form-field">From<input type="date" value={filters.start} max={filters.end || undefined} onChange={e => setFilters({ ...filters, start: e.target.value })} /></label>
-        <label className="form-field">Through<input type="date" min={filters.start || undefined} value={filters.end} onChange={e => setFilters({ ...filters, end: e.target.value })} /></label>
+        }}><option value="">All activity logs</option><option value="alerts">Threshold alerts only</option><option value="mutations">Data mutations (Old → New)</option></ValidatedField></label>
+        <label className="form-field">From<ValidatedField name="start" type="date" value={filters.start} max={filters.end || undefined} onChange={e => setFilters({ ...filters, start: e.target.value })} /></label>
+        <label className="form-field">Through<ValidatedField name="end" type="date" min={filters.start || undefined} value={filters.end} onChange={e => setFilters({ ...filters, end: e.target.value })} /></label>
         <button className="button button-dark">Search logs</button>
-      </form>
+      </ValidatedForm>
       {error && <p className="error-banner" role="alert">{error}</p>}
       <p className="workspace-muted">{result.total} matching events</p>
       <div className="agent-table-scroll">
@@ -108,7 +96,7 @@ export default function AuditLog() {
       </div>
       <div className="record-actions">
         <button className="button button-outline" disabled={result.page <= 1} onClick={() => { const p = new URLSearchParams(query); p.set('through', result.through); p.set('page', result.page - 1); setQuery(p.toString()) }}>Previous</button>
-        <span>Page {result.page}</span>
+        <span>Page {result.page} · 10 records per page</span>
         <button className="button button-outline" disabled={result.page * result.size >= result.total} onClick={() => { const p = new URLSearchParams(query); p.set('through', result.through); p.set('page', result.page + 1); setQuery(p.toString()) }}>Next</button>
       </div>
     </section>

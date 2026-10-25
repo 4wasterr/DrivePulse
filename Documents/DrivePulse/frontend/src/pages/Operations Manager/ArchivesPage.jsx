@@ -1,3 +1,6 @@
+import ValidatedField from '../../components/ui/ValidatedField.jsx'
+import ValidatedForm from '../../components/ui/ValidatedForm.jsx'
+import { PaginatedList } from '../../components/ui/Pagination.jsx'
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../../api.js'
 import Icon from '../../components/ui/Icon.jsx'
@@ -69,7 +72,7 @@ export default function ArchivesPage({ onRefresh, onDone }) {
         </div>
         <Tag>{`${data.pendingDecommissions.length} awaiting`}</Tag>
       </div>
-      {data.pendingDecommissions.map(v => <article className="staff-ledger-row" key={v.id}>
+      {<PaginatedList>{data.pendingDecommissions.map(v => <article className="staff-ledger-row" key={v.id}>
         <div>
           <h3>{v.name} · {money(v.rate)} / day</h3>
           <p>Requested by {v.decommissionRequested.by}: {v.decommissionRequested.reason}</p>
@@ -77,7 +80,7 @@ export default function ArchivesPage({ onRefresh, onDone }) {
         </div>
         <Tag>Decommission request</Tag>
         <button className="button button-dark" disabled={busy} onClick={() => approveDecommission(v)}>Confirm decommission</button>
-      </article>)}
+      </article>)}</PaginatedList>}
     </section>}
 
     <section className="workspace-surface staff-section">
@@ -89,7 +92,7 @@ export default function ArchivesPage({ onRefresh, onDone }) {
         </div>
         <Tag>{`${data.bookings.length} archived`}</Tag>
       </div>
-      {data.bookings.length ? data.bookings.map(b => <article className="staff-ledger-row" key={b.id}>
+      {data.bookings.length ? <PaginatedList>{data.bookings.map(b => <article className="staff-ledger-row" key={b.id}>
         <div>
           <h3>{b.id} · {b.renter.name} · {vehicleName(b.vehicleId)}</h3>
           <p>{prettyDate(b.start)} – {prettyDate(b.end)} · {b.status} · {money(b.total)}</p>
@@ -99,7 +102,7 @@ export default function ArchivesPage({ onRefresh, onDone }) {
           <button className="button button-outline" disabled={busy} onClick={() => restore('booking', b.id, `Booking ${b.id}`)}>Restore</button>
           <button className="text-link" disabled={busy} onClick={() => setPurgeTarget({ kind: 'booking', id: b.id, label: `Booking ${b.id} (${b.renter.name})` })}>Permanent purge</button>
         </div>
-      </article>) : <Empty>No archived reservations.</Empty>}
+      </article>)}</PaginatedList> : <Empty>No archived reservations.</Empty>}
     </section>
 
     <section className="workspace-surface staff-section">
@@ -110,7 +113,7 @@ export default function ArchivesPage({ onRefresh, onDone }) {
         </div>
         <Tag>{`${data.vehicles.length} decommissioned`}</Tag>
       </div>
-      {data.vehicles.length ? data.vehicles.map(v => <article className="staff-ledger-row" key={v.id}>
+      {data.vehicles.length ? <PaginatedList>{data.vehicles.map(v => <article className="staff-ledger-row" key={v.id}>
         <div>
           <h3>{v.name}</h3>
           <p>{v.archiveReason || 'Decommissioned from active service'}</p>
@@ -120,7 +123,7 @@ export default function ArchivesPage({ onRefresh, onDone }) {
           <button className="button button-outline" disabled={busy} onClick={() => restore('vehicle', v.id, v.name)}>Restore to active fleet</button>
           <button className="text-link" disabled={busy} onClick={() => setPurgeTarget({ kind: 'vehicle', id: v.id, label: v.name })}>Purge history</button>
         </div>
-      </article>) : <Empty>No decommissioned vehicles in the archive.</Empty>}
+      </article>)}</PaginatedList> : <Empty>No decommissioned vehicles in the archive.</Empty>}
     </section>
 
     <section className="workspace-surface">
@@ -131,7 +134,7 @@ export default function ArchivesPage({ onRefresh, onDone }) {
         </div>
         <Tag>{`${data.users.length} deactivated`}</Tag>
       </div>
-      {data.users.length ? data.users.map(u => <article className="staff-ledger-row" key={u.id}>
+      {data.users.length ? <PaginatedList>{data.users.map(u => <article className="staff-ledger-row" key={u.id}>
         <div>
           <h3>{u.name} · <small>{u.email}</small></h3>
           <p>Role: {u.role} · Reason: {u.archiveReason || 'Account deactivated'}</p>
@@ -141,11 +144,11 @@ export default function ArchivesPage({ onRefresh, onDone }) {
           <button className="button button-outline" disabled={busy} onClick={() => restore('user', u.id, u.name)}>Restore account</button>
           <button className="text-link" disabled={busy} onClick={() => setPurgeTarget({ kind: 'user', id: u.id, label: `${u.name} (${u.email})` })}>Permanent purge</button>
         </div>
-      </article>) : <Empty>No deactivated user accounts.</Empty>}
+      </article>)}</PaginatedList> : <Empty>No deactivated user accounts.</Empty>}
     </section>
 
     {purgeTarget && <Modal title={`Permanently purge · ${purgeTarget.label}`} eyebrow="IRREVERSIBLE MANAGER ACTION" onClose={() => setPurgeTarget(null)}>
-      <form className="staff-form" onSubmit={async e => {
+      <ValidatedForm className="staff-form" onSubmit={async e => {
         e.preventDefault(); const form = new FormData(e.currentTarget); setBusy(true); setError('')
         try {
           await api(`/manager/archives/${purgeTarget.kind}/${purgeTarget.id}`, { method: 'DELETE', body: { reason: form.get('reason') } })
@@ -154,11 +157,11 @@ export default function ArchivesPage({ onRefresh, onDone }) {
       }}>
         <fieldset disabled={busy}>
           <p className="workspace-muted">Permanent purges require Operations Manager confirmation and generate a high-priority <strong>Permanent record purge</strong> alert in the immutable system audit log.</p>
-          <label className="form-field">Purge authorization reason<textarea name="reason" required maxLength={500} rows={3} placeholder="Record data retention expiry or compliance purge reason." /></label>
+          <label className="form-field">Purge authorization reason<ValidatedField as="textarea" name="reason" required maxLength={500} rows={3} placeholder="Record data retention expiry or compliance purge reason." /></label>
           {error && <p className="error-banner" role="alert">{error}</p>}
           <button className="button button-dark" disabled={busy}><Icon name="shield" size={17} />Confirm permanent purge</button>
         </fieldset>
-      </form>
+      </ValidatedForm>
     </Modal>}
   </>
 }

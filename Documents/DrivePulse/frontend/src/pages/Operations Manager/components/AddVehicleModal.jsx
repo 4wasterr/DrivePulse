@@ -1,7 +1,13 @@
+import ValidatedField from '../../../components/ui/ValidatedField.jsx'
+import ValidatedForm from '../../../components/ui/ValidatedForm.jsx'
 import { useState } from 'react'
 import Modal from '../../../components/ui/Modal.jsx'
 import Icon from '../../../components/ui/Icon.jsx'
-import { api } from '../../../api.js'
+import { api, uploadVehicleImage } from '../../../api.js'
+import VehicleImageField from '../../../components/ui/VehicleImageField.jsx'
+import catalog from '../../../../../shared/vehicleCatalog.json'
+import { duplicateVehicleErrors } from '../../../../../shared/validation.mjs'
+import { vehicles } from '../../../data.js'
 
 export default function AddVehicleModal({ onClose, onDone }) {
   const [brand, setBrand] = useState('')
@@ -14,6 +20,9 @@ export default function AddVehicleModal({ onClose, onDone }) {
   const [fuelType, setFuelType] = useState('Gasoline')
   const [tankCapacity, setTankCapacity] = useState(50)
   const [mileage, setMileage] = useState(15000)
+  const [fleetCode, setFleetCode] = useState('')
+  const [registrationExpiry, setRegistrationExpiry] = useState(''), [insuranceExpiry, setInsuranceExpiry] = useState('')
+  const [photo, setPhoto] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -22,12 +31,14 @@ export default function AddVehicleModal({ onClose, onDone }) {
     setBusy(true)
     setError('')
     try {
+      const image = photo ? await uploadVehicleImage(photo) : null
       await api('/manager/vehicles', {
         method: 'POST',
         body: {
           brand,
           model,
           category,
+          fleetCode, registrationExpiry, insuranceExpiry, imageId: image?.id,
           rate: Number(rate),
           plate,
           transmission,
@@ -47,64 +58,65 @@ export default function AddVehicleModal({ onClose, onDone }) {
 
   return (
     <Modal title="Add vehicle to fleet" eyebrow="OPERATIONS MANAGER · FLEET EXPANSION" wide onClose={onClose}>
-      <form onSubmit={handleSubmit}>
+      <ValidatedForm onSubmit={handleSubmit} validate={form => duplicateVehicleErrors(Object.fromEntries(new FormData(form)), vehicles)}>
+        <fieldset disabled={busy}>
+        <VehicleImageField onChange={setPhoto} disabled={busy} />
         <div className="form-grid">
+          <label className="form-field">Unique Vehicle ID / Fleet code<ValidatedField name="fleetCode" data-validate="fleet-code" maxLength={30} placeholder="Leave blank to generate CAR-XXXXXXXX" value={fleetCode} onChange={e => setFleetCode(e.target.value)} /></label>
           <label className="form-field">
             Vehicle brand
-            <input required placeholder="e.g. Toyota, Honda, Ford" value={brand} onChange={e => setBrand(e.target.value)} />
+            <ValidatedField as="select" required value={brand} onChange={e => { setBrand(e.target.value); setModel('') }}><option value="">Select a brand</option>{Object.keys(catalog.brands).map(b => <option key={b}>{b}</option>)}</ValidatedField>
           </label>
           <label className="form-field">
             Vehicle model
-            <input required placeholder="e.g. Fortuner, Civic, Everest" value={model} onChange={e => setModel(e.target.value)} />
+            <ValidatedField as="select" required disabled={!brand} value={model} onChange={e => setModel(e.target.value)}><option value="">{brand ? 'Select a model' : 'Select a brand first'}</option>{(catalog.brands[brand] || []).map(m => <option key={m}>{m}</option>)}</ValidatedField>
           </label>
           <label className="form-field">
             Category
-            <select value={category} onChange={e => setCategory(e.target.value)}>
-              <option value="Sedan">Sedan</option>
-              <option value="SUV">SUV</option>
-              <option value="Compact">Compact</option>
-              <option value="Van">Van</option>
-              <option value="Electric">Electric</option>
-              <option value="Luxury">Luxury</option>
-            </select>
+            <ValidatedField as="select" value={category} onChange={e => { const c = e.target.value; setCategory(c); setSeats(catalog.categories[c].seats); setTankCapacity(catalog.categories[c].tankCapacity); if (c === 'Electric') setFuelType('Electric'); else if (fuelType === 'Electric') setFuelType('Gasoline') }}>
+              {Object.keys(catalog.categories).map(c => <option key={c}>{c}</option>)}
+            </ValidatedField>
           </label>
           <label className="form-field">
             License plate number
-            <input required placeholder="e.g. ABC 1234 or NGD 8899" value={plate} onChange={e => setPlate(e.target.value)} />
+            <ValidatedField name="plate" data-validate="plate" required maxLength={30} placeholder="e.g. ABC 1234 or NGD 8899" value={plate} onChange={e => setPlate(e.target.value)} />
           </label>
           <label className="form-field">
             Daily rental rate (PHP)
-            <input required type="number" min="500" max="100000" step="50" value={rate} onChange={e => setRate(e.target.value)} />
+            <ValidatedField name="rate" required type="number" min="500" max="100000" step="0.01" value={rate} onChange={e => setRate(e.target.value)} />
           </label>
           <label className="form-field">
             Transmission
-            <select value={transmission} onChange={e => setTransmission(e.target.value)}>
+            <ValidatedField as="select" value={transmission} onChange={e => setTransmission(e.target.value)}>
               <option value="Automatic">Automatic</option>
               <option value="Manual">Manual</option>
-            </select>
+            </ValidatedField>
           </label>
           <label className="form-field">
             Seating capacity
-            <input required type="number" min="2" max="15" value={seats} onChange={e => setSeats(e.target.value)} />
+            <ValidatedField required type="number" min="2" max="15" value={seats} onChange={e => setSeats(e.target.value)} />
           </label>
           <label className="form-field">
             Fuel type
-            <select value={fuelType} onChange={e => setFuelType(e.target.value)}>
+            <ValidatedField as="select" value={fuelType} onChange={e => setFuelType(e.target.value)}>
               <option value="Gasoline">Gasoline</option>
               <option value="Diesel">Diesel</option>
               <option value="Hybrid">Hybrid</option>
               <option value="Electric">Electric</option>
-            </select>
+            </ValidatedField>
           </label>
           <label className="form-field">
             Tank / battery capacity ({fuelType === 'Electric' ? 'kWh' : 'L'})
-            <input required type="number" min="10" max="150" value={tankCapacity} onChange={e => setTankCapacity(e.target.value)} />
+            <ValidatedField required type="number" min="10" max="150" value={tankCapacity} onChange={e => setTankCapacity(e.target.value)} />
           </label>
           <label className="form-field">
             Current odometer reading (km)
-            <input required type="number" min="0" max="10000000" value={mileage} onChange={e => setMileage(e.target.value)} />
+            <ValidatedField required type="number" min="0" max="10000000" value={mileage} onChange={e => setMileage(e.target.value)} />
           </label>
+          <label className="form-field">OR/CR Registration Expiry Date<ValidatedField type="date" value={registrationExpiry} onChange={e => setRegistrationExpiry(e.target.value)} /></label>
+          <label className="form-field">Insurance Expiry Date<ValidatedField type="date" value={insuranceExpiry} onChange={e => setInsuranceExpiry(e.target.value)} /></label>
         </div>
+        <p className="workspace-muted">Category defaults are suggestions; adjust seating and capacity to match the vehicle. Renewal notices appear within 30, 15 and 7 days, and when overdue.</p>
 
         {error && <div className="error-banner" role="alert" style={{ margin: '14px 0' }}>{error}</div>}
 
@@ -117,7 +129,8 @@ export default function AddVehicleModal({ onClose, onDone }) {
             {busy ? 'Registering vehicle…' : 'Add vehicle to active fleet'}
           </button>
         </div>
-      </form>
+        </fieldset>
+      </ValidatedForm>
     </Modal>
   )
 }

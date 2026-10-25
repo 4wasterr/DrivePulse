@@ -1,6 +1,8 @@
 const { asyncMap } = require('./asyncCollections');
 const { randomUUID } = require('node:crypto');
 const D = require('./domain');
+const inspectionChecklist = require('../shared/inspectionChecklist.json');
+const { renewalNotices } = require('./vehicleProfile');
 
 const STAGES = ['Available', 'Rented', 'Under Inspection', 'Maintenance', 'Overdue', 'Out of Service'];
 const stamp = () => new Date().toISOString();
@@ -17,7 +19,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
   const vehicle = async (id) => {const v = (await allFleetDef()).find((v) => v.id === id);if (!v) D.fail('Vehicle not found.', 404);return v;};
   const state = async (id) => {
     const base = await vehicle(id),saved = await get('vehicle', id);
-    return saved ? { rate: base.rate, ...saved } : { id, status: 'Available', version: 1, rate: base.rate, odometer: null, fuelLevel: null, activity: [] };
+    return saved ? { rate: base.rate, ...saved } : { id, status: 'Available', version: 1, rate: base.rate, odometer: base.mileage ?? null, fuelLevel: null, activity: [] };
   };
   const vehicleRate = async (id) => (await state(id)).rate || (await vehicle(id)).rate;
   const stale = (value, version) => {if (version !== undefined && value.version !== version) D.fail('This record changed. Refresh and try again.', 409);};
@@ -40,7 +42,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     const active = bookings.find((b) => b.status === 'On Rental');
     const pendingReturn = bookings.find((b) => b.status === 'Completed' && b.returnedAt && !b.returnInspection);
     const status = s.archivedAt ? 'Decommissioned' : s.status !== 'Available' ? s.status : active ? D.time(active.end, active.endTime) < Date.now() ? 'Overdue' : 'Rented' : pendingReturn ? 'Under Inspection' : 'Available';
-    return { ...v, ...s, rate: s.rate || v.rate, baseRate: v.rate, status, holdStatus: s.status, bookingId: active?.id || pendingReturn?.id, reservations: bookings.filter((b) => !['Completed', 'Cancelled'].includes(b.status)).length };
+    return { ...v, fleetCode: v.fleetCode || `CAR-${String(D.FLEET.findIndex(x => x.id === v.id) + 1).padStart(5, '0')}`, ...s, image: s.imageId || v.imageId ? `/api/vehicle-images/${s.imageId || v.imageId}` : v.image, rate: s.rate || v.rate, baseRate: v.rate, status, holdStatus: s.status, bookingId: active?.id || pendingReturn?.id, reservations: bookings.filter((b) => !['Completed', 'Cancelled'].includes(b.status)).length };
   })).filter((v) => includeArchived || !v.archivedAt);
 
   const operationalBlocks = async (id) => {
@@ -73,7 +75,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     const bookings = rawBookings ? await rawBookings() : await allBookings(),inside = (date) => Date.parse(date) >= from && Date.parse(date) < until;
     const approvals = (await records('approval')).filter((a) => a.disbursement && inside(a.disbursement.at));
     const maintenance = (await records('maintenance')).filter((m) => m.status === 'Completed' && inside(m.completedAt));
-    const vehicles = await asyncMap(D.FLEET, async (v) => {
+    const vehicles = await asyncMap(await allFleetDef(), async (v) => {
       const s = await state(v.id);
       const trips = bookings.filter((b) => b.vehicleId === v.id);
       const intervals = trips.filter((b) => b.dispatchedAt || b.status === 'On Rental' || b.status === 'Completed').map((b) => [Math.max(from, Date.parse(b.dispatchedAt) || D.time(b.start, b.startTime)), Math.min(until, b.returnedAt ? Date.parse(b.returnedAt) : b.status === 'On Rental' ? Date.now() : D.time(b.end, b.endTime))]).filter(([a, z]) => z > a).sort((a, b) => a[0] - b[0]);
@@ -83,7 +85,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       const revenue = trips.reduce((sum, b) => sum + (b.payments || []).filter((p) => p.type === 'rental' && p.status === 'confirmed' && inside(p.reviewedAt || p.at)).reduce((total, p) => total + p.amount, 0), 0);
       const refunds = approvals.filter((a) => a.type === 'refund' && trips.some((b) => b.id === a.bookingId)).reduce((sum, a) => sum + a.amount, 0);
       const maintenanceCost = maintenance.filter((m) => m.vehicleId === v.id).reduce((sum, m) => sum + m.cost, 0);
-      return { ...v, rate: s.rate || v.rate, rentalDays: +rentalDays.toFixed(2), utilization: +(rentalDays / ((until - from) / D.DAY) * 100).toFixed(1), revenue, refunds, netRevenue: revenue - refunds, maintenanceCost };
+      return { ...v, fleetCode: s.fleetCode || v.fleetCode || `CAR-${String(D.FLEET.findIndex(x => x.id === v.id) + 1).padStart(5, '0')}`, rate: s.rate || v.rate, rentalDays: +rentalDays.toFixed(2), utilization: +(rentalDays / ((until - from) / D.DAY) * 100).toFixed(1), revenue, refunds, netRevenue: revenue - refunds, maintenanceCost };
     });
     return {
       start, end, days: Math.round((until - from) / D.DAY),
@@ -129,6 +131,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
         risks: manager ? allRisks : [],
         flags: manager ? flags : [],
         thresholdAlerts: manager ? await systemAudit.alerts(12) : [],
+        renewalNotices: renewalNotices(activeFleet),
         summary,
         stages: STAGES,
         refundThreshold: 5000
@@ -170,7 +173,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
         if (typeof pressure !== 'number' || !Number.isFinite(pressure) || pressure < 0 || pressure > 100) D.fail('Record each tire pressure from 0 to 100 PSI.');
         tirePressure[corner] = pressure;
       }
-      if (!['tyres', 'controls', 'exterior', 'interior', 'fuel'].every((key) => input.checks?.[key] === true)) D.fail('Complete every mandatory inspection check.');
+      if (!inspectionChecklist.every(({ key }) => input.checks?.[key] === true)) D.fail('Complete every mandatory inspection check.');
       if (!['Clean', 'Needs cleaning', 'Damaged'].includes(input.cleanliness)) D.fail('Record the interior cleanliness.');
       if (!['approved', 'unsafe'].includes(input.outcome)) D.fail('Choose a safe or unsafe inspection outcome.');
       if (input.outcome === 'approved' && input.cleanliness !== 'Clean') D.fail('Clean or repair the interior before approving the vehicle.');
@@ -184,7 +187,8 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       if (new Set(await asyncMap(photos, async (p) => (await db.prepare('SELECT fingerprint FROM documents WHERE id=?').get(p.id)).fingerprint)).size !== photos.length) D.fail('Use different exterior and interior photographs.');
       const damageFlag = input.damageFlag === true || input.outcome === 'unsafe' || input.cleanliness === 'Damaged';
       const cleanReturn = input.type === 'post-return' && input.outcome === 'approved' && input.cleanliness === 'Clean' && !damageFlag && fuelLevel >= 100;
-      const report = { id: randomUUID(), vehicleId: s.id, bookingId: b?.id || null, type: input.type, status: input.outcome, role: 'mechanic', odometer, fuelLevel, tirePressure, cleanliness: input.cleanliness, damageFlag, cleanReturn, scratches: D.text(input.scratches, 'Exterior condition / scratches', 1500), note: D.text(input.note, 'Inspection notes', 1500, input.outcome === 'unsafe'), checks: Object.fromEntries(['tyres', 'controls', 'exterior', 'interior', 'fuel'].map((k) => [k, true])), photos, by: req.user.name, at: stamp() };
+      const inspectedVehicle = (await fleet()).find(v => v.id === s.id);
+      const report = { id: randomUUID(), vehicle: { id: s.id, name: inspectedVehicle.name, fleetCode: inspectedVehicle.fleetCode, plate: inspectedVehicle.plate || '' }, vehicleId: s.id, bookingId: b?.id || null, type: input.type, status: input.outcome, role: 'mechanic', odometer, fuelLevel, tirePressure, cleanliness: input.cleanliness, damageFlag, cleanReturn, scratches: D.text(input.scratches, 'Exterior condition / scratches', 1500), note: D.text(input.note, 'Inspection notes', 1500, input.outcome === 'unsafe'), checks: Object.fromEntries(inspectionChecklist.map(({ key }) => [key, input.checks[key]])), photos, by: req.user.name, at: stamp() };
       if (b) {
         if (input.type === 'pre-dispatch') {b.inspection = report;D.invalidatePass(b);} else
         {b.returnInspection = report;D.invalidatePass(b);}
@@ -229,41 +233,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       return report;
     })));
 
-    app.post('/api/bookings/:id/fast-clearance', role('agent', 'mechanic'), async (req, res) => res.json(await transaction(async () => {
-      const b = await getBooking(req.params.id);
-      if (b.version !== req.body.version) D.fail('This reservation changed. Refresh and try again.', 409);
-      if (!['Pending Approval', 'Ready for Dispatch'].includes(b.status)) D.fail('Fast-track inspection is only available for reservations awaiting dispatch.');
-      const s = await state(b.vehicleId);
-      if (s.status !== 'Available') D.fail(`Vehicle is currently ${s.status.toLowerCase()} and cannot be fast-tracked.`);
-      const latest = (await records('inspection')).filter((r) => r.vehicleId === b.vehicleId && r.outcome === 'approved').sort((x, y) => y.at.localeCompare(x.at))[0];
-      const baselinePhotos = latest?.photos?.length ? latest.photos : [{ id: `sample-${b.vehicleId}-ext`, view: 'exterior' }, { id: `sample-${b.vehicleId}-int`, view: 'interior' }];
-      const report = {
-        id: randomUUID(),
-        bookingId: b.id,
-        vehicleId: b.vehicleId,
-        type: 'pre-dispatch',
-        by: req.user.name,
-        role: 'mechanic',
-        at: stamp(),
-        outcome: 'approved',
-        status: 'approved',
-        odometer: s.odometer || (await vehicle(b.vehicleId)).odometer || 14000,
-        fuelLevel: s.fuelLevel || 100,
-        cleanliness: 'Clean',
-        scratches: 'Active fleet readiness verified. Zero new damage.',
-        tirePressure: { frontLeft: 33, frontRight: 33, rearLeft: 33, rearRight: 33 },
-        checks: { tyres: true, controls: true, exterior: true, interior: true, fuel: true },
-        photos: baselinePhotos,
-        note: `Fast-track pre-dispatch clearance verified by ${req.user.name} based on active fleet readiness.`
-      };
-      await save('inspection', report);
-      b.inspection = report;
-      D.invalidatePass(b);
-      b.version++;
-      await audit(b, req.user, 'Pre-dispatch inspection fast-tracked', report.note);
-      await saveBooking(b);
-      return await present(b);
-    })));
+    app.post('/api/bookings/:id/fast-clearance', role('agent', 'mechanic'), (req, res) => D.fail('Complete the individual mechanic checklist with fresh photo proof to save an inspection.', 403));
 
     app.post('/api/mechanic/vehicles/:id/status', role('mechanic'), async (req, res) => res.json(await transaction(async () => {
       const s = await state(req.params.id);stale(s, req.body.version);
@@ -305,7 +275,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       await vehicle(req.body.vehicleId);
       if (!['Maintenance request', 'Repair', 'Oil change'].includes(req.body.type)) D.fail('Choose a maintenance category.');
       if (req.body.dueDate && !Number.isFinite(D.time(req.body.dueDate, '00:00'))) D.fail('Choose a valid due date.');
-      const m = { id: randomUUID(), vehicleId: req.body.vehicleId, type: req.body.type, description: D.text(req.body.description, 'Work description', 1500), dueDate: req.body.dueDate || '', status: 'Requested', cost: 0, version: 1, by: req.user.name, at: stamp(), activity: [] };
+      const m = { id: randomUUID(), workOrderCode: `WO-${randomUUID().slice(0, 8).toUpperCase()}`, mechanic: req.user.name, mechanicId: req.user.id, vehicleId: req.body.vehicleId, type: req.body.type, description: D.text(req.body.description, 'Work description', 1500), dueDate: req.body.dueDate || '', status: 'Requested', cost: 0, version: 1, by: req.user.name, at: stamp(), activity: [] };
       await save('maintenance', m);
       await systemAudit.write(req.user, 'Maintenance logged', `maintenance:${m.id}`, `${m.type} for ${m.vehicleId}`, 200, { oldValue: null, newValue: { type: m.type, status: m.status, vehicleId: m.vehicleId } });
       return m;
@@ -313,11 +283,12 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
 
     app.post('/api/mechanic/maintenance/:id', role('mechanic'), async (req, res) => res.json(await transaction(async () => {
       const m = await get('maintenance', req.params.id);if (!m) D.fail('Maintenance record not found.', 404);stale(m, req.body.version);
+      if (m.archivedAt) D.fail('Restore this work order before updating it.', 409);
       if (!(m.status === 'Requested' && req.body.status === 'In progress' || m.status === 'In progress' && req.body.status === 'Completed')) D.fail('Start requested work, then complete it.');
       const s = await state(m.vehicleId);
       if (req.body.status === 'In progress' && (await allBookings()).some((b) => b.vehicleId === m.vehicleId && b.status === 'On Rental')) D.fail('Record the rental return before starting maintenance.');
       const oldMaint = { status: m.status, cost: m.cost };
-      m.status = req.body.status;m.note = D.text(req.body.note, 'Work notes', 1500);
+      m.status = req.body.status;m.mechanic = req.user.name;m.mechanicId = req.user.id;m.note = D.text(req.body.note, 'Work notes', 1500);
       if (m.status === 'Completed') {m.cost = amount(req.body.cost, 'maintenance expenditure');m.completedAt = stamp();m.reference = D.text(req.body.reference, 'Invoice / service reference', 150);}
       m.version++;m.activity.push({ at: stamp(), by: req.user.name, action: m.status, note: m.note });await save('maintenance', m);
       if (s.status !== 'Out of Service') s.status = m.status === 'In progress' || (await records('maintenance')).some((other) => other.vehicleId === m.vehicleId && other.status === 'In progress') ? 'Maintenance' : 'Under Inspection';
@@ -325,10 +296,26 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       await invalidateVehiclePasses(s.id, req.user, m.note);return m;
     })));
 
+    for (const action of ['archive', 'restore']) app.post(`/api/mechanic/maintenance/:id/${action}`, role('mechanic', 'manager'), async (req, res) => res.json(await transaction(async () => {
+      const m = await get('maintenance', req.params.id);
+      if (!m) D.fail('Work order not found.', 404);
+      if (!Number.isInteger(req.body.version)) D.fail('Supply the current work order version.');
+      stale(m, req.body.version);
+      if (action === 'archive' && (m.status !== 'Completed' || m.archivedAt)) D.fail('Only completed, active work orders can be archived.', 409);
+      if (action === 'restore' && !m.archivedAt) D.fail('This work order is not archived.', 409);
+      const oldValue = { status: m.status, archivedAt: m.archivedAt || null };
+      if (action === 'archive') { m.archivedAt = stamp(); m.archivedBy = req.user.name; }
+      else { delete m.archivedAt; delete m.archivedBy; }
+      m.version++; m.activity ||= []; m.activity.push({ id: randomUUID(), at: stamp(), by: req.user.name, action, note: `Work order ${action}d` });
+      await save('maintenance', m);
+      await systemAudit.write(req.user, action === 'archive' ? 'Work order archived' : 'Work order restored', `maintenance:${m.id}`, m.workOrderCode || m.id, 200, { oldValue, newValue: { status: m.status, archivedAt: m.archivedAt || null } });
+      return m;
+    })));
+
     app.post('/api/operations/approvals', role('agent', 'manager'), async (req, res) => res.status(201).json(await transaction(async () => {
       const b = await getBooking(req.body.bookingId),type = req.body.type;
-      if (!['refund', 'deposit'].includes(type)) D.fail('Choose a rental refund or security deposit release.');
-      if (type === 'refund' && b.status !== 'Cancelled') D.fail('Rental refunds require a cancelled reservation.');
+      if (!['refund', 'deposit'].includes(type)) D.fail('Choose a rental payment return or Security Deposit release.');
+      if (type === 'refund' && b.status !== 'Cancelled') D.fail('Rental payment returns require a cancelled reservation.');
       if (type === 'deposit' && !['Completed', 'Cancelled'].includes(b.status)) D.fail('Security deposits can only be released after return or cancellation.');
       const maxReturnable = await returnable(b, type);
       const value = amount(req.body.amount, 'release amount');
@@ -353,7 +340,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       if (req.body.decision === 'approved') {
         if (a.amount > (await returnable(b, a.type))) D.fail('The request exceeds the remaining verified funds.', 409);
         if (a.type === 'deposit' && !(b.status === 'Cancelled' || b.status === 'Completed' && b.returnInspection?.status === 'approved' && D.billing(b).rentalBalance === 0 && !(await operationalBlocks(b.vehicleId)).length)) D.fail('Settle rental charges and complete a safe post-return inspection before releasing the deposit.');
-        if (a.type === 'refund' && b.status !== 'Cancelled') D.fail('Only cancelled rentals qualify for this refund.');
+        if (a.type === 'refund' && b.status !== 'Cancelled') D.fail('Only cancelled rentals qualify for this payment return.');
       }
       const oldStatus = a.status;
       a.status = req.body.decision;a.reviewNote = D.text(req.body.reason, 'Decision reason', 1500);a.reviewedBy = req.user.name;a.reviewedAt = stamp();
@@ -404,7 +391,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     app.get('/api/manager/analytics', role('manager'), async (req, res) => res.json(await analytics(req.query.start, req.query.end)));
 
     app.get('/api/manager/audit', role('manager'), async (req, res) => {
-      const page = Number(req.query.page || 1),size = 50;
+      const page = Number(req.query.page || 1),size = 10;
       if (!Number.isInteger(page) || page < 1 || page > 100000) D.fail('Choose a valid audit page.');
       const clauses = [],params = [];
       const through = Number(req.query.through || (await db.prepare('SELECT COALESCE(MAX(sequence),0) AS value FROM audit_log').get()).value);
@@ -432,6 +419,6 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     }
   }
 
-  return { register, fleet, present, dispatchBlocks, operationalBlocks, records, state, save, vehicleRate, recordReturn, saveDynamicVehicle: async (v) => await save('dynamic_vehicle', v) };
+  return { register, fleet, present, dispatchBlocks, operationalBlocks, records, state, save, vehicleRate, vehicle, changeState, recordReturn, saveDynamicVehicle: async (v) => await save('dynamic_vehicle', v) };
 }
 module.exports = { createFleet };

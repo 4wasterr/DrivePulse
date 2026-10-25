@@ -18,10 +18,14 @@ const DEFAULT_TERMS = `1. AUTHORIZED OPERATION: The vehicle shall be operated so
 
 function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit }) {
   async function issue(b, kind, user, extra = {}) {
+    const row = await db.prepare("SELECT payload FROM fleet_records WHERE kind='dynamic_vehicle' AND id=?").get(b.vehicleId);
+    const definition = row ? JSON.parse(row.payload) : D.FLEET.find(v => v.id === b.vehicleId);
+    const stateRow = await db.prepare("SELECT payload FROM fleet_records WHERE kind='vehicle' AND id=?").get(b.vehicleId);
+    const state = stateRow ? JSON.parse(stateRow.payload) : {};
     const document = { id: `${kind.toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`, kind, bookingId: b.id, createdAt: stamp(), by: user.name, actorId: user.id, sample: !!b.sample,
-      renter: structuredClone(b.renter), vehicle: { ...D.FLEET.find((v) => v.id === b.vehicleId) },
+      renter: structuredClone(b.renter), vehicle: { ...definition, fleetCode: state.fleetCode || definition?.fleetCode || `CAR-${String(D.FLEET.findIndex(v => v.id === b.vehicleId) + 1).padStart(5, '0')}` },
       schedule: { start: b.start, startTime: b.startTime, end: b.end, endTime: b.endTime, pickup: b.pickup, dropoff: b.dropoff },
-      billing: { ...D.billing(b), rental: b.rental, deposit: b.deposit, lateFee: b.lateFee || 0 }, ...extra };
+      billing: { ...D.billing(b), rental: b.rental, deposit: b.deposit, lateFee: b.lateFee || 0, days: b.days, dailyRate: b.dailyRate || b.rental / b.days, total: b.rental + b.deposit + (b.lateFee || 0) }, ...extra };
     document.digest = createHash('sha256').update(JSON.stringify(document)).digest('hex');
     await db.prepare('INSERT INTO rental_documents(id,booking_id,kind,created_at,payload) VALUES(?,?,?,?,?)').run(document.id, b.id, kind, document.createdAt, JSON.stringify(document));
     return { id: document.id, kind, createdAt: document.createdAt, by: user.name, digest: document.digest };
@@ -57,9 +61,9 @@ function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit
       const b = await getBooking(row.booking_id);
       if (req.user.role === 'client' && b.ownerId !== req.user.id) D.fail('Issued document not found.', 404);
       const d = JSON.parse(row.payload);
-      res.set('Content-Disposition', `attachment; filename="${d.id}.html"`).type('html').send(render(d));
+      res.set('Content-Disposition', `${req.query.view === 'inline' ? 'inline' : 'attachment'}; filename="${d.id}.html"`).type('html').send(render(d));
     });
-    app.get('/api/agreement-terms', role('agent'), (req, res) => res.json({ terms: DEFAULT_TERMS }));
+    app.get('/api/agreement-terms', role('agent', 'client'), (req, res) => res.json({ terms: DEFAULT_TERMS }));
   }
   return { register, contract, receipt, cashReceipt, issue };
 }
@@ -67,21 +71,24 @@ function render(d) {
   const isAgreement = d.kind === 'agreement';
   const title = {
     agreement: 'Official Vehicle Rental Agreement & Terms',
+    confirmation: 'Reservation Confirmation & Booking Summary',
     release: 'Vehicle Release & Handover Receipt',
     return: 'Vehicle Return & Post-Inspection Receipt',
     cash: 'Official Cash Payment Receipt',
-    disbursement: 'Security Deposit / Refund Release Receipt'
+    disbursement: 'Security Deposit Release Receipt'
   }[d.kind] || 'DrivePulse Issued Document';
 
   const fields = [
   ['Document Reference', d.id],
   ['Reservation ID', d.bookingId],
-  ['Verified Renter', `${d.renter.name} · ${d.renter.email || 'In-Person Customer'}`],
+  ['Renter', `${d.renter.name} · ${d.renter.email || 'In-Person Customer'}`],
   ['Vehicle Description', `${d.vehicle.name} (${d.vehicle.category || 'Standard'})`],
+  ['Unique Vehicle ID / Fleet Code', d.vehicle.fleetCode || d.vehicle.id || '—'],
   ['Scheduled Pick-up', `${d.schedule.start} at ${d.schedule.startTime} PHT (${d.schedule.pickup})`],
   ['Scheduled Return', `${d.schedule.end} at ${d.schedule.endTime} PHT (${d.schedule.dropoff})`],
   ['Issuing Officer', d.by],
   ['Date & Time Issued', fmt(d.createdAt)]];
+  if (d.bookingStatus) fields.push(['Reservation Status', d.bookingStatus]);
 
   if (d.eventAt) fields.push(['Actual Event Timestamp', fmt(d.eventAt)]);
   const i = d.inspection;
@@ -146,11 +153,12 @@ function render(d) {
   .digest { font-family: monospace; font-size: 10px; color: #6b7280; }
   @media print {
     body { border: none; padding: 0; margin: 0; max-width: 100%; }
-    footer .no-print { display: none; }
+    .no-print { display: none; }
   }
 </style>
 </head>
 <body>
+  <button type="button" class="no-print" onclick="window.print()" style="padding:10px 16px;margin-bottom:20px;cursor:pointer">Print / Save as PDF</button>
   <header>
     <div>
       <div class="brand">drivepulse<span>.</span></div>
@@ -169,11 +177,14 @@ function render(d) {
   <div class="billing-card">
     <div class="billing-header">Rental Charges & Cash Balance Schedule</div>
     <table class="billing-table">
-      <tr><td>Base Rental Charges</td><td>${escape(money(d.billing.rentalDue))}</td></tr>
+      ${d.billing.dailyRate ? `<tr><td>Daily Rate × Rental Days</td><td>${escape(money(d.billing.dailyRate))} × ${escape(d.billing.days)}</td></tr>` : ''}
+      <tr><td>Base Rental Charges</td><td>${escape(money(d.billing.rental ?? d.billing.rentalDue))}</td></tr>
       <tr><td>Late Return Surcharges (if applicable)</td><td>${escape(money(d.billing.lateFee))}</td></tr>
       <tr><td>Verified Cash Rental Payments</td><td>${escape(money(d.billing.rentalPaid))}</td></tr>
-      <tr><td>Refundable Security Deposit (Cash at Counter)</td><td>${escape(money(d.billing.depositPaid))} / ${escape(money(d.billing.deposit))}</td></tr>
-      <tr><td>Remaining Net Balance Due</td><td>${escape(money(d.billing.rentalBalance))}</td></tr>
+      <tr><td>Security Deposit (Cash at Counter)</td><td>${escape(money(d.billing.depositPaid))} / ${escape(money(d.billing.deposit))}</td></tr>
+      ${d.billing.total != null ? `<tr><td>Total Rental Quotation</td><td>${escape(money(d.billing.total))}</td></tr>` : ''}
+      <tr><td>Remaining Security Deposit Balance</td><td>${escape(money(d.billing.depositBalance))}</td></tr>
+      <tr><td>Remaining Rental Balance Due</td><td>${escape(money(d.billing.rentalBalance))}</td></tr>
     </table>
   </div>
 

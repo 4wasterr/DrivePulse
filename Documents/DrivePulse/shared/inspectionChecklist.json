@@ -1,0 +1,7 @@
+[
+  { "key": "tyres", "label": "Tires and all four measured pressures verified" },
+  { "key": "controls", "label": "Brakes, lights, controls and safety equipment verified" },
+  { "key": "exterior", "label": "Exterior condition and damage recorded" },
+  { "key": "interior", "label": "Cabin condition and cleanliness recorded" },
+  { "key": "fuel", "label": "Fuel / battery level and odometer measured" }
+]

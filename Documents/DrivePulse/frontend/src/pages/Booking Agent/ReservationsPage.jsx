@@ -6,7 +6,7 @@ const statuses = ['All statuses', 'Needs ID review', 'Payment review', 'Pending 
 export default function AgentReservationsPage({ query, setQuery, status, setStatus, channel, setChannel, reservationList, open, onArchive }) {
   return <section className="workspace-surface">
     <div className="agent-table-toolbar">
-      <label className="agent-search"><Icon name="search" size={18} /><input aria-label="Search reservations" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search customer, vehicle, or reference" /></label>
+      <label className="agent-search"><Icon name="search" size={18} /><input aria-label="Search reservations" maxLength={150} value={query} onChange={e => setQuery(e.target.value)} placeholder="Search customer, vehicle, or reference" /></label>
       <div>
         <select aria-label="Filter booking status" value={status} onChange={e => setStatus(e.target.value)}>{statuses.map(s => <option key={s}>{s}</option>)}</select>
         <select aria-label="Filter booking channel" value={channel} onChange={e => setChannel(e.target.value)}><option>All channels</option><option>Online</option><option>Walk-in</option></select>

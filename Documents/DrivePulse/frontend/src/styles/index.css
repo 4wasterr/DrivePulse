@@ -15,8 +15,11 @@
 @import "../pages/Authentication/demo.css";
 @import "../layouts/staff-layout.css";
 @import "../pages/Booking Agent/agent.css";
-@import "../components/support/conversation.css";
-@import "../pages/Client Portal/support.css";
 @import "../layouts/staff-footer.css";
 @import "../pages/Booking Agent/booking-details.css";
 @import "./workspace-responsive.css";
+@import "./enhancements.css";
+@import "./workflow-refinements.css";
+@import "./navigation.css";
+@import "./interaction.css";
+@import "./spacing.css";

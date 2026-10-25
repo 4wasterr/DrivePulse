@@ -1,0 +1,58 @@
+.data-pagination { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:18px 2px 4px; width:100%; grid-column:1 / -1; color:#666; font-size:13px; }
+.data-pagination > div, .data-pagination label { display:flex; align-items:center; gap:12px; }
+.data-pagination select { min-width:58px; padding:7px; border:1px solid #ddd; border-radius:6px; background:#fff; color:#333; opacity:1; }
+.data-pagination button { min-height:36px; padding:8px 13px; }
+button:disabled { cursor:default; opacity:.5; }
+.secure-password-input { display:flex; align-items:center; border:1px solid #ccc; border-radius:8px; overflow:hidden; background:#fff; }
+.secure-password-input input { flex:1; width:0; min-height:46px; border:0; padding:12px; background:transparent; }
+.secure-password-input:focus-within { outline:2px solid #575f3b; outline-offset:2px; }
+.secure-password-input button { display:flex; align-items:center; justify-content:center; width:46px; height:46px; background:transparent; color:#555; flex-shrink:0; }
+.password-fields > .form-field { margin:16px 0 8px; }
+.password-suggest { margin:12px 0; }
+.password-requirements { display:grid; gap:7px; list-style:none; margin:4px 0 18px; padding:0; color:#777; font-size:13px; }
+.password-requirements li { display:flex; align-items:center; gap:8px; }
+.password-requirements .met, .password-match { color:#276342; }
+.password-match { font-size:13px; margin:8px 0; }
+.vehicle-image-field { display:flex; align-items:center; gap:18px; flex-wrap:wrap; margin:8px 0 20px; }
+.vehicle-image-field img { width:160px; height:105px; object-fit:cover; border-radius:8px; border:1px solid #ddd; }
+.vehicle-image-field .form-field { flex:1; min-width:180px; }
+.vehicle-image-field input { width:100%; padding:10px; }
+.vehicle-renewal-dates { font-size:12px; line-height:1.6; }
+.global-notification-button { position:relative; flex-shrink:0; }
+.global-notification-button > span { position:absolute; right:-6px; top:-5px; background:#314b34; color:white; border-radius:14px; padding:2px 5px; min-width:18px; font-size:10px; line-height:14px; }
+.notification-actions { display:flex; gap:16px; justify-content:space-between; align-items:center; flex-wrap:wrap; margin:12px 0 18px; }
+.notification-actions p { color:#666; font-size:14px; }
+.global-notification { display:flex; align-items:flex-start; gap:14px; padding:18px 12px; border-top:1px solid #ddd; border-left:3px solid #79916a; background:#f5f7f2; }
+.global-notification > div { flex:1; min-width:0; }
+.global-notification p { margin:7px 0; color:#555; line-height:1.6; overflow-wrap:anywhere; }
+.global-notification small { color:#777; }
+.global-notification.urgent { border-left-color:#a44232; }
+.global-notification.warning { border-left-color:#a98031; }
+.global-notification.is-read { background:#fff; }
+.global-notification.is-read strong { font-weight:500; }
+.agent-sidebar, .sidebar { height:100vh; height:100dvh; overflow:hidden; box-sizing:border-box; }
+.agent-sidebar nav, .sidebar .primary-nav { min-height:0; overflow-y:auto; overscroll-behavior:contain; flex:1; }
+.agent-sidebar-bottom, .sidebar-bottom { flex-shrink:0; padding-top:12px; margin-top:auto; }
+.agent-signout, .sidebar-auth-action { flex-shrink:0; }
+.sidebar-bottom { display:flex; flex-direction:column; }
+.sidebar-auth-action { order:10; margin-top:8px; }
+.staff-form .pill-tabs { margin-bottom:20px; }
+.calendar-scroll .data-pagination { min-width:320px; }
+@media (max-height:900px) {
+  .agent-sidebar-note, .sidebar .help-card { display:none; }
+  .agent-sidebar, .sidebar { padding-top:20px; padding-bottom:12px; }
+  .agent-workspace-label { margin-top:20px; margin-bottom:16px; }
+  .sidebar .sidebar-help { padding:12px; }
+  .agent-user { padding-top:12px; }
+}
+@media (max-height:580px) {
+  .agent-workspace-label, .workspace-label, .sidebar-help, .preview-caption { display:none; }
+  .agent-sidebar .agent-user, .sidebar .profile-button { padding-top:8px; padding-bottom:6px; }
+  .agent-sidebar nav a { min-height:36px; padding-top:8px; padding-bottom:8px; }
+}
+@media (max-width:600px) {
+  .data-pagination > div { width:100%; justify-content:space-between; }
+  .data-pagination { font-size:12px; }
+  .global-notification { flex-wrap:wrap; }
+  .vehicle-image-field img { width:100%; height:170px; }
+}

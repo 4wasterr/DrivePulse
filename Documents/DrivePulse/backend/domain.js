@@ -1,4 +1,5 @@
 const DAY = 86400000;
+const { inputError } = require('../shared/validation.mjs');
 const REQUIRED_DOCUMENTS = ['license', 'government-1', 'government-2'];
 const LOCATIONS = ['Makati City, Metro Manila', 'BGC, Taguig City', 'NAIA Terminal 3, Pasay', 'Quezon City, Metro Manila'];
 const FLEET = [
@@ -11,8 +12,11 @@ const FLEET = [
 ];
 function fail(message, status = 400) { const error = new Error(message); error.status = status; throw error; }
 function text(value, label, max = 200, required = true) {
+  if (value != null && typeof value !== 'string') fail(`Enter valid text for ${label.toLowerCase()}.`);
   const clean = typeof value === 'string' ? value.trim() : '';
-  if ((required && !clean) || clean.length > max) fail(`${label} is required and must be ${max} characters or fewer.`);
+  const kind = ['Full name', 'Customer name'].includes(label) ? 'name' : label === 'Email' ? 'email' : label === 'Contact number' ? 'phone' : /reference/i.test(label) ? 'reference' : 'text';
+  const problem = inputError(clean, { kind, label, required, maxLength: max });
+  if (problem) fail(problem);
   return clean;
 }
 function time(date, hour = '10:00') {
@@ -21,8 +25,8 @@ function time(date, hour = '10:00') {
   if (!Number.isFinite(stamp) || new Date(stamp + 8 * 3600000).toISOString().slice(0, 10) !== date) return NaN;
   return stamp;
 }
-function quote(input, allowPast = false, customRate = null) {
-  const vehicle = FLEET.find(v => v.id === input.vehicleId);
+function quote(input, allowPast = false, customRate = null, definition = null) {
+  const vehicle = definition?.id === input.vehicleId ? definition : FLEET.find(v => v.id === input.vehicleId);
   if (!vehicle) fail('Choose a vehicle from the fleet.');
   const start = time(input.start, input.startTime), end = time(input.end, input.endTime);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) fail('Choose valid dates, with return after pick-up.');

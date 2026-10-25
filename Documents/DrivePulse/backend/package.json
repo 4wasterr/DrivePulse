@@ -20,7 +20,7 @@
     "@electric-sql/pglite": "^0.5.11"
   },
   "scripts": {
-    "test": "node --test tests/*.test.js",
+    "test": "node --require ./tests/helpers/environment.js --test tests/*.test.js",
     "start": "node index.js",
     "dev": "node --watch index.js"
   }

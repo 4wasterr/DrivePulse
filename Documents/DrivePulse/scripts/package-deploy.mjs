@@ -18,7 +18,7 @@ function collect(directory) {
     else files.push(relative)
   }
 }
-for (const directory of ['backend', 'frontend', 'scripts', 'docs']) collect(directory)
+for (const directory of ['backend', 'frontend', 'shared', 'scripts', 'docs']) collect(directory)
 mkdirSync(join(root, 'artifacts'), { recursive: true })
 const archive = join(root, 'artifacts/drivepulse-source.tar.gz')
 const manifest = join(tmpdir(), `drivepulse-package-${randomUUID()}.txt`)

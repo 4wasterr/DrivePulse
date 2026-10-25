@@ -2,6 +2,7 @@ require('dotenv').config({ path: require('node:path').join(__dirname, '.env'), q
 // Express creation stays in the entrypoint for Vercel framework discovery.
 const express = require('express');
 const { createApp } = require('./application');
+const { databaseDiagnostic } = require('./database-errors');
 const app = express();
 let runtime;
 let startupError;
@@ -13,8 +14,7 @@ app.use(async (req, res, next) => {
 });
 const ready = createApp({ app }).then(value => { runtime = value; }).catch(error => {
   startupError = error;
-  // Connection errors may contain credentials; log a fixed diagnostic.
-  console.error('DrivePulse startup failed. Check DATABASE_URL, database TLS, and run db:migrate.');
+  console.error('DrivePulse startup failed. ' + databaseDiagnostic(error));
 });
 app.ready = ready;
 

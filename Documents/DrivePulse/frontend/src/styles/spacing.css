@@ -1,0 +1,49 @@
+/* Keep labels, feedback and actions readable across the four workspaces. */
+.modal form > fieldset { min-width:0; margin:0; padding:0; border:0; }
+.form-field { min-width:0; line-height:1.6; gap:10px; }
+.form-grid { gap:22px 24px; margin-top:28px; align-items:start; }
+.staff-form .form-grid { gap:22px 24px; margin-bottom:24px; }
+.staff-form .form-grid .form-field { margin-bottom:0; }
+.customer-details-form .customer-details-grid { gap:24px; }
+.customer-details-grid .form-field { gap:10px; }
+.customer-details-grid .field-label { min-height:24px; }
+.form-field textarea { line-height:1.65; }
+.form-actions,.confirmation-actions,.inspection-footer { gap:14px; flex-wrap:wrap; margin-top:30px; padding-top:24px; }
+.form-actions .button { min-height:46px; }
+.staff-form h3 { padding-block:28px 18px; margin-top:18px; line-height:1.5; }
+.modal-header { gap:20px; margin-bottom:30px; }
+.booking-detail-tabs { gap:10px; margin-bottom:30px; padding-bottom:12px; }
+.upload-stack { gap:20px; margin-block:28px; }
+.workspace-section-heading { flex-wrap:wrap; gap:20px; }
+.staff-toolbar,.staff-report-toolbar { gap:20px; }
+.staff-section { margin-bottom:32px; }
+.staff-vehicle-grid { gap:24px; }
+.staff-vehicle-copy { padding:24px; }
+.staff-vehicle-copy dl { gap:16px; padding-block:22px; }
+.staff-card-actions { gap:14px; padding-top:20px; }
+.staff-metrics,.agent-stats { gap:22px; margin-bottom:34px; }
+.fleet-stage-metrics { gap:16px; }
+.agent-stat > span:nth-last-child(2),.agent-stat > span:last-child { line-height:1.6; }
+.agent-table th,.agent-table td { padding-inline:16px; line-height:1.6; }
+.auth-form .password-fields > .form-field { margin:8px 0 10px; }
+.password-fields > .field-validation-message { margin-top:8px; }
+.auth-form .error-banner { margin-block:18px; }
+.auth-form .button[type=submit] { margin-top:16px; }
+.auth-footnote { line-height:1.7; }
+@media(min-width:768px) {
+  .modal-inner { padding:36px; }
+  .workspace-surface { padding:30px; }
+  .agent-overview-grid { gap:30px; }
+}
+@media(max-width:767px) {
+  .form-grid,.staff-form .form-grid,.customer-details-form .customer-details-grid { gap:20px 18px; }
+  .form-actions { row-gap:14px; }
+  .staff-metrics,.agent-stats { gap:16px; margin-bottom:28px; }
+  .staff-vehicle-copy { padding:22px; }
+  .staff-toolbar,.staff-report-toolbar { gap:16px; }
+}
+@media(max-width:480px) {
+  .form-actions > .button { flex:1 1 auto; justify-content:center; }
+  .modal-inner { padding:26px 20px; }
+  .modal-header h2 { overflow-wrap:anywhere; }
+}

@@ -1,7 +1,9 @@
+import { PaginatedList } from '../../components/ui/Pagination.jsx'
 import { useState } from 'react'
 import { dateISO, prettyDate, vehicles, money, tripTime } from '../../data.js'
 import Icon from '../../components/ui/Icon.jsx'
 import Tag from '../../components/workspace/StaffTag.jsx'
+import { clampCalendarStart, bookingDatesForDay } from '../../utils/calendar.js'
 
 const addDays = (date, amount) => new Date(Date.parse(`${date}T12:00:00Z`) + amount * 86400000).toISOString().slice(0, 10)
 
@@ -11,8 +13,9 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
   const [filter, setFilter] = useState('all')
   const [now] = useState(() => Date.now())
 
-  const days = Array.from({ length: range }, (_, index) => addDays(start, index))
   const today = dateISO()
+  const visibleStart = clampCalendarStart(start, today)
+  const days = Array.from({ length: range }, (_, index) => addDays(visibleStart, index))
 
   // Determine current live vehicle status
   const vehicleStatusMap = vehicles.reduce((acc, v) => {
@@ -30,6 +33,7 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
   }, {})
 
   const displayedVehicles = vehicles.filter(v => {
+    if (v.archivedAt) return false
     const info = vehicleStatusMap[v.id]
     if (filter === 'available') return info.status === 'Available'
     if (filter === 'rented') return info.status === 'On Rental'
@@ -43,7 +47,7 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
       <div className="calendar-toolbar">
         <div>
           <p className="workspace-kicker">FLEET OPERATIONAL SCHEDULE</p>
-          <h2>{prettyDate(start, { year: 'numeric' })} – {prettyDate(days[days.length - 1], { year: 'numeric' })}</h2>
+          <h2>{prettyDate(visibleStart, { year: 'numeric' })} – {prettyDate(days[days.length - 1], { year: 'numeric' })}</h2>
           <p className="workspace-muted">
             Track active rentals, overdue returns, scheduled maintenance, and open reservation slots across the fleet.
           </p>
@@ -51,13 +55,13 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
 
         <div className="calendar-controls">
           <div className="calendar-nav-buttons">
-            <button className="icon-button calendar-prev" aria-label="Previous days" onClick={() => setStart(addDays(start, -range))}>
+            <button className="icon-button calendar-prev" aria-label="Previous days" disabled={visibleStart <= today} onClick={() => setStart(clampCalendarStart(addDays(visibleStart, -range), today))}>
               <Icon name="chevron" />
             </button>
             <button className="button button-outline" onClick={() => setStart(today)}>
               Today
             </button>
-            <button className="icon-button" aria-label="Next days" onClick={() => setStart(addDays(start, range))}>
+            <button className="icon-button" aria-label="Next days" onClick={() => setStart(addDays(visibleStart, range))}>
               <Icon name="chevron" />
             </button>
           </div>
@@ -78,9 +82,11 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
 
             <input
               id="calendar-start"
+              aria-label="Calendar start date"
+              min={today}
               type="date"
-              value={start}
-              onChange={e => e.target.value && setStart(e.target.value)}
+              value={visibleStart}
+              onChange={e => e.target.value >= today && setStart(e.target.value)}
               title="Jump to date"
             />
           </div>
@@ -96,7 +102,7 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
       </div>
 
       <div className="calendar-scroll">
-        <div className="fleet-calendar-grid">
+        <div className="fleet-calendar-grid" style={{ gridTemplateColumns: '235px repeat(' + range + ', minmax(125px, 1fr))' }}>
           <div className="calendar-corner">
             <strong>VEHICLE & LIVE STATUS</strong>
           </div>
@@ -109,7 +115,7 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
             </div>
           ))}
 
-          {displayedVehicles.map(vehicle => {
+          {<PaginatedList>{displayedVehicles.map(vehicle => {
             const vInfo = vehicleStatusMap[vehicle.id]
             const hold = availability.find(item => item.blocked && item.vehicleId === vehicle.id)
 
@@ -138,7 +144,8 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
                     tripTime(b.end, b.endTime || '10:00') > dayStart
                   )
 
-                  const isPast = day < today
+                  const selectableDates = bookingDatesForDay(day)
+                  const isPast = !selectableDates
 
                   // If day is today and vehicle has an active hold
                   const isDayOnHold = hold && (day === today || (hold.status === 'Maintenance' && day <= addDays(today, 2)))
@@ -155,7 +162,8 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
                             <button
                               className={`calendar-booking ${statusClass}`}
                               key={b.id}
-                              onClick={() => onOpen(b.id)}
+                              disabled={day < today}
+                              onClick={() => { if (day >= dateISO()) onOpen(b.id) }}
                               title={`${b.renter.name} · ${b.id} (${bookingLabel})`}
                             >
                               <strong>{b.renter.name}</strong>
@@ -175,7 +183,8 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
                         <button
                           className="calendar-available"
                           aria-label={`Reserve ${vehicle.name} on ${prettyDate(day)}`}
-                          onClick={() => onCreate({ vehicleId: vehicle.id, start: day, end: addDays(day, 1) })}
+                          disabled={!selectableDates}
+                          onClick={() => { const dates = bookingDatesForDay(day); if (dates) onCreate({ vehicleId: vehicle.id, ...dates }) }}
                         >
                           <span>＋</span>
                           Available
@@ -186,7 +195,7 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
                 })}
               </div>
             )
-          })}
+          })}</PaginatedList>}
         </div>
       </div>
       <p className="workspace-muted calendar-caption">

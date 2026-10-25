@@ -2,9 +2,11 @@
 .auth-demo summary:focus-visible { outline: 2px solid #777; outline-offset: 4px; }
 .auth-demo > p { text-align: left; font-size: 13px; }
 .demo-credentials { margin: 18px 0; }
-.demo-credentials > div { padding: 10px 0; border-bottom: 1px solid #e9e9e9; }
-.demo-credentials dt { color: #555; font-size: 12px; margin-bottom: 3px; }
-.demo-credentials dd { margin: 0; color: #222; font-size: 13px; overflow-wrap: anywhere; }
+.demo-credentials > div { padding: 16px 0; border-bottom: 1px solid #e9e9e9; }
+.demo-credentials dt { color: #444; font-size: 13px; font-weight:600; margin-bottom: 10px; }
+.demo-credentials dd { display:flex; flex-wrap:wrap; gap:10px 28px; margin: 0; color: #666; font-size: 12px; overflow-wrap: anywhere; }
+.demo-credentials dd > span { display:flex; align-items:baseline; gap:10px; line-height:1.7; }
+.demo-credentials code { color:#222; background:#f3f4f0; border-radius:4px; padding:3px 7px; }
 .auth-demo code { font-size: 13px; user-select: text; }
 .auth-demo > .demo-password { color: #444; line-height: 1.8; }
 .demo-password code { display: inline-block; }

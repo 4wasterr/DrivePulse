@@ -9,6 +9,7 @@ export async function api(path, options = {}) {
 }
 export const uploadDocument = (kind, file, bookingId) => api(`/documents/${encodeURIComponent(kind)}${bookingId ? `?bookingId=${encodeURIComponent(bookingId)}` : ''}`, { method: 'POST', body: file, headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) } })
 export const uploadConditionPhoto = (vehicleId, file) => api(`/documents/condition?vehicleId=${encodeURIComponent(vehicleId)}`, { method: 'POST', body: file, headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) } })
+export const uploadVehicleImage = file => api('/vehicle-images', { method: 'POST', body: file, headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) } })
 export async function fetchDocument(id) {
   const response = await fetch(`/api/documents/${encodeURIComponent(id)}`, { credentials: 'same-origin' })
   if (!response.ok) throw new Error('The document could not be opened. Please refresh and try again.')

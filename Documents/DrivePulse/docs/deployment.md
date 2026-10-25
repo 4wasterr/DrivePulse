@@ -42,6 +42,16 @@ The migration is transactional and repeatable. It preserves records from the ear
 
 The migration has been exercised against embedded PostgreSQL. Run it first in your Supabase staging database and verify the result before changing an existing production database.
 
+### Fix a database startup failure after `npm start`
+
+The backend loads `backend/.env` when running locally. Editing `.env.example`, `.env.production.example`, or a root `.env` does not configure the backend. `DATABASE_URL` must contain the complete PostgreSQL connection string from Supabase **Connect**, starting with `postgresql://` or `postgres://`. An HTTPS project/API URL or a database password on its own is not a database connection string. Replace the password placeholder and percent-encode reserved password characters before saving it.
+
+For production, put that connection string in `backend/.env`, keep `NODE_ENV=production`, and run `npm.cmd run db:migrate` from the DrivePulse root before `npm.cmd start`. If this is a new production database, run `npm.cmd run db:manager` after migration to create the first manager. Set the same connection string in Vercel's backend `DATABASE_URL` environment variable when deploying. If TLS verification fails after correcting the URL, configure the Supabase CA certificate as described above.
+
+Startup and database commands report a specific, credential-free diagnostic for invalid URLs, rejected passwords, missing schema, and certificate errors. `28P01` means the database rejected the saved password: replace only the password in the complete URL with the actual Supabase **database password**, not your Supabase account password or an API key. If needed, reset it in the project's Database Settings and update each environment that uses it. `SELF_SIGNED_CERT_IN_CHAIN` means the driver needs the Supabase CA certificate; supply it through `DATABASE_CA_CERT` (PEM text with escaped `\n` newlines) or `DATABASE_CA_PATH` (a PEM file). Keep certificate verification enabled. See [Supabase's SSL guide](https://supabase.com/docs/guides/platform/ssl-enforcement).
+
+To work locally without Supabase, set `NODE_ENV=development` and leave `DATABASE_URL=` empty in `backend/.env`, then run `npm.cmd run dev` from the DrivePulse root. Development uses the local SQLite database. `npm start` runs only the API; `npm run dev` starts both the API and frontend.
+
 ## Configure Vercel
 
 The existing Git repository has a parent directory above DrivePulse and includes tracked dependency files. For a new Git deployment, use the clean source archive in a separate DrivePulse repository. The archive excludes the surrounding personal folders. For CLI deployment, run commands from this DrivePulse directory.
