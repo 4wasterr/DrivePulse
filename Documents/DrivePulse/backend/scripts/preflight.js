@@ -1,6 +1,7 @@
 require('dotenv').config({ path: require('node:path').join(__dirname, '../.env'), quiet: true });
 const { createDatabase } = require('../db');
 const { databaseDiagnostic } = require('../database-errors');
+const { emailConfigurationProblems } = require('../email-config');
 
 function validateProduction(env) {
   const problems = [];
@@ -19,6 +20,7 @@ function validateProduction(env) {
     try { const url = new URL(value); if (url.protocol !== 'https:' || url.origin !== value) throw new Error(); }
     catch { problems.push('FRONTEND_ORIGIN entries must be exact HTTPS origins with no path or trailing slash.'); break; }
   }
+  problems.push(...emailConfigurationProblems(env));
   return problems;
 }
 

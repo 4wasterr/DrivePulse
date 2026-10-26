@@ -74,11 +74,14 @@ test('the manager command creates a hashed account once and preserves it on a se
 });
 
 test('production preflight reports missing configuration and accepts exact HTTPS origins', () => {
-  assert.equal(validateProduction({}).length, 4);
-  const env = { NODE_ENV: 'production', ALLOW_AGENT_SIGNUP: 'false', DATABASE_URL: 'postgresql://postgres.ref:strong-example-secret@pooler.example.com:6543/postgres', FRONTEND_ORIGIN: 'https://drivepulse.example.com' };
+  assert.equal(validateProduction({}).length, 6);
+  const env = { NODE_ENV: 'production', ALLOW_AGENT_SIGNUP: 'false', DATABASE_URL: 'postgresql://postgres.ref:strong-example-secret@pooler.example.com:6543/postgres', FRONTEND_ORIGIN: 'https://drivepulse.example.com', SMTP_USER: 'sender@gmail.com', SMTP_PASS: 'test-app-password' };
   assert.deepEqual(validateProduction(env), []);
   assert.ok(validateProduction({ ...env, FRONTEND_ORIGIN: 'https://drivepulse.example.com/' }).length);
   assert.ok(validateProduction({ ...env, ALLOW_AGENT_SIGNUP: 'true' }).length);
+  assert.match(validateProduction({ ...env, SMTP_USER: '' }).join(' '), /SMTP_USER/);
+  assert.match(validateProduction({ ...env, SMTP_PASS: '' }).join(' '), /SMTP_PASS/);
+  assert.match(validateProduction({ ...env, SMTP_PORT: '25' }).join(' '), /SMTP_PORT/);
 });
 
 test('checked-in Supabase SQL matches the executable migration', () => {

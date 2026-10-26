@@ -1,7 +1,5 @@
-const { Resend } = require('resend');
-
-const DEFAULT_FROM = 'DrivePulse <onboarding@resend.dev>';
-const DEFAULT_PROVIDER_EMAIL = 'reizenoh24@gmail.com';
+const nodemailer = require('nodemailer');
+const { emailConfig, emailConfigurationProblems } = require('./email-config');
 
 // Delivery problems are shown to the user (not hidden behind a generic 500).
 function deliveryError(message, status = 503) {
@@ -74,40 +72,46 @@ function renderEmailLayout({ eyebrow, heading, greeting, body, actionLabel, acti
 </html>`;
 }
 
-function createMailer({ env = process.env, resendClient = null } = {}) {
-  const apiKey = (env.RESEND_API || env.RESEND_API_KEY || '').trim();
-  if (!apiKey && !resendClient) return null;
-  const from = (env.RESEND_FROM || DEFAULT_FROM).trim();
-  const replyTo = (env.RESEND_REPLY_TO || DEFAULT_PROVIDER_EMAIL).trim();
-  const client = resendClient || new Resend(apiKey);
+function createMailer({ env = process.env, smtpTransport = null } = {}) {
+  if (emailConfigurationProblems(env).length) return null;
+  const { from, replyTo, smtp } = emailConfig(env);
+  const transport = smtpTransport || nodemailer.createTransport({
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.port === 465,
+    requireTLS: true,
+    auth: { user: smtp.user, pass: smtp.host.toLowerCase() === 'smtp.gmail.com' ? smtp.pass.replace(/\s/g, '') : smtp.pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
+    disableFileAccess: true,
+    disableUrlAccess: true,
+  });
 
   async function deliver({ to, subject, html, text }) {
-    let response;
     try {
-      response = await client.emails.send({
+      const message = {
         from,
         to,
         ...(replyTo ? { replyTo } : {}),
         subject,
         html,
         text,
-      });
-    } catch {
+      };
+      const result = await transport.sendMail(message);
+      if (!result.accepted?.length || result.rejected?.length) throw deliveryError('We could not deliver the email. Please try again in a moment.');
+      return { id: result.messageId || null };
+    } catch (error) {
+      if (error.expose) throw error;
+      if (error.code === 'EAUTH') {
+        console.error('DrivePulse SMTP authentication failed. Check SMTP_USER and SMTP_PASS in the backend environment.');
+      }
       throw deliveryError('We could not reach the email service. Please try again in a moment.');
     }
-    if (response?.error) {
-      const message = String(response.error.message || '');
-      console.error('DrivePulse email delivery failed:', response.error.name || 'error', message);
-      if (/only send testing emails to your own email address|verify a domain/i.test(message)) {
-        throw deliveryError(`Email is in Resend test mode, so messages can only be sent to ${DEFAULT_PROVIDER_EMAIL}. Verify a sending domain in Resend to email other addresses.`, 400);
-      }
-      throw deliveryError('We could not send the email right now. Please try again in a moment.');
-    }
-    return { id: response?.data?.id || null };
   }
 
   return {
-    providerEmail: replyTo || DEFAULT_PROVIDER_EMAIL,
+    providerEmail: replyTo,
     async sendVerification({ to, name, verifyUrl }) {
       const displayName = name || 'there';
       const subject = 'Verify your DrivePulse client account';

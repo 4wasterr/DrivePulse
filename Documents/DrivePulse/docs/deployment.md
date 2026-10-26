@@ -67,8 +67,14 @@ Set these backend environment variables for **Production**, and separately for a
 | `DATABASE_URL` | The appropriate Supabase transaction pooler URL |
 | `FRONTEND_ORIGIN` | Additional custom HTTPS origins, comma-separated, without trailing slashes |
 | `DATABASE_CA_CERT` | Supabase CA certificate if required by its TLS chain |
+| `SMTP_HOST` | `smtp.gmail.com` (default) |
+| `SMTP_PORT` | `465` (default, TLS) |
+| `SMTP_USER` | The sending Gmail address |
+| `SMTP_PASS` | A Google App Password for the sending account |
 
 Enable Vercel system environment variables. The API recognizes the exact deployment and branch URLs; the production environment also recognizes the primary production domain. Use a separate database for preview deployments. Do not add database URLs, passwords, service-role keys, or private bindings to `VITE_` variables. There are no internal service bindings to configure.
+
+Client account verification and password recovery use Gmail SMTP. Follow [the email setup guide](email-setup.md), save the SMTP variables on the backend service, and redeploy. Production preflight checks these settings, and public production signup requires configured Gmail credentials. The website can keep its existing `vercel.app` address.
 
 If deploying the current parent repository, set Root Directory to `Documents/DrivePulse`. If deploying the clean standalone repository, leave Root Directory at `.`. No Vercel login, project link, or public deployment has been created by this preparation.
 

@@ -29,6 +29,8 @@ Use `backend/.env.production.example` for the required environment variables. Ru
 
 Run `npm run preflight -- --connect` with the production environment loaded before deploying. See [Vercel Services](https://vercel.com/docs/services) and [Supabase connection guidance](https://supabase.com/docs/guides/database/connecting-to-postgres).
 
+Account verification and forgot-password emails use Gmail SMTP. Follow [the email setup guide](docs/email-setup.md) to configure the backend SMTP credentials in Vercel and redeploy. Your existing Gmail account and a Google App Password are sufficient; no purchased domain is needed.
+
 ## Demo accounts
 
 In local demo mode, sign in at `#login` using a username (or the email shown below) and its password:

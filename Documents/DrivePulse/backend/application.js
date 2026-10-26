@@ -299,12 +299,17 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     return await db.prepare('SELECT * FROM users WHERE id=?').get(record.user_id);
   };
   const requireMailer = () => {
-    if (!mailer) D.fail('Email delivery is not configured. Ask your administrator to add the Resend API key.', 503);
+    if (!mailer) D.fail('Email delivery is not configured. Ask your administrator to configure Gmail SMTP.', 503);
   };
   const sendVerification = async (user, req) => {
     const token = await issueToken(user, 'verify_email', VERIFY_TOKEN_TTL);
     if (!token) return false;
-    await mailer.sendVerification({ to: user.email, name: user.name, verifyUrl: `${appOrigin(req)}/#verify-email?token=${token}` });
+    try {
+      await mailer.sendVerification({ to: user.email, name: user.name, verifyUrl: `${appOrigin(req)}/#verify-email?token=${token}` });
+    } catch (error) {
+      await db.prepare('DELETE FROM auth_tokens WHERE token=?').run(hash(token));
+      throw error;
+    }
     return true;
   };
   const accountEmail = (value) => {
@@ -354,7 +359,12 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
       if (!user || user.archived_at) return;
       const token = await issueToken(user, 'reset_password', RESET_TOKEN_TTL);
       if (!token) return;
-      await mailer.sendPasswordReset({ to: user.email, name: user.name, resetUrl: `${appOrigin(req)}/#reset-password?token=${token}` });
+      try {
+        await mailer.sendPasswordReset({ to: user.email, name: user.name, resetUrl: `${appOrigin(req)}/#reset-password?token=${token}` });
+      } catch (error) {
+        await db.prepare('DELETE FROM auth_tokens WHERE token=?').run(hash(token));
+        throw error;
+      }
       await systemAudit.write(user, 'Password reset requested', `Account: ${user.email}`, 'Password recovery email sent', 200, { ip: address });
     });
     res.json({ ok: true, message: 'If an account uses this email, a password reset link is on its way. It expires in 30 minutes.' });
@@ -396,9 +406,9 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
       if (!['client', 'agent', 'mechanic', 'manager'].includes(req.body.role)) D.fail('Choose a valid account type.');
       if (existing) D.fail('An account already uses this email. Sign in instead.', 409);
       if (req.body.role !== 'client' && !allowAgentSignup) D.fail('Ask your administrator to create a staff account.', 403);
-      // Client self-registration must confirm the inbox whenever email delivery is configured.
-      const isTestDomain = (addr) => /@(example\.(com|org|net)|test\.local|drivepulse\.demo)$/i.test(addr);
-      const verify = Boolean(mailer) && req.body.role === 'client' && (!isTestDomain(email) || Boolean(mailer.isMock));
+      // Public production accounts always require inbox confirmation.
+      const verify = req.body.role === 'client' && (Boolean(mailer) || process.env.NODE_ENV === 'production');
+      if (verify) requireMailer();
       const user = await addUser(D.text(req.body.name, 'Full name', 70), email, req.body.role, password, { verified: !verify });
       req.auditUser = user;
       if (verify) {
