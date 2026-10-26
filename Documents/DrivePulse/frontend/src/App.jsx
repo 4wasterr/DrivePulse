@@ -9,16 +9,18 @@ import LandingPage from './pages/Public/LandingPage.jsx'
 import { isPublicPage, workspaceHome } from './utils/roles.js'
 import { syncVehicles } from './data.js'
 import { NotificationContext } from './components/ui/notificationContext.js'
-import { readNavigationTrail } from './utils/navigation.js'
+import { readNavigationTrail, routeFromHash } from './utils/navigation.js'
 
 const clientPages = ['overview', 'fleet', 'bookings', 'documents', 'payments']
 
-const authPages = ['login', 'signup', ...['agent', 'mechanic', 'manager'].flatMap(role => [`${role}-login`, `${role}-signup`])]
+const accountPages = ['forgot-password', 'reset-password', 'verify-email']
+const authPages = ['login', 'signup', ...accountPages, ...['agent', 'mechanic', 'manager'].flatMap(role => [`${role}-login`, `${role}-signup`])]
+const authMode = page => accountPages.includes(page) ? page : page.includes('signup') ? 'signup' : 'login'
 
 const pageRole = page => ['agent', 'mechanic', 'manager'].find(role => page.startsWith(`${role}-`)) || 'client'
 
 export default function App() {
-  const [page, setPage] = useState(() => window.location.hash.slice(1) || 'home')
+  const [page, setPage] = useState(() => routeFromHash())
   const navigationTrail = useRef(readNavigationTrail(page, window.history.state))
   const [workspace, setWorkspace] = useState(null)
   const [availability, setAvailability] = useState([])
@@ -49,7 +51,7 @@ export default function App() {
   }, [])
   useEffect(() => {
     const change = () => {
-      const next = window.location.hash.slice(1) || 'home'
+      const next = routeFromHash()
       navigationTrail.current = readNavigationTrail(next, window.history.state, navigationTrail.current)
       window.history.replaceState({ ...window.history.state, drivepulseNavigation: navigationTrail.current }, '')
       setPage(next)
@@ -78,7 +80,7 @@ export default function App() {
   let content
   if (isPublicPage(page)) content = <LandingPage user={user} section={page} />
   else if (authPages.includes(page) || requiresAuth && !user) {
-    content = <AuthPage key={page} mode={page.includes('signup') ? 'signup' : 'login'} onSuccess={signedIn} />
+    content = <AuthPage key={page} mode={authPages.includes(page) ? authMode(page) : 'login'} emailDelivery={config.emailDelivery} onSuccess={signedIn} onNavigate={navigate} />
   }
   else if (user && ['mechanic', 'manager'].includes(user.role) && (page.startsWith(`${user.role}-`) || clientPages.includes(page))) content = <StaffWorkspace page={page.startsWith(`${user.role}-`) ? page : `${user.role}-overview`} user={user} operations={workspace.operations} onRefresh={refresh} onNavigate={navigate} onLogout={logout} />
   else if (user?.role === 'agent' && (page.startsWith('agent-') || clientPages.includes(page))) content = <AgentPortal page={page.startsWith('agent-') ? page : 'agent-overview'} user={user} workspace={workspace} availability={availability} onRefresh={refresh} onNavigate={navigate} onLogout={logout} />

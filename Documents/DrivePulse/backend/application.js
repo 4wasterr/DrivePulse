@@ -9,14 +9,19 @@ const { createAudit } = require('./audit');
 const { createRentalDocuments, DEFAULT_TERMS } = require('./rentalDocuments');
 const { validPassword, PASSWORD_ERROR, isAdmin } = require('./security');
 const { vehicleProfile, renewalNotices, expiryDate } = require('./vehicleProfile');
+const { createMailer } = require('./email');
 const demoAccounts = require('../shared/demoAccounts.json');
 const { inputError } = require('../shared/validation.mjs');
 
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const now = () => new Date().toISOString();
+const VERIFY_TOKEN_TTL = 24 * 3600000;
+const RESET_TOKEN_TTL = 30 * 60000;
+const EMAIL_RESEND_COOLDOWN = 60000;
 function publicUser(user) {
   return {
     id: user.id, name: user.name, email: user.email, role: user.role,
+    emailVerified: Boolean(user.email_verified_at),
     createdAt: user.created_at || null, lastLoginAt: user.last_login_at || null,
     archivedAt: user.archived_at || null, archivedBy: user.archived_by || null, archiveReason: user.archive_reason || null
   };
@@ -35,7 +40,7 @@ function samplePDF(label) {
   return Buffer.from(pdf);
 }
 
-async function createApp({ app = express(), database = null, dbPath, seedDemo = process.env.ENABLE_DEMO_ACCOUNTS === 'true' || process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL, allowAgentSignup = process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL && process.env.ALLOW_AGENT_SIGNUP !== 'false' || process.env.ALLOW_AGENT_SIGNUP === 'true' } = {}) {
+async function createApp({ app = express(), database = null, dbPath, mailer = createMailer(), seedDemo = process.env.ENABLE_DEMO_ACCOUNTS === 'true' || process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL, allowAgentSignup = process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL && process.env.ALLOW_AGENT_SIGNUP !== 'false' || process.env.ALLOW_AGENT_SIGNUP === 'true' } = {}) {
   if (process.env.NODE_ENV === 'production' && (allowAgentSignup || seedDemo && process.env.ENABLE_DEMO_ACCOUNTS !== 'true')) throw new Error('Demo data and staff self-registration must be disabled in production.');
   const db = database || createDatabase({ filename: dbPath });
   await db.initialize();
@@ -57,9 +62,9 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
   const allTickets = async () => (await db.prepare('SELECT payload FROM tickets').all()).map((row) => JSON.parse(row.payload));
   const saveTicket = async (ticket) => await db.prepare('INSERT INTO tickets(id,owner_id,payload) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(ticket.id, ticket.ownerId || null, JSON.stringify(ticket));
   const meta = (doc) => ({ id: doc.id, kind: doc.kind, name: doc.name, mime: doc.mime, fingerprint: doc.fingerprint, size: doc.data.length, uploadedAt: doc.uploaded_at });
-  const addUser = async (name, email, role, password) => {
+  const addUser = async (name, email, role, password, { verified = true } = {}) => {
     const record = passwordRecord(password),id = randomUUID(),createdAt = now();
-    await db.prepare('INSERT INTO users(id,email,name,role,salt,password_hash,created_at) VALUES(?,?,?,?,?,?,?)').run(id, email, name, role, record.salt, record.passwordHash, createdAt);
+    await db.prepare('INSERT INTO users(id,email,name,role,salt,password_hash,created_at,email_verified_at) VALUES(?,?,?,?,?,?,?,?)').run(id, email, name, role, record.salt, record.passwordHash, createdAt, verified ? createdAt : '');
     return await db.prepare('SELECT * FROM users WHERE id=?').get(id);
   };
   const systemAudit = createAudit(db);
@@ -237,6 +242,7 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     agentSignup: allowAgentSignup,
     staffSignup: allowAgentSignup,
     demo: seedDemo,
+    emailDelivery: Boolean(mailer),
     rates: Object.fromEntries((await fleet.fleet(true)).map((v) => [v.id, v.rate]))
   }));
 
@@ -250,8 +256,8 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     return publicUser(user);
   };
 
-  app.post('/api/auth/:action', async (req, res) => {
-    if (!['login', 'signup'].includes(req.params.action)) D.fail('Not found.', 404);
+  // Shared per-address throttle for every unauthenticated account endpoint.
+  const throttle = async (req) => {
     const address = process.env.VERCEL ? req.get('x-real-ip') || req.ip : req.ip;
     const at = Date.now(), cutoff = at - 15 * 60000;
     await db.prepare('DELETE FROM auth_attempts WHERE started_at<?').run(cutoff);
@@ -261,6 +267,122 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
       started_at=CASE WHEN auth_attempts.started_at<? THEN excluded.started_at ELSE auth_attempts.started_at END
       RETURNING attempts`).get(address, at, cutoff, cutoff);
     if (attempt.attempts > 25) D.fail('Too many attempts. Please try again in 15 minutes.', 429);
+    return address;
+  };
+
+  // Email links return to the same DrivePulse site the request came from (already origin-checked).
+  const appOrigin = (req) => {
+    const origin = req.get('origin');
+    if (origin && origins.includes(origin)) return origin;
+    const configured = (process.env.FRONTEND_ORIGIN || '').split(',').map(value => value.trim()).find(Boolean);
+    if (configured) return configured;
+    const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+    if (vercelHost) return `https://${vercelHost}`;
+    return 'http://127.0.0.1:5173';
+  };
+
+  // Only a SHA-256 digest of each single-use link token is stored.
+  const issueToken = async (user, kind, ttl) => {
+    const recent = await db.prepare('SELECT issued_at FROM auth_tokens WHERE user_id=? AND kind=? ORDER BY issued_at DESC LIMIT 1').get(user.id, kind);
+    if (recent?.issued_at && Date.now() - Date.parse(recent.issued_at) < EMAIL_RESEND_COOLDOWN) return null;
+    const token = randomBytes(32).toString('base64url');
+    await db.prepare('DELETE FROM auth_tokens WHERE (user_id=? AND kind=?) OR expires<=?').run(user.id, kind, Date.now());
+    await db.prepare('INSERT INTO auth_tokens(token,user_id,kind,expires,issued_at) VALUES(?,?,?,?,?)').run(hash(token), user.id, kind, Date.now() + ttl, now());
+    return token;
+  };
+  const consumeToken = async (token, kind) => {
+    if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{20,100}$/.test(token)) return null;
+    const record = await db.prepare('SELECT auth_tokens.user_id, auth_tokens.expires FROM auth_tokens JOIN users ON users.id=auth_tokens.user_id WHERE auth_tokens.token=? AND auth_tokens.kind=?').get(hash(token), kind);
+    if (!record) return null;
+    await db.prepare('DELETE FROM auth_tokens WHERE token=?').run(hash(token));
+    if (Number(record.expires) <= Date.now()) return null;
+    return await db.prepare('SELECT * FROM users WHERE id=?').get(record.user_id);
+  };
+  const requireMailer = () => {
+    if (!mailer) D.fail('Email delivery is not configured. Ask your administrator to add the Resend API key.', 503);
+  };
+  const sendVerification = async (user, req) => {
+    const token = await issueToken(user, 'verify_email', VERIFY_TOKEN_TTL);
+    if (!token) return false;
+    await mailer.sendVerification({ to: user.email, name: user.name, verifyUrl: `${appOrigin(req)}/#verify-email?token=${token}` });
+    return true;
+  };
+  const accountEmail = (value) => {
+    const email = D.text(value, 'Email', 160).toLowerCase();
+    const error = inputError(email, { kind: 'email' });
+    if (error) D.fail(error);
+    return email;
+  };
+  // Identical responses for known and unknown addresses prevent account discovery.
+  const quietly = async (work) => {
+    try { await work(); }
+    catch (error) { if (process.env.NODE_ENV !== 'production' && error.expose) throw error; if (error.expose) console.error('DrivePulse email request failed:', error.message); else throw error; }
+  };
+
+  app.post('/api/auth/verify-email', async (req, res) => {
+    const address = await throttle(req);
+    const user = await transaction(async () => await consumeToken(req.body.token, 'verify_email'));
+    if (!user) D.fail('This verification link is invalid or has expired. Request a new one from the sign-in page.', 400);
+    if (user.archived_at) D.fail('This account has been deactivated by an operations manager.', 403);
+    if (!user.email_verified_at) {
+      user.email_verified_at = now();
+      await db.prepare('UPDATE users SET email_verified_at=? WHERE id=?').run(user.email_verified_at, user.id);
+      await db.prepare("DELETE FROM auth_tokens WHERE user_id=? AND kind='verify_email'").run(user.id);
+      await systemAudit.write(user, 'Email verified', `Account: ${user.email}`, 'Client confirmed their email address', 200, { ip: address });
+    }
+    req.auditUser = user;
+    res.json({ user: await createSession(user, res) });
+  });
+
+  app.post('/api/auth/resend-verification', async (req, res) => {
+    requireMailer();
+    await throttle(req);
+    const email = accountEmail(req.body.email);
+    await quietly(async () => {
+      const user = await db.prepare('SELECT * FROM users WHERE email=?').get(email);
+      if (user && !user.email_verified_at && !user.archived_at) await sendVerification(user, req);
+    });
+    res.json({ ok: true, message: 'If this account still needs verification, a new link is on its way. Check your inbox and spam folder.' });
+  });
+
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    requireMailer();
+    const address = await throttle(req);
+    const email = accountEmail(req.body.email);
+    await quietly(async () => {
+      const user = await db.prepare('SELECT * FROM users WHERE email=?').get(email);
+      if (!user || user.archived_at) return;
+      const token = await issueToken(user, 'reset_password', RESET_TOKEN_TTL);
+      if (!token) return;
+      await mailer.sendPasswordReset({ to: user.email, name: user.name, resetUrl: `${appOrigin(req)}/#reset-password?token=${token}` });
+      await systemAudit.write(user, 'Password reset requested', `Account: ${user.email}`, 'Password recovery email sent', 200, { ip: address });
+    });
+    res.json({ ok: true, message: 'If an account uses this email, a password reset link is on its way. It expires in 30 minutes.' });
+  });
+
+  app.post('/api/auth/reset-password', async (req, res) => {
+    const address = await throttle(req);
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    if (!validPassword(password)) D.fail(PASSWORD_ERROR);
+    const user = await transaction(async () => {
+      const target = await consumeToken(req.body.token, 'reset_password');
+      if (!target) D.fail('This password reset link is invalid or has expired. Request a new one.', 400);
+      if (target.archived_at) D.fail('This account has been deactivated by an operations manager.', 403);
+      const record = passwordRecord(password);
+      // Opening the emailed link also proves the address belongs to this user.
+      await db.prepare("UPDATE users SET salt=?,password_hash=?,email_verified_at=CASE WHEN email_verified_at='' THEN ? ELSE email_verified_at END WHERE id=?").run(record.salt, record.passwordHash, now(), target.id);
+      await db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+      await db.prepare('DELETE FROM auth_tokens WHERE user_id=?').run(target.id);
+      return target;
+    });
+    req.auditUser = user;
+    await systemAudit.write(user, 'User password reset', `user:${user.id}`, 'Password reset through emailed recovery link; active sessions revoked.', 200, { ip: address });
+    res.json({ ok: true, email: user.email });
+  });
+
+  app.post('/api/auth/:action', async (req, res) => {
+    if (!['login', 'signup'].includes(req.params.action)) D.fail('Not found.', 404);
+    const address = await throttle(req);
     const signup = req.params.action === 'signup';
     const identifier = D.text(signup ? req.body.email : req.body.username ?? req.body.email, signup ? 'Email' : 'Email or username', 160).toLowerCase();
     const identifierError = inputError(identifier, { kind: signup ? 'email' : 'login-identifier' });
@@ -274,12 +396,24 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
       if (!['client', 'agent', 'mechanic', 'manager'].includes(req.body.role)) D.fail('Choose a valid account type.');
       if (existing) D.fail('An account already uses this email. Sign in instead.', 409);
       if (req.body.role !== 'client' && !allowAgentSignup) D.fail('Ask your administrator to create a staff account.', 403);
-      const user = await addUser(D.text(req.body.name, 'Full name', 70), email, req.body.role, password);
+      // Client self-registration must confirm the inbox whenever email delivery is configured.
+      const isTestDomain = (addr) => /@(example\.(com|org|net)|test\.local|drivepulse\.demo)$/i.test(addr);
+      const verify = Boolean(mailer) && req.body.role === 'client' && (!isTestDomain(email) || Boolean(mailer.isMock));
+      const user = await addUser(D.text(req.body.name, 'Full name', 70), email, req.body.role, password, { verified: !verify });
       req.auditUser = user;
-      await systemAudit.write(user, 'Account registration', `Account: ${user.email}`, `New ${user.role} account created`, 201, {
+      if (verify) {
+        try { await sendVerification(user, req); }
+        catch (error) {
+          // Never leave an unreachable, unverifiable account behind.
+          await db.prepare('DELETE FROM users WHERE id=?').run(user.id);
+          throw error;
+        }
+      }
+      await systemAudit.write(user, 'Account registration', `Account: ${user.email}`, verify ? `New ${user.role} account created; verification email sent` : `New ${user.role} account created`, 201, {
         ip: address,
         newValue: { name: user.name, email: user.email, role: user.role }
       });
+      if (verify) return res.status(201).json({ verificationRequired: true, email: user.email });
       return res.status(201).json({ user: await createSession(user, res) });
     }
     const candidate = scryptSync(password, existing?.salt || 'missing-account-salt', 64);
@@ -304,6 +438,13 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
         { ip: address, alertType: 'Policy override' }
       );
       D.fail('This account has been deactivated by an operations manager.', 403);
+    }
+    if (!existing.email_verified_at) {
+      const error = new Error('Verify your email address before signing in. Check your inbox for the DrivePulse verification link.');
+      error.status = 403;
+      error.publicCode = 'EMAIL_NOT_VERIFIED';
+      error.publicData = { email: existing.email };
+      throw error;
     }
     await db.prepare('DELETE FROM auth_attempts WHERE address=?').run(address);
     req.auditUser = existing;
@@ -827,8 +968,8 @@ async function createApp({ app = express(), database = null, dbPath, seedDemo = 
     if (res.headersSent) return next(error);
     const duplicate = error.code === '23505' || error.code === 'ERR_SQLITE_ERROR' && /UNIQUE constraint failed/.test(error.message);
     const status = error.type === 'entity.too.large' ? 413 : duplicate ? 409 : error.status || 500;
-    if (status >= 500) console.error('DrivePulse request failed:', error.message);
-    res.status(status).json({ error: duplicate ? 'This record already exists. Refresh and try again.' : status === 413 ? 'Files must be 4 MB or smaller.' : status >= 500 ? 'The request could not be completed. Please try again.' : error.message });
+    if (status >= 500 && !error.expose) console.error('DrivePulse request failed:', error.message);
+    res.status(status).json({ error: duplicate ? 'This record already exists. Refresh and try again.' : status === 413 ? 'Files must be 4 MB or smaller.' : status >= 500 && !error.expose ? 'The request could not be completed. Please try again.' : error.message, ...(error.publicCode ? { code: error.publicCode } : {}), ...(error.publicData || {}) });
   });
   return { app, db };
 }

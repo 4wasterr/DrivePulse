@@ -1,6 +1,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { getBackNavigation, readNavigationTrail } from '../src/utils/navigation.js'
+import { getBackNavigation, readNavigationTrail, routeFromHash, hashParam } from '../src/utils/navigation.js'
+
+test('hash route and query parameter extraction parse email recovery and verification links', () => {
+  assert.equal(routeFromHash('#verify-email?token=abc-123_xyz'), 'verify-email')
+  assert.equal(hashParam('token', '#verify-email?token=abc-123_xyz'), 'abc-123_xyz')
+  assert.equal(routeFromHash('#reset-password?token=reset-token-456'), 'reset-password')
+  assert.equal(hashParam('token', '#reset-password?token=reset-token-456'), 'reset-token-456')
+  assert.equal(routeFromHash('#forgot-password'), 'forgot-password')
+  assert.equal(hashParam('token', '#forgot-password'), '')
+  assert.equal(routeFromHash(''), 'home')
+})
 
 test('module Back walks the visited route trail and browser history restores earlier trails', () => {
   const first = readNavigationTrail('overview', null)

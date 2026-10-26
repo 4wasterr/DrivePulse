@@ -4,3 +4,5 @@ process.env.NODE_ENV = 'development';
 process.env.DATABASE_URL = '';
 delete process.env.VERCEL;
 delete process.env.ALLOW_AGENT_SIGNUP;
+delete process.env.RESEND_API;
+delete process.env.RESEND_API_KEY;

@@ -44,9 +44,9 @@ async function main() {
       const existing = await db.prepare("SELECT id FROM users WHERE role='manager' AND archived_at IS NULL LIMIT 1").get();
       if (existing) throw new Error('MANAGER_EXISTS');
       if (await db.prepare('SELECT id FROM users WHERE email=?').get(email)) throw new Error('EMAIL_EXISTS');
-      const id = randomUUID(), salt = randomBytes(16).toString('hex');
-      await db.prepare('INSERT INTO users(id,email,name,role,salt,password_hash,created_at) VALUES(?,?,?,?,?,?,?)')
-        .run(id, email, name, 'manager', salt, scryptSync(password, salt, 64).toString('hex'), new Date().toISOString());
+      const id = randomUUID(), salt = randomBytes(16).toString('hex'), createdAt = new Date().toISOString();
+      await db.prepare('INSERT INTO users(id,email,name,role,salt,password_hash,created_at,email_verified_at) VALUES(?,?,?,?,?,?,?,?)')
+        .run(id, email, name, 'manager', salt, scryptSync(password, salt, 64).toString('hex'), createdAt, createdAt);
       await createAudit(db).write({ id, name, role: 'manager' }, 'Initial manager provisioned', `user:${id}`, 'Created through the database management command.');
     });
     console.log('Initial manager created. Sign in and create the booking-agent and mechanic accounts under User Management.');
