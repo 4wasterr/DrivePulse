@@ -1,7 +1,7 @@
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { dirname, isAbsolute, resolve } = require('node:path');
-const { sqliteSchema, postgresSchema, emailUpgrade } = require('./schema');
+const { sqliteSchema, postgresSchema, emailUpgrade, profileUpgrade, profileColumns } = require('./schema');
 
 class SQLiteDatabase {
   constructor(filename) {
@@ -19,6 +19,7 @@ class SQLiteDatabase {
     if (!columns.some(column => column.name === 'email_verified_at')) {
       this.connection.exec("ALTER TABLE users ADD COLUMN email_verified_at TEXT NOT NULL DEFAULT ''; UPDATE users SET email_verified_at = CASE WHEN created_at <> '' THEN created_at ELSE 'verified' END;");
     }
+    for (const column of profileColumns) if (!columns.some(item => item.name === column)) this.connection.exec(`ALTER TABLE users ADD COLUMN ${column} TEXT NOT NULL DEFAULT '';`);
   }
   exec(sql) { return this.connection.exec(sql); }
   prepare(sql) { return this.connection.prepare(sql); }
@@ -69,8 +70,9 @@ class PostgresDatabase {
     if (!rows.length) throw Object.assign(new Error('Run npm run db:migrate before starting the production API.'), { code: 'DATABASE_SCHEMA_MISSING' });
     // Additive, idempotent upgrade for email verification and password recovery.
     const ready = await this.query("SELECT (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users' AND column_name='email_verified_at') AS columns, (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='auth_tokens') AS tables");
-    if (Number(ready.rows[0].columns) && Number(ready.rows[0].tables)) return;
-    await this.transaction(() => this.query(emailUpgrade));
+    if (!Number(ready.rows[0].columns) || !Number(ready.rows[0].tables)) await this.transaction(() => this.query(emailUpgrade));
+    const profile = await this.query("SELECT (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users' AND column_name IN ('first_name','middle_name','last_name','phone','address_street','address_city','address_postal')) AS columns, (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('recovery_codes','login_locks')) AS tables");
+    if (Number(profile.rows[0].columns) !== 7 || Number(profile.rows[0].tables) !== 2) await this.transaction(() => this.query(profileUpgrade));
   }
   exec(sql) { return this.query(sql); }
   prepare(sql) {

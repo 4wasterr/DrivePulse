@@ -1,6 +1,6 @@
 # Account emails on Vercel
 
-DrivePulse sends account verification and password-reset links through Gmail SMTP from the Express backend. Each message goes to the email entered by that client. The sender account does not need to match the recipient. Links open the DrivePulse site that requested them; Vercel deployment URLs are detected automatically.
+DrivePulse sends account verification links, password-recovery codes, and account-lock notifications through Gmail SMTP from the Express backend. Each message goes to the email entered by that client. The sender account does not need to match the recipient. Links open the DrivePulse site that requested them; Vercel deployment URLs are detected automatically.
 
 Set the SMTP variables on the **backend** service in Vercel for Production and, if needed, Preview, then redeploy. Keep credentials out of frontend `VITE_` variables and source control. For local development, use the ignored `backend/.env` and restart the API.
 
@@ -32,8 +32,14 @@ Gmail is a practical option for a small demo or low-volume app. It has sending l
 1. Create a client account with an inbox different from the sender account. Confirm registration asks for email verification and sign-in is blocked until verified.
 2. Open the verification email. Its button should open the deployed DrivePulse site and sign in the verified client.
 3. Sign out, choose **Forgot password?**, and enter the client's address.
-4. Open the reset link, set a new password, and sign in with it. The old password and existing sessions should no longer work; the reset link cannot be reused.
+4. Enter the six-digit code in DrivePulse, set a new password, and sign in with it. The old password and existing sessions should no longer work; the code cannot be reused.
 
-Verification links expire after 24 hours; reset links expire after 30 minutes. Successful sends have a one-minute cooldown. A failed delivery removes the unsent token so the request can be retried immediately. Production registration refuses to create unverified accounts when no mail provider is configured. Local development without any provider still supports demo registration.
+Verification links expire after 24 hours. Password-recovery codes expire after 10 minutes and allow at most five failed attempts. Successful sends have a one-minute cooldown. A failed delivery removes the unsent token so the request can be retried immediately. Production registration refuses to create unverified accounts when no mail provider is configured. Local development without any provider still supports demo registration.
 
 Run `npm.cmd run preflight` with the production environment loaded to detect missing SMTP credentials. This validates configuration only; it does not prove SMTP authentication or inbox delivery. The automated email tests use mocked provider responses and do not send real emails.
+
+After three unsuccessful sign-in attempts, the account has a 60-second cooldown. Gmail sends an “Unlock your account” notification with a link to sign-in. Access returns automatically after the cooldown; the email button does not bypass it. Password resets clear the lock, and administrator password changes, account deactivation, and critical identity changes revoke outstanding recovery challenges.
+
+Existing SQLite and PostgreSQL databases receive additive profile columns and security tables at startup. Existing accounts remain usable. New public client registrations require first and last names, a Philippine mobile number, and a complete address; the middle name is optional.
+
+Previously issued password-reset links are superseded by the code flow. Request a new recovery code after deploying this version. Verification activation links continue to work.

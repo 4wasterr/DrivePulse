@@ -21,6 +21,7 @@ export function inputError(value, { kind = 'text', label = 'This field', require
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(clean) || local.startsWith('.') || local.endsWith('.') || clean.includes('..') || !domain.split('.').every(part => /^[\p{L}\p{N}](?:[\p{L}\p{N}-]*[\p{L}\p{N}])?$/u.test(part))) return 'Enter an email such as name@example.com.'
   }
   if (kind === 'phone' && (!/^\+?[\d\s().-]+$/u.test(clean) || clean.replace(/\D/g, '').length < 7 || clean.replace(/\D/g, '').length > 15)) return 'Enter 7–15 digits. A leading +, spaces, brackets and hyphens are allowed.'
+  if (kind === 'ph-mobile' && (!/^\+?[\d\s()-]+$/.test(clean) || !/^(?:0|63)?9\d{9}$/.test(clean.replace(/\D/g, '')))) return 'Enter a Philippine mobile number such as 0917 123 4567 or +63 917 123 4567.'
   if (kind === 'plate' && !/^[a-z\d][a-z\d -]{1,29}$/i.test(clean)) return 'Use 2–30 letters, numbers, spaces or hyphens for the plate.'
   if (kind === 'fleet-code' && !/^[a-z\d][a-z\d _-]{1,29}$/i.test(clean)) return 'Use 2–30 letters, numbers, spaces, hyphens or underscores for the fleet code.'
   if (kind === 'reference' && !/[\p{L}\p{N}]/u.test(clean)) return 'Include at least one letter or number in the reference.'

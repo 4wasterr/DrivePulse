@@ -40,7 +40,7 @@ export default function HeroCarousel({ children }) {
     <div className="landing-hero-photos" aria-hidden="true">{slides.map((item, index) => <img key={item.image} className={slide === index ? 'is-active' : ''} src={item.image} alt="" style={{ objectPosition: item.position }} fetchPriority={index === 0 ? 'high' : 'low'} decoding="async" />)}</div>
     {children}
     <div className="landing-container landing-carousel-bar">
-      <div className="landing-carousel-caption"><span>THE DRIVEPULSE FLEET</span><strong>{slides[slide].name}</strong></div>
+      <div className="landing-carousel-caption"><span>FLEET OPERATIONS WITH DRIVEPULSE</span><strong>{slides[slide].name}</strong></div>
       <div className="landing-carousel-controls" role="group" aria-label="Hero slideshow controls" onKeyDown={event => {
         if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
           event.preventDefault()

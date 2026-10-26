@@ -1,3 +1,4 @@
+import ClientProfileFields from '../../components/ui/ClientProfileFields.jsx'
 import ValidatedField from '../../components/ui/ValidatedField.jsx'
 import ValidatedForm from '../../components/ui/ValidatedForm.jsx'
 import { useState, useEffect, useCallback } from 'react'
@@ -28,7 +29,8 @@ export default function UserManagementPage({ currentUser, onDone }) {
   const shownUsers = (tab === 'Archived' ? data.archivedUsers : data.users).filter(u => (roleFilter === 'all' || u.role === roleFilter) && (u.name + ' ' + u.email + ' ' + u.role).toLowerCase().includes(search.toLowerCase()))
   const t = data.telemetry || {}
   const close = () => { setModal(null); setError('') }
-  const show = value => { setError(''); setModal(value) }
+  const [accountRole, setAccountRole] = useState('agent')
+  const show = value => { setError(''); setAccountRole(value.user?.role || 'agent'); setModal(value) }
   async function submit(event) {
     event.preventDefault(); const form = new FormData(event.currentTarget); setBusy(true); setError('')
     try {
@@ -60,7 +62,7 @@ export default function UserManagementPage({ currentUser, onDone }) {
     </Modal>}
     {modal && modal.kind !== 'history' && isAdmin && <Modal title={modal.kind === 'create' ? 'Create User' : modal.kind === 'password' ? 'Reset password · ' + modal.user.name : modal.kind === 'edit' ? 'Edit profile · ' + modal.user.name : 'Deactivate · ' + modal.user.name} eyebrow="ADMIN ACCOUNT MANAGEMENT" onClose={close}>
       <ValidatedForm className="staff-form" onSubmit={submit} validate={form => [{ name: 'role', message: modal.kind === 'edit' && modal.user.id === currentUser.id && form.elements.namedItem('role')?.value !== 'manager' ? 'Keep your own Admin role to retain access to this workspace.' : '' }]}><fieldset disabled={busy}>
-        {['create', 'edit'].includes(modal.kind) && <><label className="form-field">Full name<ValidatedField name="name" required maxLength={70} defaultValue={modal.user?.name || ''} /></label><label className="form-field">Email address<ValidatedField name="email" type="email" required maxLength={160} defaultValue={modal.user?.email || ''} /></label><label className="form-field">Role<ValidatedField as="select" name="role" defaultValue={modal.user?.role || 'agent'}>{Object.entries(roleNames).map(([k, label]) => <option key={k} value={k}>{label}</option>)}</ValidatedField></label></>}
+        {['create', 'edit'].includes(modal.kind) && <>{accountRole === 'client' ? <ClientProfileFields user={modal.user} /> : <label className="form-field">Full name<ValidatedField name="name" required maxLength={70} defaultValue={modal.user?.name || ''} /></label>}<label className="form-field">Email address<ValidatedField name="email" type="email" required maxLength={160} defaultValue={modal.user?.email || ''} /></label><label className="form-field">Role<ValidatedField as="select" name="role" value={accountRole} onChange={event => setAccountRole(event.target.value)}>{Object.entries(roleNames).map(([k, label]) => <option key={k} value={k}>{label}</option>)}</ValidatedField></label></>}
         {['create', 'password'].includes(modal.kind) && <PasswordFields />}
         {modal.kind === 'password' && <p>Resetting the password signs this user out of all active sessions.</p>}
         {modal.kind === 'deactivate' && <><p>Deactivation revokes active sessions and moves this user to Archived.</p><label className="form-field">Reason<ValidatedField as="textarea" name="reason" required maxLength={500} rows={3} /></label></>}

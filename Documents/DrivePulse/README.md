@@ -31,6 +31,10 @@ Run `npm run preflight -- --connect` with the production environment loaded befo
 
 Account verification and forgot-password emails use Gmail SMTP. Follow [the email setup guide](docs/email-setup.md) to configure the backend SMTP credentials in Vercel and redeploy. Your existing Gmail account and a Google App Password are sufficient; no purchased domain is needed.
 
+## Account security
+
+Client registration collects first and last names, an optional middle name, a Philippine mobile number, and a complete address. Password recovery uses a six-digit, single-use email code with a 10-minute expiry and five-attempt limit. Three failed sign-ins trigger a 60-second account cooldown and an unlock notification through Gmail SMTP. Verification emails and recovery codes have a one-minute resend cooldown. Existing accounts and rental records are preserved by the additive database upgrades.
+
 ## Demo accounts
 
 In local demo mode, sign in at `#login` using a username (or the email shown below) and its password:

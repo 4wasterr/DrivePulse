@@ -12,16 +12,19 @@ const { vehicleProfile, renewalNotices, expiryDate } = require('./vehicleProfile
 const { createMailer } = require('./email');
 const demoAccounts = require('../shared/demoAccounts.json');
 const { inputError } = require('../shared/validation.mjs');
+const { clientProfile } = require('../shared/clientProfile.mjs');
+const { createAccountSecurity } = require('./account-security');
 
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const now = () => new Date().toISOString();
 const VERIFY_TOKEN_TTL = 24 * 3600000;
-const RESET_TOKEN_TTL = 30 * 60000;
 const EMAIL_RESEND_COOLDOWN = 60000;
 function publicUser(user) {
   return {
     id: user.id, name: user.name, email: user.email, role: user.role,
     emailVerified: Boolean(user.email_verified_at),
+    firstName: user.first_name || '', middleName: user.middle_name || '', lastName: user.last_name || '', phone: user.phone || '',
+    address: { street: user.address_street || '', city: user.address_city || '', postalCode: user.address_postal || '' },
     createdAt: user.created_at || null, lastLoginAt: user.last_login_at || null,
     archivedAt: user.archived_at || null, archivedBy: user.archived_by || null, archiveReason: user.archive_reason || null
   };
@@ -62,9 +65,12 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   const allTickets = async () => (await db.prepare('SELECT payload FROM tickets').all()).map((row) => JSON.parse(row.payload));
   const saveTicket = async (ticket) => await db.prepare('INSERT INTO tickets(id,owner_id,payload) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(ticket.id, ticket.ownerId || null, JSON.stringify(ticket));
   const meta = (doc) => ({ id: doc.id, kind: doc.kind, name: doc.name, mime: doc.mime, fingerprint: doc.fingerprint, size: doc.data.length, uploadedAt: doc.uploaded_at });
-  const addUser = async (name, email, role, password, { verified = true } = {}) => {
+  const readClientProfile = input => { try { return clientProfile(input); } catch (error) { D.fail(error.message); } };
+  const writeProfile = async (id, profile) => db.prepare('UPDATE users SET first_name=?,middle_name=?,last_name=?,phone=?,address_street=?,address_city=?,address_postal=? WHERE id=?').run(profile.firstName || '', profile.middleName || '', profile.lastName || '', profile.phone || '', profile.street || '', profile.city || '', profile.postalCode || '', id);
+  const addUser = async (name, email, role, password, { verified = true, profile = {} } = {}) => {
     const record = passwordRecord(password),id = randomUUID(),createdAt = now();
     await db.prepare('INSERT INTO users(id,email,name,role,salt,password_hash,created_at,email_verified_at) VALUES(?,?,?,?,?,?,?,?)').run(id, email, name, role, record.salt, record.passwordHash, createdAt, verified ? createdAt : '');
+    await writeProfile(id, profile);
     return await db.prepare('SELECT * FROM users WHERE id=?').get(id);
   };
   const systemAudit = createAudit(db);
@@ -74,6 +80,12 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     await systemAudit.write(user, action, booking.id, note, 200, extra);
   };
   const transaction = async (callback) => await db.transaction(callback);
+  const accountSecurity = createAccountSecurity({ db, transaction, mailer, passwordRecord });
+  const revokeRecovery = async user => {
+    await db.prepare('DELETE FROM auth_tokens WHERE user_id=?').run(user.id);
+    await db.prepare('DELETE FROM recovery_codes WHERE user_id=?').run(user.id);
+    await db.prepare('DELETE FROM login_locks WHERE identifier=?').run(hash(user.email));
+  };
   const rentalDocuments = createRentalDocuments({ db, getBooking, saveBooking, transaction, audit });
   const fleet = createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, transaction, audit, rentalDocuments, systemAudit });
   const updateBooking = async (req, action, fn) => await transaction(async () => {
@@ -302,7 +314,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     if (!mailer) D.fail('Email delivery is not configured. Ask your administrator to configure Gmail SMTP.', 503);
   };
   const sendVerification = async (user, req) => {
-    const token = await issueToken(user, 'verify_email', VERIFY_TOKEN_TTL);
+    const token = await transaction(() => issueToken(user, 'verify_email', VERIFY_TOKEN_TTL));
     if (!token) return false;
     try {
       await mailer.sendVerification({ to: user.email, name: user.name, verifyUrl: `${appOrigin(req)}/#verify-email?token=${token}` });
@@ -347,46 +359,31 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
       const user = await db.prepare('SELECT * FROM users WHERE email=?').get(email);
       if (user && !user.email_verified_at && !user.archived_at) await sendVerification(user, req);
     });
-    res.json({ ok: true, message: 'If this account still needs verification, a new link is on its way. Check your inbox and spam folder.' });
+    res.json({ ok: true, retryAfterSeconds: 60, message: 'If this account still needs verification, a new link is on its way. Check your inbox and spam folder.' });
   });
 
   app.post('/api/auth/forgot-password', async (req, res) => {
     requireMailer();
     const address = await throttle(req);
     const email = accountEmail(req.body.email);
+    let recovery;
     await quietly(async () => {
       const user = await db.prepare('SELECT * FROM users WHERE email=?').get(email);
-      if (!user || user.archived_at) return;
-      const token = await issueToken(user, 'reset_password', RESET_TOKEN_TTL);
-      if (!token) return;
-      try {
-        await mailer.sendPasswordReset({ to: user.email, name: user.name, resetUrl: `${appOrigin(req)}/#reset-password?token=${token}` });
-      } catch (error) {
-        await db.prepare('DELETE FROM auth_tokens WHERE token=?').run(hash(token));
-        throw error;
-      }
-      await systemAudit.write(user, 'Password reset requested', `Account: ${user.email}`, 'Password recovery email sent', 200, { ip: address });
+      recovery = await accountSecurity.issueRecovery(user, email, appOrigin(req));
+      if (user && !user.archived_at) await systemAudit.write(user, 'Password reset requested', `Account: ${user.email}`, 'Password recovery code requested', 200, { ip: address });
     });
-    res.json({ ok: true, message: 'If an account uses this email, a password reset link is on its way. It expires in 30 minutes.' });
+    // A failed send has the same public response shape as other recovery requests.
+    res.json({ ok: true, challengeId: recovery?.challengeId || randomBytes(24).toString('base64url'), retryAfterSeconds: recovery?.retryAfterSeconds || 60, message: 'If an account uses this email, a six-digit verification code is on its way. It expires in 10 minutes.' });
   });
 
   app.post('/api/auth/reset-password', async (req, res) => {
     const address = await throttle(req);
     const password = typeof req.body.password === 'string' ? req.body.password : '';
     if (!validPassword(password)) D.fail(PASSWORD_ERROR);
-    const user = await transaction(async () => {
-      const target = await consumeToken(req.body.token, 'reset_password');
-      if (!target) D.fail('This password reset link is invalid or has expired. Request a new one.', 400);
-      if (target.archived_at) D.fail('This account has been deactivated by an operations manager.', 403);
-      const record = passwordRecord(password);
-      // Opening the emailed link also proves the address belongs to this user.
-      await db.prepare("UPDATE users SET salt=?,password_hash=?,email_verified_at=CASE WHEN email_verified_at='' THEN ? ELSE email_verified_at END WHERE id=?").run(record.salt, record.passwordHash, now(), target.id);
-      await db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
-      await db.prepare('DELETE FROM auth_tokens WHERE user_id=?').run(target.id);
-      return target;
-    });
+    const user = await accountSecurity.completeRecovery(req.body.challengeId, req.body.code, password);
+    if (!user) D.fail('The verification code is invalid, expired, or has reached its attempt limit. Request a new code.', 400);
     req.auditUser = user;
-    await systemAudit.write(user, 'User password reset', `user:${user.id}`, 'Password reset through emailed recovery link; active sessions revoked.', 200, { ip: address });
+    await systemAudit.write(user, 'User password reset', `user:${user.id}`, 'Password reset through emailed verification code; active sessions revoked.', 200, { ip: address });
     res.json({ ok: true, email: user.email });
   });
 
@@ -409,7 +406,8 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
       // Public production accounts always require inbox confirmation.
       const verify = req.body.role === 'client' && (Boolean(mailer) || process.env.NODE_ENV === 'production');
       if (verify) requireMailer();
-      const user = await addUser(D.text(req.body.name, 'Full name', 70), email, req.body.role, password, { verified: !verify });
+      const profile = req.body.role === 'client' ? readClientProfile(req.body) : {};
+      const user = await transaction(() => addUser(profile.name || D.text(req.body.name, 'Full name', 70), email, req.body.role, password, { verified: !verify, profile }));
       req.auditUser = user;
       if (verify) {
         try { await sendVerification(user, req); }
@@ -423,11 +421,26 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
         ip: address,
         newValue: { name: user.name, email: user.email, role: user.role }
       });
-      if (verify) return res.status(201).json({ verificationRequired: true, email: user.email });
+      if (verify) return res.status(201).json({ verificationRequired: true, email: user.email, retryAfterSeconds: 60 });
       return res.status(201).json({ user: await createSession(user, res) });
     }
     const candidate = scryptSync(password, existing?.salt || 'missing-account-salt', 64);
+    const lockError = (lock) => {
+      const seconds = Math.max(1, Math.ceil((lock.lockedUntil - Date.now()) / 1000));
+      res.set('Retry-After', String(seconds));
+      const error = new Error(`Too many unsuccessful sign-in attempts. Try again in ${seconds} seconds.`);
+      error.status = 429; error.publicCode = 'ACCOUNT_LOCKED'; error.publicData = { retryAfterSeconds: seconds };
+      throw error;
+    };
+    const currentLock = await accountSecurity.loginLock(email);
+    if (currentLock.locked) lockError(currentLock);
     if (!existing || demoAccount && existing.role !== demoAccount.role || !timingSafeEqual(candidate, Buffer.from(existing.password_hash, 'hex'))) {
+      const lock = await accountSecurity.loginLock(email, { failed: true });
+      if (lock.newlyLocked) await systemAudit.write(existing || { name: email, role: 'anonymous' }, 'Account temporarily locked', 'Account security', 'Three unsuccessful sign-in attempts; access resumes after 60 seconds.', 429, { ip: address });
+      if (lock.newlyLocked && existing && !existing.archived_at && mailer?.sendAccountUnlock) {
+        try { await mailer.sendAccountUnlock({ to: existing.email, name: existing.name, loginUrl: `${appOrigin(req)}/#login` }); }
+        catch { console.error('DrivePulse could not send the account unlock notification.'); }
+      }
       await systemAudit.write(
         { id: existing?.id || null, name: email, role: existing?.role || 'anonymous' },
         'Failed login attempt',
@@ -436,6 +449,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
         401,
         { ip: address, alertType: 'Failed login attempt' }
       );
+      if (lock.locked) lockError(lock);
       D.fail('Email, username or password is incorrect.', 401);
     }
     if (existing.archived_at) {
@@ -457,6 +471,8 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
       throw error;
     }
     await db.prepare('DELETE FROM auth_attempts WHERE address=?').run(address);
+    const finalLock = await accountSecurity.loginLock(email, { success: true });
+    if (finalLock.locked) lockError(finalLock);
     req.auditUser = existing;
     await systemAudit.write(existing, 'User sign in', `Account: ${existing.email}`, 'Successful user authentication', 200, { ip: address });
     res.json({ user: await createSession(existing, res) });
@@ -831,15 +847,16 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   });
 
   app.post('/api/manager/users', requireManager, async (req, res) => res.status(201).json(await transaction(async () => {
-    const name = D.text(req.body.name, 'Full name', 70);
     const email = D.text(req.body.email, 'Email', 160).toLowerCase();
     const role = req.body.role;
+    const profile = role === 'client' ? readClientProfile(req.body) : {};
+    const name = profile.name || D.text(req.body.name, 'Full name', 140);
     const password = typeof req.body.password === 'string' ? req.body.password : '';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) D.fail('Enter a valid email address.');
     if (!['client', 'agent', 'mechanic', 'manager'].includes(role)) D.fail('Choose a valid role.');
     if (!validPassword(password)) D.fail(PASSWORD_ERROR);
     if (await db.prepare('SELECT id FROM users WHERE email=?').get(email)) D.fail('An account already uses this email.', 409);
-    const created = await addUser(name, email, role, password);
+    const created = await addUser(name, email, role, password, { profile });
     await systemAudit.write(req.user, 'User account created', `user:${created.id}`, `${name} (${role})`, 200, { oldValue: null, newValue: { name, email, role } });
     return publicUser(created);
   })));
@@ -851,6 +868,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     const record = passwordRecord(req.body.password);
     await db.prepare('UPDATE users SET salt=?,password_hash=? WHERE id=?').run(record.salt, record.passwordHash, target.id);
     await db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+    await revokeRecovery(target);
     await systemAudit.write(req.user, 'User password reset', `user:${target.id}`, 'Password reset by Admin; active sessions revoked.');
     return { ok: true };
   })));
@@ -859,7 +877,8 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     const target = await db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
     if (!target) D.fail('User not found.', 404);
     const role = req.body.role || target.role;
-    const name = req.body.name === undefined ? target.name : D.text(req.body.name, 'Full name', 70);
+    const profile = role === 'client' && req.body.firstName !== undefined ? readClientProfile(req.body) : null;
+    const name = profile?.name || (req.body.name === undefined ? target.name : D.text(req.body.name, 'Full name', 140));
     const email = req.body.email === undefined ? target.email : D.text(req.body.email, 'Email', 160).toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) D.fail('Enter a valid email address.');
     if (await db.prepare('SELECT id FROM users WHERE email=? AND id<>?').get(email, target.id)) D.fail('This email is already registered.', 409);
@@ -867,7 +886,11 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     if (target.id === req.user.id && role !== 'manager') D.fail('You cannot remove your own operations-manager role.');
     const oldVal = { name: target.name, role: target.role, email: target.email };
     await db.prepare('UPDATE users SET name=?,role=?,email=? WHERE id=?').run(name, role, email, target.id);
-    if (role !== target.role || email !== target.email) await db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+    if (profile) await writeProfile(target.id, profile);
+    if (role !== target.role || email !== target.email) {
+      await db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+      await revokeRecovery(target);
+    }
     await systemAudit.write(req.user, role !== target.role ? 'User role updated' : 'Profile updated', `user:${target.id}`, `${target.email}: ${oldVal.role} → ${role}`, 200, { oldValue: oldVal, newValue: { name, role, email } });
     return publicUser(await db.prepare('SELECT * FROM users WHERE id=?').get(target.id));
   })));
@@ -881,6 +904,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     const archivedAt = now();
     await db.prepare('UPDATE users SET archived_at=?,archived_by=?,archive_reason=? WHERE id=?').run(archivedAt, req.user.name, reason, target.id);
     await db.prepare('DELETE FROM sessions WHERE user_id=?').run(target.id);
+    await revokeRecovery(target);
     await systemAudit.write(req.user, 'User account deactivated', `user:${target.id}`, `${target.email}: ${reason}`, 200, {
       oldValue: { status: 'active', role: target.role },
       newValue: { status: 'archived', archivedBy: req.user.name, reason }

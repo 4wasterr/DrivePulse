@@ -66,7 +66,7 @@ test('production API accepts exact deployment and custom origins while rejecting
     'https://www.drivepulse.example.com',
     'https://rental.example.com'
   ]) {
-    const response = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'missing@example.com', password: 'StrongPass123!' }) });
+    const response = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `${new URL(origin).hostname.replaceAll('.', '-')}@example.com`, password: 'StrongPass123!' }) });
     assert.equal(response.status, 401, `${origin} should reach authentication`);
     assert.equal(response.headers.get('access-control-allow-origin'), origin);
   }

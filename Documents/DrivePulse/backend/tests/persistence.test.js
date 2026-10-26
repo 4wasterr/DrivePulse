@@ -23,7 +23,7 @@ test('accounts, sessions, uploads, tickets and audits survive a local API restar
     return `http://127.0.0.1:${server.address().port}/api`;
   }
   let base = await start();
-  const signup = await fetch(base + '/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'client', name: 'Persistent client', email: 'persistent@example.com', password: 'StrongPass123!' }) });
+  const signup = await fetch(base + '/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'client', name: 'Persistent client', firstName: 'Persistent', lastName: 'client', phone: '0917 123 4567', street: '12 Main Street', city: 'Quezon City', postalCode: '1100', email: 'persistent@example.com', password: 'StrongPass123!' }) });
   assert.equal(signup.status, 201);
   const cookie = signup.headers.get('set-cookie').split(';')[0];
   const file = Buffer.from('%PDF-1.7\npersisted test document');

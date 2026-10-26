@@ -6,9 +6,9 @@ import HeroCarousel from './HeroCarousel.jsx'
 import { workspaceHome, workspaceRoles } from '../../utils/roles.js'
 
 const steps = [
-  { number: '01', icon: 'shield', title: 'Sign in with your account.', copy: 'Use the same sign-in page whether you are a client, booking agent, fleet mechanic or operations manager.' },
-  { number: '02', icon: 'grid', title: 'Open your assigned workspace.', copy: 'Your account automatically opens the tools and information available to your role.' },
-  { number: '03', icon: 'check', title: 'Keep every task connected.', copy: 'Follow reservations, vehicle readiness and operational updates in one system.' },
+  { number: '01', icon: 'shield', title: 'Capture every reservation.', copy: 'Coordinate online and walk-in bookings with vehicle availability, rental schedules, and customer requirements.' },
+  { number: '02', icon: 'grid', title: 'Verify fleet readiness.', copy: 'Connect document checks, payment records, and inspection evidence before authorizing vehicle dispatch.' },
+  { number: '03', icon: 'check', title: 'Control the rental lifecycle.', copy: 'Track handovers, returns, maintenance, deposits, and operational exceptions in a shared system of record.' },
 ]
 
 function Brand() {
@@ -44,33 +44,33 @@ export default function LandingPage({ user, section = 'home' }) {
       <HeroCarousel><div className="landing-container landing-hero-inner">
         <div className="landing-hero-copy">
           <p className="landing-eyebrow">FLEET & RENTAL OPERATIONS</p>
-          <h1 id="landing-title">One platform.<br /><span>Every role connected.</span></h1>
-          <p className="landing-hero-description">Reservations, vehicle readiness and daily operations, together in DrivePulse. Sign in to open the workspace assigned to your account.</p>
-          <div className="landing-hero-actions"><a href={destination} className="button button-dark">{action}<Icon name="arrow" /></a><a className="landing-text-link" href="#workspaces">See the workspaces<Icon name="down" size={18} /></a></div>
-          <p className="landing-access-note"><Icon name="shield" size={17} />{user ? 'Signed in as ' + role?.name + ' · ' + user.name : 'One sign-in for clients and staff. Your account determines your workspace.'}</p>
+          <h1 id="landing-title">Car rental operations.<br /><span>Fleet management, unified.</span></h1>
+          <p className="landing-hero-description">DrivePulse connects booking logistics, fleet readiness, dispatch, maintenance, and financial records in one car rental operations platform.</p>
+          <div className="landing-hero-actions"><a href={destination} className="button button-dark">{action}<Icon name="arrow" /></a><a className="landing-text-link" href="#workspaces">Explore platform capabilities<Icon name="down" size={18} /></a></div>
+          <p className="landing-access-note"><Icon name="shield" size={17} />{user ? 'Signed in as ' + role?.name + ' · ' + user.name : 'Role-based access keeps booking, maintenance, and management responsibilities clearly defined.'}</p>
         </div>
         <aside className="landing-operation-card" aria-label="Connected workspaces">
           <div className="landing-operation-heading"><span className="landing-pulse" /><span>ONE CONNECTED OPERATION</span></div>
-          <h2>A clear place<br />for every task.</h2>
+          <h2>Operational visibility.<br />Accountable teams.</h2>
           <div className="landing-operation-roles">{workspaceRoles.map(item => <div key={item.id}><span className="landing-role-icon"><Icon name={item.icon} size={21} /></span><div><strong>{item.name}</strong><span>{item.description}</span></div><Icon name="check" size={16} /></div>)}</div>
-          <div className="landing-operation-foot"><Icon name="road" size={18} /><span>From reservation to road readiness.</span></div>
+          <div className="landing-operation-foot"><Icon name="road" size={18} /><span>From booking confirmation to controlled vehicle dispatch.</span></div>
         </aside>
       </div></HeroCarousel>
 
       <section className="landing-container landing-section" id="workspaces" aria-labelledby="workspaces-title">
-        <div className="landing-section-heading"><div><p className="landing-eyebrow">BUILT AROUND YOUR ROLE</p><h2 id="workspaces-title">Four roles. One shared system.</h2></div><p>Each workspace focuses on the tasks its users need to complete.</p></div>
+        <div className="landing-section-heading"><div><p className="landing-eyebrow">BUILT FOR RENTAL OPERATIONS</p><h2 id="workspaces-title">Coordinate the entire rental operation.</h2></div><p>Give clients, booking agents, mechanics, and managers the operational records and controls required for reliable fleet utilization.</p></div>
         <div className="landing-role-grid">{workspaceRoles.map(item => <article key={item.id} className="landing-role-card"><span className="landing-role-icon"><Icon name={item.icon} size={24} /></span><h3>{item.name}</h3><p>{item.description}</p><ul>{item.tasks.map(task => <li key={task}><Icon name="check" size={14} /><span>{task}</span></li>)}</ul></article>)}</div>
-        <p className="landing-role-note"><Icon name="info" size={17} />You do not need to choose a role when signing in. Your account opens the appropriate workspace automatically.</p>
+        <p className="landing-role-note"><Icon name="info" size={17} />Role-based workspaces connect customer bookings, dispatch coordination, fleet maintenance, and management oversight.</p>
       </section>
 
       <section className="landing-how-section" id="how-it-works" aria-labelledby="how-title"><div className="landing-container">
-        <div className="landing-section-heading"><div><p className="landing-eyebrow">GETTING STARTED</p><h2 id="how-title">A straightforward way in.</h2></div></div>
+        <div className="landing-section-heading"><div><p className="landing-eyebrow">THE OPERATING WORKFLOW</p><h2 id="how-title">A consistent process from booking to return.</h2></div></div>
         <ol className="landing-steps">{steps.map(step => <li key={step.number}><span className="landing-step-number">{step.number}</span><Icon name={step.icon} size={24} /><h3>{step.title}</h3><p>{step.copy}</p></li>)}</ol>
       </div></section>
 
-      <section className="landing-container landing-access-section" aria-labelledby="access-title"><div><p className="landing-eyebrow">YOUR WORKSPACE IS READY</p><h2 id="access-title">Start with your account.</h2><p>{user ? 'Return to your workspace to continue where you left off.' : 'Clients and staff use the same sign-in page.'}</p></div><div className="landing-access-actions"><a className="button button-dark" href={destination}>{action}<Icon name="arrow" /></a>{!user && <p>New client? <a href="#signup">Create a client account</a><small>Staff accounts are provided by your Admin.</small></p>}</div></section>
+      <section className="landing-container landing-access-section" aria-labelledby="access-title"><div><p className="landing-eyebrow">CENTRALIZE YOUR RENTAL OPERATIONS</p><h2 id="access-title">Put DrivePulse to work.</h2><p>{user ? 'Return to your operational workspace to review bookings, fleet readiness, and outstanding actions.' : 'Access the platform to coordinate rental demand, vehicle dispatch, and fleet performance.'}</p></div><div className="landing-access-actions"><a className="button button-dark" href={destination}>{action}<Icon name="arrow" /></a>{!user && <p>New client? <a href="#signup">Create a client account</a><small>Staff accounts are provided by your Admin.</small></p>}</div></section>
     </main>
 
-    <footer className="landing-footer"><div className="landing-container"><Brand /><p>One fleet. Every role. Connected.</p><span>© {new Date().getFullYear()} DrivePulse.</span><a className="landing-text-link" href="#home">Back to top<Icon name="arrow" size={17} /></a></div></footer>
+    <footer className="landing-footer"><div className="landing-container"><Brand /><p>DrivePulse · Car rental and fleet operations management.</p><span>© {new Date().getFullYear()} DrivePulse.</span><a className="landing-text-link" href="#home">Back to top<Icon name="arrow" size={17} /></a></div></footer>
   </div>
 }

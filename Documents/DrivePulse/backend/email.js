@@ -128,20 +128,25 @@ function createMailer({ env = process.env, smtpTransport = null } = {}) {
       const text = `Hi ${displayName},\n\nWelcome to DrivePulse. Verify your client account by opening this link:\n${verifyUrl}\n\nThis verification link expires in 24 hours. If you did not create a DrivePulse account, you can ignore this email.`;
       return deliver({ to, subject, html, text });
     },
-    async sendPasswordReset({ to, name, resetUrl }) {
+    async sendAccountUnlock({ to, name, loginUrl }) {
+      const subject = 'Unlock your DrivePulse account';
+      const html = renderEmailLayout({ eyebrow: 'Account security', heading: 'Unlock your account.', greeting: `Hi ${name || 'there'},`, body: 'Three unsuccessful sign-in attempts temporarily locked your DrivePulse account. Wait one minute, then use the button below to sign in again. If these attempts were not yours, reset your password.', actionLabel: 'Unlock your account', actionUrl: loginUrl, expiryNote: 'The account becomes accessible automatically after the 60-second cooldown. This button opens sign-in and does not bypass the cooldown.', footerNote: 'Never share your password or verification codes.' });
+      return deliver({ to, subject, html, text: `Hi ${name || 'there'},\n\nUnlock your account: three unsuccessful sign-in attempts caused a 60-second cooldown. Your account becomes accessible automatically after one minute. Sign in again at ${loginUrl}\n\nIf these attempts were not yours, use Forgot password to secure your account.` });
+    },
+    async sendPasswordReset({ to, name, code, resetUrl }) {
       const displayName = name || 'there';
       const subject = 'Reset your DrivePulse password';
       const html = renderEmailLayout({
         eyebrow: 'Password Recovery',
         heading: 'Reset your password.',
         greeting: `Hi ${displayName},`,
-        body: 'We received a request to reset the password for your DrivePulse account. Click the button below to set a new password and return to DrivePulse.',
-        actionLabel: 'Reset password',
+        body: `Your password recovery verification code is ${code}. Enter this six-digit code in DrivePulse to set a new password.`,
+        actionLabel: 'Enter verification code',
         actionUrl: resetUrl,
-        expiryNote: 'This password recovery link expires in 30 minutes and can only be used once.',
+        expiryNote: 'This code expires in 10 minutes and can only be used once. Five unsuccessful attempts invalidate it.',
         footerNote: 'If you did not request a password reset, you can safely ignore this email—your current password will remain unchanged.',
       });
-      const text = `Hi ${displayName},\n\nReset your DrivePulse password by opening this link:\n${resetUrl}\n\nThis link expires in 30 minutes and can only be used once. If you did not request a password reset, you can ignore this email.`;
+      const text = `Hi ${displayName},\n\nYour DrivePulse verification code is: ${code}\n\nEnter it at ${resetUrl}\n\nThis code expires in 10 minutes and can only be used once. Five unsuccessful attempts invalidate it. If you did not request a password reset, you can ignore this email.`;
       return deliver({ to, subject, html, text });
     },
   };

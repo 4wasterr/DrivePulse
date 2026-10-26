@@ -7,8 +7,10 @@ async function testDatabase() {
   const engine = new PGlite();
   await engine.exec(postgresSchema);
   const query = async (sql, params = []) => {
-    const result = await engine.query(sql, params);
-    return { rows: result.rows, rowCount: result.affectedRows || 0 };
+    // Like pg's simple-query protocol, unparameterized migrations may contain
+    // several statements (including DO blocks). PGlite.query always prepares SQL.
+    const result = params.length ? await engine.query(sql, params) : (await engine.exec(sql)).at(-1);
+    return { rows: result?.rows || [], rowCount: result?.affectedRows || 0 };
   };
   // PGlite exposes one session. Lease it for the entire transaction, like pg.Pool.
   let pending = Promise.resolve();

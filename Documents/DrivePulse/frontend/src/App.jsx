@@ -67,7 +67,11 @@ export default function App() {
   const navigate = to => { window.location.assign(`#${to}`); setPage(to) }
   const authenticate = (to = 'overview') => { returnTo.current = to; navigate('login') }
   async function signedIn(user) { await refresh(); navigate(user.role !== 'client' ? workspaceHome(user.role) : clientPages.includes(page) ? page : returnTo.current) }
-  async function logout() { await api('/logout', { method: 'POST' }); sequence.current += 1; returnTo.current = 'overview'; navigationTrail.current = []; setWorkspace(null); navigate('home') }
+  async function logout() {
+    try { await api('/logout', { method: 'POST' }) }
+    catch (error) { if (error.code !== 'ACTION_CANCELLED') setConnectionError(error.message); return }
+    sequence.current += 1; returnTo.current = 'overview'; navigationTrail.current = []; setWorkspace(null); navigate('home')
+  }
   useEffect(() => {
     if (!authPages.includes(page) && clientPages.includes(page)) {
       returnTo.current = page

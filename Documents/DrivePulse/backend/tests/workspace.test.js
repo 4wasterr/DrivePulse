@@ -19,7 +19,7 @@ async function fixture(t, options = {}) {
     return { status: response.status, data, cookie: response.headers.get('set-cookie')?.split(';')[0], headers: response.headers };
   }
   const account = async (role, name = role) => {
-    const result = await request('/auth/signup', { method: 'POST', body: { role, name, email: `${name}@example.com`, password: 'StrongPass123!' } });
+    const result = await request('/auth/signup', { method: 'POST', body: { role, name, firstName: name, lastName: 'Client', phone: '0917 123 4567', street: '12 Main Street', city: 'Quezon City', postalCode: '1100', email: `${name}@example.com`, password: 'StrongPass123!' } });
     assert.equal(result.status, 201, JSON.stringify(result.data)); return result;
   };
   const client = await account('client', 'alex'), agent = await account('agent', 'jamie');
@@ -86,7 +86,7 @@ test('input validation rejects invalid customer details without saving reservati
 test('accounts use hashed passwords, role checks, protected sessions, and origin checks', async t => {
   const f = await fixture(t);
   const session = await f.request('/session', { cookie: f.client.cookie });
-  assert.equal(session.data.user.role, 'client'); assert.equal(session.data.user.name, 'alex');
+  assert.equal(session.data.user.role, 'client'); assert.equal(session.data.user.name, 'alex Client');
   assert.ok(f.client.headers.get('set-cookie').includes('HttpOnly')); assert.ok(f.client.headers.get('set-cookie').includes('SameSite=Strict'));
   const record = await f.db.prepare('SELECT * FROM users WHERE email=?').get('alex@example.com');
   assert.notEqual(record.password_hash, 'StrongPass123!'); assert.equal(record.password_hash.length, 128);
@@ -622,7 +622,7 @@ test('agreement previews use server prices and profile, reject stale terms, and 
   assert.equal((await f.request('/bookings/agreement-preview', { method: 'POST', body: dates })).status, 401);
   assert.equal((await f.request('/bookings/agreement-preview', { method: 'POST', cookie: f.agent.cookie, body: dates })).status, 403);
   const first = await preview(); assert.equal(first.status, 200, JSON.stringify(first.data));
-  assert.equal(first.data.renter.name, 'alex'); assert.equal(first.data.quote.rental, 12600); assert.equal(first.data.quote.dailyRate, 4200);
+  assert.equal(first.data.renter.name, 'alex Client'); assert.equal(first.data.quote.rental, 12600); assert.equal(first.data.quote.dailyRate, 4200);
   assert.match(first.data.vehicle.fleetCode, /^CAR-/); assert.match(first.data.terms, /AUTHORIZED OPERATION/);
   assert.equal((await f.db.prepare('SELECT COUNT(*) AS count FROM rental_documents').get()).count, 0);
   assert.equal((await f.request('/bookings/agreement-preview', { method: 'POST', cookie: f.client.cookie, body: f.dates('bmw-3', -2, -1) })).status, 400);
