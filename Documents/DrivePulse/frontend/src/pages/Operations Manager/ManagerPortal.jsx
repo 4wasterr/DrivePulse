@@ -14,6 +14,7 @@ import RiskForm from './components/RiskForm.jsx'
 import AddVehicleModal from './components/AddVehicleModal.jsx'
 import VehicleProfileModal from './components/VehicleProfileModal.jsx'
 import EscalateOverdueModal from './components/EscalateOverdueModal.jsx'
+import ExtensionApprovals from '../../components/operations/ExtensionApprovals.jsx'
 
 const navigation = [
   ['overview', 'grid', 'Fleet & oversight'],
@@ -59,6 +60,7 @@ export default function ManagerPortal({ page, user, operations, onRefresh, onNav
   </>
 
   return <StaffLayout user={user} navigation={navigation} section={section} title={title} approvals={approvals} notice={notice} error={error} setNotice={setNotice} setError={setError} onLogout={onLogout} dialogs={dialogs}>
+    {['overview', 'approvals'].includes(section) && <ExtensionApprovals bookings={bookings} onRefresh={onRefresh} onNotice={setNotice} />}
     {section === 'overview' && <ManagerOverviewPage operations={operations} fleetFilters={fleetFilters} onRefresh={onRefresh} setDialog={setDialog} onSection={goSection} />}
     {section === 'approvals' && <ApprovalPanel approvals={approvals} bookings={bookings} flags={flags} risks={risks} setDialog={setDialog} onRequest={() => setDialog({ kind: 'financial-request' })} onReview={a => setDialog({ kind: 'approval-review', approval: a })} />}
     {section === 'analytics' && <Analytics />}

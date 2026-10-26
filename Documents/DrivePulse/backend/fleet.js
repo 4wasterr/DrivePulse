@@ -2,6 +2,7 @@ const { asyncMap } = require('./asyncCollections');
 const { randomUUID } = require('node:crypto');
 const D = require('./domain');
 const inspectionChecklist = require('../shared/inspectionChecklist.json');
+const { normalizeConditions, conditionProblem } = require('../shared/inspection.mjs');
 const { renewalNotices } = require('./vehicleProfile');
 
 const STAGES = ['Available', 'Rented', 'Under Inspection', 'Maintenance', 'Overdue', 'Out of Service'];
@@ -59,7 +60,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     return Math.max(0, Math.round((type === 'deposit' ? bill.depositPaid : bill.rentalPaid) * 100) - approved) / 100;
   };
   const present = async (b) => ({ ...D.present(b), dispatchBlocks: await dispatchBlocks(b), refundableRental: await returnable(b, 'refund'), refundableDeposit: await returnable(b, 'deposit') });
-  const mechanicBooking = (b) => ({ id: b.id, vehicleId: b.vehicleId, start: b.start, end: b.end, startTime: b.startTime, endTime: b.endTime, status: b.status, version: b.version, inspection: b.inspection, returnInspection: b.returnInspection, returnedAt: b.returnedAt, sample: b.sample });
+  const mechanicBooking = (b) => ({ id: b.id, vehicleId: b.vehicleId, start: b.start, end: b.end, startTime: b.startTime, endTime: b.endTime, status: b.status, version: b.version, inspection: b.inspection, returnInspection: b.returnInspection, returnedAt: b.returnedAt, sample: b.sample, driverName: b.renter?.name, verificationStatus: D.verification(b) });
 
   async function completeDisbursement(a, b, user, mode = 'Manager exception approval') {
     const reference = `REL-${a.id.slice(0, 8).toUpperCase()}`;
@@ -173,7 +174,10 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
         if (typeof pressure !== 'number' || !Number.isFinite(pressure) || pressure < 0 || pressure > 100) D.fail('Record each tire pressure from 0 to 100 PSI.');
         tirePressure[corner] = pressure;
       }
-      if (!inspectionChecklist.every(({ key }) => input.checks?.[key] === true)) D.fail('Complete every mandatory inspection check.');
+      const checks = normalizeConditions(input.checks, inspectionChecklist);
+      const conditionError = conditionProblem(checks, inspectionChecklist, input.outcome);
+      if (conditionError) D.fail(conditionError);
+      if (input.driverVerification !== (input.type === 'clearance' ? 'not-applicable' : 'matched')) D.fail('Complete individual / driver verification before the condition record.');
       if (!['Clean', 'Needs cleaning', 'Damaged'].includes(input.cleanliness)) D.fail('Record the interior cleanliness.');
       if (!['approved', 'unsafe'].includes(input.outcome)) D.fail('Choose a safe or unsafe inspection outcome.');
       if (input.outcome === 'approved' && input.cleanliness !== 'Clean') D.fail('Clean or repair the interior before approving the vehicle.');
@@ -183,12 +187,12 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
         if (!doc || !doc.mime.startsWith('image/') || !['exterior', 'interior'].includes(p.view)) D.fail('Choose your uploaded condition photos for this vehicle.');
         return { id: doc.id, view: p.view, name: doc.name, mime: doc.mime };
       });
-      if ((await records('inspection')).some((r) => r.photos.some((p) => photos.some((photo) => photo.id === p.id)))) D.fail('Upload fresh condition photos for this inspection.');
+      if ((await records('inspection')).some((r) => (r.photos || []).some((p) => photos.some((photo) => photo.id === p.id)))) D.fail('Upload fresh condition photos for this inspection.');
       if (new Set(await asyncMap(photos, async (p) => (await db.prepare('SELECT fingerprint FROM documents WHERE id=?').get(p.id)).fingerprint)).size !== photos.length) D.fail('Use different exterior and interior photographs.');
-      const damageFlag = input.damageFlag === true || input.outcome === 'unsafe' || input.cleanliness === 'Damaged';
+      const damageFlag = input.damageFlag === true || input.outcome === 'unsafe' || input.cleanliness === 'Damaged' || Object.values(checks).some(value => ['Damaged', 'Needs Repair'].includes(value));
       const cleanReturn = input.type === 'post-return' && input.outcome === 'approved' && input.cleanliness === 'Clean' && !damageFlag && fuelLevel >= 100;
       const inspectedVehicle = (await fleet()).find(v => v.id === s.id);
-      const report = { id: randomUUID(), vehicle: { id: s.id, name: inspectedVehicle.name, fleetCode: inspectedVehicle.fleetCode, plate: inspectedVehicle.plate || '' }, vehicleId: s.id, bookingId: b?.id || null, type: input.type, status: input.outcome, role: 'mechanic', odometer, fuelLevel, tirePressure, cleanliness: input.cleanliness, damageFlag, cleanReturn, scratches: D.text(input.scratches, 'Exterior condition / scratches', 1500), note: D.text(input.note, 'Inspection notes', 1500, input.outcome === 'unsafe'), checks: Object.fromEntries(inspectionChecklist.map(({ key }) => [key, input.checks[key]])), photos, by: req.user.name, at: stamp() };
+      const report = { id: randomUUID(), vehicle: { id: s.id, name: inspectedVehicle.name, fleetCode: inspectedVehicle.fleetCode, plate: inspectedVehicle.plate || '' }, vehicleId: s.id, bookingId: b?.id || null, type: input.type, status: input.outcome, role: 'mechanic', odometer, fuelLevel, tirePressure, cleanliness: input.cleanliness, damageFlag, cleanReturn, scratches: D.text(input.scratches, 'Exterior condition / scratches', 1500), note: D.text(input.note, 'Inspection notes', 1500, input.outcome === 'unsafe'), checks, driverVerification: input.driverVerification || null, driverName: b?.renter?.name || null, photos, by: req.user.name, at: stamp() };
       if (b) {
         if (input.type === 'pre-dispatch') {b.inspection = report;D.invalidatePass(b);} else
         {b.returnInspection = report;D.invalidatePass(b);}
@@ -419,6 +423,6 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     }
   }
 
-  return { register, fleet, present, dispatchBlocks, operationalBlocks, records, state, save, vehicleRate, vehicle, changeState, recordReturn, saveDynamicVehicle: async (v) => await save('dynamic_vehicle', v) };
+  return { register, fleet, present, dispatchBlocks, operationalBlocks, records, state, save, vehicleRate, vehicle, changeState, recordReturn, invalidateVehiclePasses, saveDynamicVehicle: async (v) => await save('dynamic_vehicle', v) };
 }
 module.exports = { createFleet };

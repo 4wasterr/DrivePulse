@@ -60,7 +60,7 @@ export default function FleetPage({ fleet, stages, mechanic, onRefresh, setDialo
             <div className="staff-card-actions">
               <button className="button button-outline" onClick={() => setDialog({ kind: 'vehicle-profile', vehicle: v })}>Edit profile / renewals</button>
               <button className="button button-outline" onClick={() => setDialog({ kind: 'rate', vehicle: v })}>Modify rate</button>
-              <button className="text-link" onClick={() => setDialog({ kind: 'decommission', vehicle: v })}>{v.decommissionRequested ? 'Approve decommission' : 'Decommission'}</button>
+              <button className="text-link" onClick={() => setDialog({ kind: 'decommission', vehicle: v })}>{v.decommissionRequested ? 'Approve decommission' : 'Delete / archive car'}</button>
               <button className="text-link" onClick={() => setDialog({ kind: 'vehicle-history', vehicle: v })}>History<Icon name="arrow" size={14} /></button>
             </div>
           )}

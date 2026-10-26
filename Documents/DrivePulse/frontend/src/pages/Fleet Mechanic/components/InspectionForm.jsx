@@ -7,6 +7,7 @@ import Modal from '../../../components/ui/Modal.jsx'
 import Icon from '../../../components/ui/Icon.jsx'
 import VehicleIdentity from '../../../components/fleet/VehicleIdentity.jsx'
 import checklist from '../../../../../shared/inspectionChecklist.json'
+import { CONDITION_STATUSES, conditionProblem } from '../../../../../shared/inspection.mjs'
 
 export default function InspectionForm({ operations, initial, onClose, onDone }) {
   const initialType = initial.type || (operations.bookings.some(b => b.vehicleId === initial.vehicleId && ['Pending Approval', 'Ready for Dispatch'].includes(b.status)) || !initial.vehicleId ? 'pre-dispatch' : 'clearance')
@@ -31,45 +32,67 @@ export default function InspectionForm({ operations, initial, onClose, onDone })
 
 function InspectionChecklist({ vehicle, type, booking, busy, setBusy, onDone }) {
   const [outcome, setOutcome] = useState('approved'), [damageFlag, setDamageFlag] = useState(false), [error, setError] = useState('')
+  const [step, setStep] = useState(0), [driverVerification, setDriverVerification] = useState('')
+  const [checks, setChecks] = useState({})
+  const [photos, setPhotos] = useState({}), [uploading, setUploading] = useState(0)
+  async function upload(view, file) {
+    if (!file) return
+    const problem = validateFile(file)
+    if (problem || !file.type.startsWith('image/')) { setError(problem || 'Choose a condition image.'); return }
+    setUploading(count => count + 1); setError('')
+    try { const photo = await uploadConditionPhoto(vehicle.id, file); setPhotos(previous => ({ ...previous, [view]: { id: photo.id, view, name: file.name } })) }
+    catch (err) { setError(err.message) }
+    finally { setUploading(count => count - 1) }
+  }
   async function submit(event) {
-    event.preventDefault(); const data = new FormData(event.currentTarget); setBusy(true); setError('')
+    event.preventDefault()
+    if (step === 0) {
+      if (!driverVerification) { setError('Complete individual / driver verification.'); return }
+      setStep(1); setError(''); return
+    }
+    const data = new FormData(event.currentTarget); setBusy(true); setError('')
     try {
-      const checks = Object.fromEntries(checklist.map(({ key }) => [key, data.get(key) === 'on']))
-      if (!Object.values(checks).every(Boolean)) throw new Error('Verify every checklist item individually.')
-      const files = ['exterior', 'interior'].map(view => ({ view, file: data.get(view + 'Photo') }))
-      for (const { file } of files) { const problem = validateFile(file); if (problem || !file.type.startsWith('image/')) throw new Error(problem || 'Upload separate exterior and interior photos.') }
-      const photos = []
-      for (const { view, file } of files) { const photo = await uploadConditionPhoto(vehicle.id, file); photos.push({ id: photo.id, view }) }
+      const problem = conditionProblem(checks, checklist, outcome)
+      if (problem) throw new Error(problem)
+      if (uploading || !photos.exterior || !photos.interior) throw new Error('Upload separate exterior and interior photos and wait for both uploads to finish.')
       const result = await api('/mechanic/inspections', { method: 'POST', body: {
         vehicleId: vehicle.id, vehicleVersion: vehicle.version, type, bookingId: type === 'clearance' ? null : booking?.id, version: booking?.version,
         odometer: Number(data.get('odometer')), fuelLevel: Number(data.get('fuelLevel')),
         tirePressure: Object.fromEntries(['frontLeft', 'frontRight', 'rearLeft', 'rearRight'].map(key => [key, Number(data.get(key))])),
-        cleanliness: data.get('cleanliness'), scratches: data.get('scratches'), note: data.get('note'), outcome, damageFlag, checks, photos
+        cleanliness: data.get('cleanliness'), scratches: data.get('scratches'), note: data.get('note'), outcome, damageFlag, checks, photos: Object.values(photos), driverVerification
       } })
       await onDone(outcome === 'unsafe' ? 'Inspection saved. Vehicle release is blocked.' : result.cleanReturn ? 'Inspection saved. Clean return verified and Security Deposit release recorded.' : 'Inspection saved with condition photo proof.')
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
   return <ValidatedForm className="staff-form inspection-form" onSubmit={submit}><fieldset disabled={busy}>
-    <h3>01 / Measured readings</h3>
+    <div className="booking-steps" aria-label="Inspection progress"><span aria-current={step === 0 ? 'step' : undefined}>01 / Individual / driver verification</span><span aria-current={step === 1 ? 'step' : undefined}>02 / Vehicle condition record</span></div>
+    <fieldset hidden={step !== 0} disabled={step !== 0}>
+      <h3>Individual / driver verification</h3>
+      {type !== 'clearance' && <p className="info-note">Driver: {booking?.driverName || booking?.renter?.name || 'See reservation'} · Agent ID review: {booking?.verificationStatus || 'Pending review'}. Match the individual and presented identification to the reservation before proceeding.</p>}
+      <label className="form-field"><span>{type === 'clearance' ? 'Technician verification' : 'Driver / identification match'}</span><ValidatedField as="select" name="driverVerification" required value={driverVerification} onChange={e => { setDriverVerification(e.target.value); setError('') }}><option value="" disabled>Select verification result</option><option value={type === 'clearance' ? 'not-applicable' : 'matched'}>{type === 'clearance' ? 'Vehicle identity verified; no driver for safety clearance' : 'Individual and identification match the named driver'}</option></ValidatedField></label>
+    </fieldset>
+    <fieldset hidden={step !== 1} disabled={step !== 1}>
+    <h3>Measured readings</h3>
     <div className="form-grid">
       <label className="form-field"><span>Odometer (km)</span><ValidatedField name="odometer" type="number" required min={vehicle.odometer ?? 0} max="10000000" step="0.01" placeholder={vehicle.odometer == null ? 'Read at the vehicle' : 'Last reading: ' + vehicle.odometer} /></label>
       <label className="form-field"><span>Fuel / battery level (%)</span><ValidatedField name="fuelLevel" type="number" required min="0" max="100" step="0.01" /></label>
       {[['frontLeft', 'Front left'], ['frontRight', 'Front right'], ['rearLeft', 'Rear left'], ['rearRight', 'Rear right']].map(([key, label]) => <label className="form-field" key={key}><span>{label} tire pressure (PSI)</span><ValidatedField name={key} type="number" required min="0" max="100" step="0.1" /></label>)}
     </div>
-    <h3>02 / Condition record</h3>
+    <h3>Condition record</h3>
     <label className="form-field"><span>Exterior condition / damage locations</span><ValidatedField as="textarea" name="scratches" required maxLength={1500} rows={3} placeholder="Describe observed damage and its location, or explicitly record no visible damage." /></label>
     <label className="form-field"><span>Interior condition</span><ValidatedField as="select" name="cleanliness" required defaultValue=""><option value="" disabled>Select observed condition</option><option>Clean</option><option>Needs cleaning</option><option>Damaged</option></ValidatedField></label>
-    <label className="checkbox-label"><ValidatedField type="checkbox" checked={damageFlag} onChange={e => setDamageFlag(e.target.checked)} />Damage observed / requires repair{type === 'post-return' && ' (holds Security Deposit for review)'}</label>
-    <h3>03 / Individual verification</h3>
-    <div className="staff-checklist">{checklist.map(({ key, label }) => <label className="checkbox-label" key={key}><ValidatedField type="checkbox" name={key} required />{label}</label>)}</div>
-    <h3>04 / Fresh photo proof</h3>
+    <label className="form-field"><span>Damage observed / requires repair{type === 'post-return' && ' (holds Security Deposit for review)'}</span><ValidatedField as="select" name="damageFlag" value={damageFlag ? 'yes' : 'no'} onChange={e => setDamageFlag(e.target.value === 'yes')}><option value="no">No damage observed</option><option value="yes">Damage / repair required</option></ValidatedField></label>
+    <div className="form-grid">{checklist.map(({ key, label }) => <label className="form-field" key={key}><span>{label}</span><ValidatedField as="select" name={key} required value={checks[key] || ''} onChange={e => setChecks(previous => ({ ...previous, [key]: e.target.value }))}><option value="" disabled>Select status</option>{CONDITION_STATUSES.map(status => <option key={status}>{status}</option>)}</ValidatedField></label>)}</div>
+    <h3>Fresh photo proof</h3>
     <p className="workspace-muted">Separate exterior and interior photos · JPG, PNG or WebP · up to 4 MB each.</p>
-    <div className="form-grid">{['exterior', 'interior'].map(view => <label className="form-field staff-photo-input" key={view}><span><Icon name="camera" size={18} />{view === 'exterior' ? 'Exterior photo' : 'Interior photo'}</span><ValidatedField type="file" name={view + 'Photo'} accept="image/jpeg,image/png,image/webp" required /></label>)}</div>
-    <h3>05 / Assessment</h3>
+    <div className="form-grid">{['exterior', 'interior'].map(view => <label className="form-field staff-photo-input" key={view}><span><Icon name="camera" size={18} />{view === 'exterior' ? 'Exterior photo' : 'Interior photo'}</span><ValidatedField type="file" name={view + 'Photo'} accept="image/jpeg,image/png,image/webp" disabled={uploading > 0} onChange={e => { upload(view, e.target.files[0]); e.target.value = '' }} /><small role="status">{photos[view] ? `Uploaded: ${photos[view].name}` : 'Upload required'}</small></label>)}</div>
+    {uploading > 0 && <p role="status">Uploading condition photo…</p>}
+    <h3>Assessment</h3>
     <label className="form-field"><span>Inspection outcome</span><ValidatedField as="select" name="outcome" value={outcome} onChange={e => setOutcome(e.target.value)}><option value="approved">Safe / approved</option><option value="unsafe">Unsafe / Out of Service</option></ValidatedField></label>
     <label className="form-field"><span>Inspection notes{outcome === 'unsafe' ? ' (required)' : ''}</span><ValidatedField as="textarea" name="note" required={outcome === 'unsafe'} maxLength={1500} rows={3} /></label>
     {type === 'post-return' && <p className="info-note">An approved clean return with full fuel and no damage flags qualifies for automatic Security Deposit release.</p>}
+    </fieldset>
     {error && <p className="error-banner" role="alert">{error}</p>}
-    <footer className="inspection-footer"><button type="submit" className="button button-dark" disabled={busy || type !== 'clearance' && !booking}><Icon name="check" size={18} />{busy ? 'Saving…' : 'Save Inspection'}</button></footer>
+    <footer className="inspection-footer">{step === 1 && <button type="button" className="button button-outline" disabled={busy || uploading > 0} onClick={() => { setStep(0); setError('') }}>Back to verification</button>}<button type="submit" className="button button-dark" disabled={busy || uploading > 0 || type !== 'clearance' && !booking || step === 1 && (!photos.exterior || !photos.interior)}><Icon name="check" size={18} />{busy ? 'Saving…' : step === 0 ? 'Continue to condition record' : 'Save Inspection'}</button></footer>
   </fieldset></ValidatedForm>
 }

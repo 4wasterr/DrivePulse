@@ -45,7 +45,7 @@ async function fixture(t, options = {}) {
     const vehicleId = booking.vehicleId, data = await operations();
     const photos = [];
     for (const view of ['exterior', 'interior']) photos.push({ id: (await photo(vehicleId, `${view}-${Date.now()}-${Math.random()}`)).id, view });
-    return request('/mechanic/inspections', { method: 'POST', cookie: mechanic.cookie, body: { vehicleId, vehicleVersion: data.fleet.find(v => v.id === vehicleId).version, bookingId: booking.id, version: booking.version, type, odometer: 12000, fuelLevel: 85, tirePressure: { frontLeft: 33, frontRight: 33, rearLeft: 32, rearRight: 32 }, cleanliness: 'Clean', scratches: 'No visible scratches.', checks: { tyres: true, controls: true, exterior: true, interior: true, fuel: true }, photos, outcome: 'approved', ...extra } });
+    return request('/mechanic/inspections', { method: 'POST', cookie: mechanic.cookie, body: { vehicleId, vehicleVersion: data.fleet.find(v => v.id === vehicleId).version, bookingId: booking.id, version: booking.version, type, odometer: 12000, fuelLevel: 85, tirePressure: { frontLeft: 33, frontRight: 33, rearLeft: 32, rearRight: 32 }, cleanliness: 'Clean', scratches: 'No visible scratches.', checks: { tyres: true, controls: true, exterior: true, interior: true, fuel: true }, driverVerification: type === 'clearance' ? 'not-applicable' : 'matched', photos, outcome: 'approved', ...extra } });
   };
   const verifyAll = async booking => {
     booking = (await operations(agent.cookie)).bookings.find(b => b.id === booking.id);
@@ -645,4 +645,102 @@ test('agreement previews use server prices and profile, reject stale terms, and 
   assert.equal((await f.request('/rental-documents/' + b.confirmation.id, { cookie: other.cookie })).status, 404);
   const walkin = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('toyota-camry'), renter: { name: 'Walk In', phone: '09171234567' } } });
   assert.equal(walkin.status, 201); assert.equal(walkin.data.confirmation.kind, 'confirmation');
+});
+
+
+test('renter extensions wait for staff approval and only approved requests update the contract', async t => {
+  const f = await fixture(t); let b = await f.book();
+  b.status = 'Ready for Dispatch';
+  await f.db.prepare('UPDATE bookings SET payload=? WHERE id=?').run(JSON.stringify(b), b.id);
+  const before = (await f.db.prepare('SELECT COUNT(*) AS count FROM rental_documents WHERE booking_id=?').get(b.id)).count;
+  const request = await f.request('/bookings/' + b.id + '/extend', { method: 'POST', cookie: f.client.cookie, body: { version: b.version, end: f.date(6), endTime: '10:00' } });
+  assert.equal(request.status, 200, JSON.stringify(request.data));
+  let pending = request.data, extension = pending.extensionRequests[0];
+  assert.equal(extension.status, 'pending'); assert.equal(pending.end, b.end); assert.equal(pending.rental, b.rental); assert.equal(pending.days, b.days);
+  assert.equal((await f.db.prepare('SELECT COUNT(*) AS count FROM rental_documents WHERE booking_id=?').get(b.id)).count, before);
+  assert.equal((await f.request('/bookings/' + b.id + '/extend', { method: 'POST', cookie: f.client.cookie, body: { version: pending.version, end: f.date(7), endTime: '10:00' } })).status, 409);
+  const path = '/bookings/' + b.id + '/extensions/' + extension.id + '/review';
+  for (const cookie of [f.client.cookie, f.mechanic.cookie]) assert.equal((await f.request(path, { method: 'POST', cookie, body: { version: pending.version, decision: 'approved', reason: 'Schedule checked' } })).status, 403);
+  assert.equal((await f.request(path, { method: 'POST', cookie: f.manager.cookie, body: { version: b.version, decision: 'approved', reason: 'Schedule checked' } })).status, 409);
+  const approved = await f.request(path, { method: 'POST', cookie: f.manager.cookie, body: { version: pending.version, decision: 'approved', reason: 'Future schedule is clear' } });
+  assert.equal(approved.status, 200, JSON.stringify(approved.data));
+  assert.equal(approved.data.end, f.date(6)); assert.equal(approved.data.days, 4); assert.equal(approved.data.rental, 16800);
+  assert.equal(approved.data.extensionRequests[0].status, 'approved'); assert.equal(approved.data.extensionRequests[0].reviewedRole, 'manager');
+  assert.equal((await f.db.prepare('SELECT COUNT(*) AS count FROM rental_documents WHERE booking_id=?').get(b.id)).count, before + 1);
+  assert.equal((await f.request(path, { method: 'POST', cookie: f.agent.cookie, body: { version: approved.data.version, decision: 'approved', reason: 'Repeat' } })).status, 409);
+});
+
+test('extension approval rechecks newly booked conflicts and rejection preserves rental dates', async t => {
+  const f = await fixture(t); let b = await f.book(); b.status = 'On Rental';
+  await f.db.prepare('UPDATE bookings SET payload=? WHERE id=?').run(JSON.stringify(b), b.id);
+  const request = await f.request('/bookings/' + b.id + '/extend', { method: 'POST', cookie: f.client.cookie, body: { version: b.version, end: f.date(7), endTime: '10:00' } });
+  assert.equal(request.status, 200); const pending = request.data;
+  const next = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('bmw-3', 6, 8), renter: { name: 'Next renter', phone: '09171234567' } } });
+  assert.equal(next.status, 201);
+  const path = '/bookings/' + b.id + '/extensions/' + pending.extensionRequests[0].id + '/review';
+  assert.equal((await f.request(path, { method: 'POST', cookie: f.agent.cookie, body: { version: pending.version, decision: 'approved', reason: 'Checked' } })).status, 409);
+  const rejected = await f.request(path, { method: 'POST', cookie: f.agent.cookie, body: { version: pending.version, decision: 'rejected', reason: 'Next reservation conflicts' } });
+  assert.equal(rejected.status, 200); assert.equal(rejected.data.end, b.end); assert.equal(rejected.data.rental, b.rental); assert.equal(rejected.data.extensionRequests[0].status, 'rejected');
+  assert.equal((await f.request('/bookings/' + b.id + '/extend', { method: 'POST', cookie: f.client.cookie, body: { version: rejected.data.version, end: f.date(7), endTime: '10:00' } })).status, 409);
+  const retry = await f.request('/bookings/' + b.id + '/extend', { method: 'POST', cookie: f.client.cookie, body: { version: rejected.data.version, end: f.date(6), endTime: '10:00' } });
+  assert.equal(retry.status, 200);
+  const approved = await f.request('/bookings/' + b.id + '/extensions/' + retry.data.extensionRequests[1].id + '/review', { method: 'POST', cookie: f.agent.cookie, body: { version: retry.data.version, decision: 'approved', reason: 'Exact handover leaves the next booking free' } });
+  assert.equal(approved.status, 200); assert.equal(approved.data.extensionRequests[1].reviewedRole, 'agent');
+});
+
+test('dropdown inspection statuses persist in vehicle history and unsafe checkpoints cannot be approved', async t => {
+  const f = await fixture(t); const b = await f.book();
+  const checks = { tyres: 'Good', controls: 'Good', exterior: 'Fair', interior: 'Good', fuel: 'Good' };
+  assert.equal((await f.inspect(b, 'pre-dispatch', { checks, driverVerification: null })).status, 400);
+  for (const bad of [{ ...checks, tyres: 'N/A' }, { ...checks, exterior: 'Damaged' }, { ...checks, interior: 'unknown' }]) assert.equal((await f.inspect(b, 'pre-dispatch', { checks: bad, driverVerification: 'matched' })).status, 400);
+  const saved = await f.inspect(b, 'pre-dispatch', { checks, driverVerification: 'matched' });
+  assert.equal(saved.status, 201, JSON.stringify(saved.data)); assert.deepEqual(saved.data.checks, checks); assert.equal(saved.data.driverVerification, 'matched');
+  const operations = await f.operations();
+  assert.equal(operations.inspections[0].id, saved.data.id); assert.deepEqual(operations.inspections[0].checks, checks);
+  assert.equal(operations.fleet.find(v => v.id === b.vehicleId).lastInspection, saved.data.id);
+  const current = operations.bookings.find(v => v.id === b.id);
+  const unsafe = await f.inspect(current, 'pre-dispatch', { checks: { ...checks, controls: 'Needs Repair' }, driverVerification: 'matched', outcome: 'unsafe', note: 'Brake service required' });
+  assert.equal(unsafe.status, 201, JSON.stringify(unsafe.data)); assert.equal(unsafe.data.damageFlag, true);
+  assert.equal((await f.operations()).fleet.find(v => v.id === b.vehicleId).status, 'Out of Service');
+});
+
+test('manager can edit complete vehicle specifications and apply holds without bypassing mechanic clearance', async t => {
+  const f = await fixture(t);
+  const created = await f.request('/manager/vehicles', { method: 'POST', cookie: f.manager.cookie, body: { brand: 'Toyota', model: 'Vios', category: 'Sedan', plate: 'EDIT 123', rate: 3500 } });
+  assert.equal(created.status, 201); const vehicle = created.data, path = '/manager/vehicles/' + vehicle.id + '/profile';
+  const body = { version: 1, brand: 'Honda', model: 'City', category: 'Sedan', plate: 'EDIT 456', transmission: 'Manual', seats: 5, fuelType: 'Gasoline', tankCapacity: 45, rate: 4500, status: 'Available', reason: 'Updated registration and specs' };
+  assert.equal((await f.request(path, { method: 'PATCH', cookie: f.agent.cookie, body })).status, 403);
+  const edited = await f.request(path, { method: 'PATCH', cookie: f.manager.cookie, body });
+  assert.equal(edited.status, 200, JSON.stringify(edited.data));
+  for (const key of ['brand', 'model', 'category', 'plate', 'transmission', 'seats', 'fuelType', 'tankCapacity', 'rate', 'status']) assert.equal(edited.data[key], body[key]);
+  assert.equal(edited.data.name, 'Honda City');
+  const booking = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates(vehicle.id), renter: { name: 'Updated specs renter', phone: '09171234567' } } });
+  assert.equal(booking.status, 201, JSON.stringify(booking.data));
+  const issued = JSON.parse((await f.db.prepare('SELECT payload FROM rental_documents WHERE id=?').get(booking.data.agreement.id)).payload);
+  assert.equal(issued.vehicle.name, 'Honda City'); assert.equal(issued.vehicle.plate, 'EDIT 456'); assert.equal(issued.vehicle.transmission, 'Manual');
+  const held = await f.request(path, { method: 'PATCH', cookie: f.manager.cookie, body: { version: edited.data.version, status: 'Out of Service', reason: 'Repair hold' } });
+  assert.equal(held.status, 200, JSON.stringify(held.data));
+  assert.equal((await f.request(path, { method: 'PATCH', cookie: f.manager.cookie, body: { version: held.data.version, status: 'Available' } })).status, 400);
+  const archived = await f.request('/vehicles/' + vehicle.id + '/decommission', { method: 'POST', cookie: f.manager.cookie, body: { version: held.data.version, reason: 'Retired by manager' } });
+  assert.equal(archived.status, 200); assert.ok(archived.data.archivedAt);
+  assert.equal((await f.operations()).fleet.some(v => v.id === vehicle.id), false);
+});
+
+test('SQL injection payloads cannot change lookup, search, role or pagination queries', async t => {
+  const f = await fixture(t); const booking = await f.book();
+  const payload = "' OR '1'='1'; DROP TABLE users; --";
+  const badId = encodeURIComponent(payload);
+  assert.equal((await f.request('/manager/users/' + badId, { method: 'PATCH', cookie: f.manager.cookie, body: { name: 'Intruder' } })).status, 404);
+  assert.equal((await f.request('/documents/' + badId, { cookie: f.client.cookie })).status, 404);
+  const search = await f.request('/manager/audit?q=' + encodeURIComponent(payload), { cookie: f.manager.cookie });
+  assert.equal(search.status, 200, JSON.stringify(search.data)); assert.equal(search.data.total, 0); assert.deepEqual(search.data.records, []);
+  for (const query of ['role=' + encodeURIComponent(payload), 'page=' + encodeURIComponent('1; DROP TABLE bookings'), 'through=' + encodeURIComponent('0 OR 1=1'), 'q[x]=value']) {
+    const response = await f.request('/manager/audit?' + query, { cookie: f.manager.cookie });
+    assert.ok([200, 400].includes(response.status), JSON.stringify(response.data));
+  }
+  const ticket = await f.request('/support', { method: 'POST', cookie: f.client.cookie, body: { bookingId: booking.id, category: 'General', subject: 'Question', message: payload } });
+  assert.equal(ticket.status, 201); assert.equal(ticket.data.messages[0].message, payload);
+  assert.equal((await f.db.prepare('SELECT COUNT(*) AS count FROM users').get()).count, 4);
+  assert.equal((await f.db.prepare('SELECT COUNT(*) AS count FROM bookings').get()).count, 1);
+  assert.equal((await f.request('/workspace', { cookie: f.client.cookie })).data.bookings[0].id, booking.id);
 });

@@ -174,11 +174,12 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
     })()}
     {modal?.type === 'trip' && (() => {
       const activeBooking = bookings.find(b => b.id === modal.booking.id) || modal.booking
-      const canExtend = ['On Rental', 'Ready for Dispatch'].includes(activeBooking.status)
+      const canExtend = ['On Rental', 'Ready for Dispatch'].includes(activeBooking.status) && !(activeBooking.extensionRequests || []).some(r => r.status === 'pending')
       return (
         <Modal title="Every step of your journey." eyebrow={activeBooking.id} wide onClose={() => setModal(null)}>
           <BookingRecords booking={activeBooking} />
           <TripDetails booking={activeBooking} />
+          {(activeBooking.extensionRequests || []).map(request => <p className="info-note" key={request.id}>Extension to {prettyDate(request.newEnd)} at {request.newEndTime}: {request.status === 'pending' ? 'Pending verification / approval. Your current return schedule remains in effect.' : `${request.status} by ${request.reviewedBy}. ${request.reason || ''}`}</p>)}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '14px' }}>
             {activeBooking.dispatchPass && !activeBooking.dispatchPass.revokedAt && (
               <button className="button button-dark full-width" onClick={() => downloadPass(activeBooking)}>
@@ -206,7 +207,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
         onSuccess={async () => {
           await onRefresh()
           setModal(null)
-          notify('Rental extension confirmed! Your return schedule and contract have been updated.')
+          notify('Extension request submitted for Operations Manager or Booking Agent approval. Your current return schedule remains in effect.')
         }}
       />
     )}

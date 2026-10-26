@@ -22,8 +22,10 @@ function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit
     const definition = row ? JSON.parse(row.payload) : D.FLEET.find(v => v.id === b.vehicleId);
     const stateRow = await db.prepare("SELECT payload FROM fleet_records WHERE kind='vehicle' AND id=?").get(b.vehicleId);
     const state = stateRow ? JSON.parse(stateRow.payload) : {};
+    const vehicleProfile = { ...definition };
+    for (const key of ['name', 'brand', 'model', 'category', 'plate', 'transmission', 'seats', 'fuelType', 'tankCapacity']) if (state[key] !== undefined) vehicleProfile[key] = state[key];
     const document = { id: `${kind.toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`, kind, bookingId: b.id, createdAt: stamp(), by: user.name, actorId: user.id, sample: !!b.sample,
-      renter: structuredClone(b.renter), vehicle: { ...definition, fleetCode: state.fleetCode || definition?.fleetCode || `CAR-${String(D.FLEET.findIndex(v => v.id === b.vehicleId) + 1).padStart(5, '0')}` },
+      renter: structuredClone(b.renter), vehicle: { ...vehicleProfile, fleetCode: state.fleetCode || definition?.fleetCode || `CAR-${String(D.FLEET.findIndex(v => v.id === b.vehicleId) + 1).padStart(5, '0')}` },
       schedule: { start: b.start, startTime: b.startTime, end: b.end, endTime: b.endTime, pickup: b.pickup, dropoff: b.dropoff },
       billing: { ...D.billing(b), rental: b.rental, deposit: b.deposit, lateFee: b.lateFee || 0, days: b.days, dailyRate: b.dailyRate || b.rental / b.days, total: b.rental + b.deposit + (b.lateFee || 0) }, ...extra };
     document.digest = createHash('sha256').update(JSON.stringify(document)).digest('hex');

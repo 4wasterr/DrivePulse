@@ -509,6 +509,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     const notices = renewalNotices(activeFleet.filter(v => user.role !== 'client' || bookings.some(b => b.vehicleId === v.id)));
     if (user.role !== 'mechanic') {
       for (const b of bookings) {
+        for (const request of b.extensionRequests || []) notices.push({ id: `extension:${request.id}:${request.status}`, category: 'system', severity: request.status === 'pending' ? 'warning' : 'info', title: `Rental extension · ${request.status === 'pending' ? 'Pending verification / approval' : request.status}`, message: `${b.id} · Requested return ${request.newEnd} ${request.newEndTime} PHT${request.status === 'pending' ? ' · Operations Manager or Booking Agent review required' : ''}`, at: request.reviewedAt || request.at });
         for (const payment of (b.payments || []).filter(p => p.type === 'deposit')) notices.push({ id: `deposit-payment:${payment.id}:${payment.status}`, category: 'deposit', severity: 'info', title: `Security Deposit · ${payment.status === 'confirmed' ? 'received' : payment.status}`, message: `${b.id} · PHP ${payment.amount} · ${payment.status === 'pending' ? 'Awaiting payment verification' : 'Payment status updated'}`, at: payment.reviewedAt || payment.at });
       }
       const approvals = (await fleet.records('approval')).filter(a => bookings.some(b => b.id === a.bookingId));
@@ -683,35 +684,53 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     await rentalDocuments.receipt(b, 'release', req.user);
   })));
 
-  app.post('/api/agent/bookings/:id/extend', requireAgent, async (req, res) => res.json(await updateBooking(req, 'Rental extended', async (b) => {
-    if (['Cancelled', 'Completed'].includes(b.status)) D.fail('Closed reservations cannot be extended.');
-    const updated = { ...b, end: req.body.end, endTime: req.body.endTime };
-    if (D.time(updated.end, updated.endTime) <= Math.max(D.time(b.end, b.endTime), Date.now())) D.fail('Choose a future return time later than the current return.');
-    const quotation = D.quote(updated, true, await fleet.vehicleRate(b.vehicleId), await fleet.vehicle(b.vehicleId));
+  const requireScheduleReviewer = (req, res, next) => !req.user ? res.status(401).json({ error: 'Sign in to continue.' }) : !['manager', 'agent'].includes(req.user.role) ? res.status(403).json({ error: 'An Operations Manager or Booking Agent must review extensions.' }) : next();
+  async function extensionQuote(b, end, endTime) {
+    const updated = { ...b, end, endTime };
+    if (D.time(end, endTime) <= Math.max(D.time(b.end, b.endTime), Date.now())) D.fail('Choose a future return time later than the current return.');
+    const quotation = D.quote(updated, true, b.dailyRate || b.rental / b.days, await fleet.vehicle(b.vehicleId));
     if (!D.available(await allBookings(), updated, b.id)) D.fail('This extension overlaps another reservation.', 409);
-    b.extensions ||= [];b.extensions.push({ oldEnd: b.end, oldEndTime: b.endTime, newEnd: updated.end, newEndTime: updated.endTime, additionalRental: quotation.rental - b.rental, by: req.user.name, at: now() });
-    b.end = updated.end;b.endTime = updated.endTime;b.days = quotation.days;b.rental = quotation.rental;b.dailyRate = quotation.rental / quotation.days;
+    return { updated, quotation };
+  }
+  async function applyExtension(b, req, end, endTime, request = null) {
+    if (['Cancelled', 'Completed'].includes(b.status)) D.fail('Closed reservations cannot be extended.');
+    const { updated, quotation } = await extensionQuote(b, end, endTime);
+    const entry = { oldEnd: b.end, oldEndTime: b.endTime, newEnd: end, newEndTime: endTime, additionalRental: quotation.rental - b.rental, by: req.user.name, actorId: req.user.id, at: now(), status: 'approved', requestId: request?.id || null };
+    b.extensions ||= []; b.extensions.push(entry);
+    b.end = updated.end; b.endTime = updated.endTime; b.days = quotation.days; b.rental = quotation.rental; b.dailyRate = quotation.rental / quotation.days;
     await rentalDocuments.contract(b, req.user);
     D.invalidatePass(b);
+    return entry;
+  }
+
+  // Staff submitting this action explicitly approve the schedule adjustment.
+  app.post('/api/agent/bookings/:id/extend', requireScheduleReviewer, async (req, res) => res.json(await updateBooking(req, 'Rental extension approved', async b => {
+    if ((b.extensionRequests || []).some(r => r.status === 'pending')) D.fail('Review the pending extension request before making another adjustment.', 409);
+    await applyExtension(b, req, req.body.end, req.body.endTime);
   })));
 
-  app.post('/api/bookings/:id/extend', requireUser, async (req, res) => res.json(await updateBooking(req, 'Rental extended (Client self-service)', async (b) => {
-    if (req.user.role === 'client' && b.ownerId !== req.user.id) D.fail('You can only extend your own rentals.', 403);
+  app.post('/api/bookings/:id/extend', requireUser, async (req, res) => res.json(await updateBooking(req, 'Rental extension requested (pending verification / approval)', async b => {
+    if (req.user.role !== 'client' || b.ownerId !== req.user.id) D.fail('Only the renter can request an extension for their own booking.', 403);
     if (!['On Rental', 'Ready for Dispatch'].includes(b.status)) D.fail('Only active or ready rentals can be extended.');
-    const updated = { ...b, end: req.body.end, endTime: req.body.endTime };
-    if (D.time(updated.end, updated.endTime) <= Math.max(D.time(b.end, b.endTime), Date.now())) D.fail('Choose a future return time later than the current return.');
-    const quotation = D.quote(updated, true, await fleet.vehicleRate(b.vehicleId), await fleet.vehicle(b.vehicleId));
-    if (!D.available(await allBookings(), updated, b.id)) D.fail('This vehicle is reserved by another customer for the requested extension dates.', 409);
-    b.extensions ||= [];
-    b.extensions.push({
-      oldEnd: b.end, oldEndTime: b.endTime,
-      newEnd: updated.end, newEndTime: updated.endTime,
-      additionalRental: quotation.rental - b.rental,
-      by: req.user.name, at: now(), clientInitiated: req.user.role === 'client'
-    });
-    b.end = updated.end;b.endTime = updated.endTime;b.days = quotation.days;b.rental = quotation.rental;b.dailyRate = quotation.rental / quotation.days;
-    await rentalDocuments.contract(b, req.user);
-    D.invalidatePass(b);
+    if ((b.extensionRequests || []).some(r => r.status === 'pending')) D.fail('An extension is already pending verification / approval.', 409);
+    const { quotation } = await extensionQuote(b, req.body.end, req.body.endTime);
+    b.extensionRequests ||= [];
+    b.extensionRequests.push({ id: randomUUID(), status: 'pending', oldEnd: b.end, oldEndTime: b.endTime, newEnd: req.body.end, newEndTime: req.body.endTime, additionalRental: quotation.rental - b.rental, requestedBy: req.user.name, actorId: req.user.id, at: now() });
+  })));
+
+  app.post('/api/bookings/:id/extensions/:requestId/review', requireScheduleReviewer, async (req, res) => res.json(await updateBooking(req, 'Rental extension reviewed', async b => {
+    const request = (b.extensionRequests || []).find(r => r.id === req.params.requestId);
+    if (!request) D.fail('Extension request not found.', 404);
+    if (request.status !== 'pending') D.fail('This extension request has already been reviewed.', 409);
+    if (!['approved', 'rejected'].includes(req.body.decision)) D.fail('Approve or reject the extension request.');
+    const reason = D.text(req.body.reason, 'Extension review note', 1000);
+    if (req.body.decision === 'approved') {
+      if (b.end !== request.oldEnd || b.endTime !== request.oldEndTime) D.fail('The rental schedule changed. Reject this request and ask for a new one.', 409);
+      if (!['On Rental', 'Ready for Dispatch'].includes(b.status)) D.fail('Only active or ready rentals can be extended.');
+      const entry = await applyExtension(b, req, request.newEnd, request.newEndTime, request);
+      request.additionalRental = entry.additionalRental;
+    }
+    Object.assign(request, { status: req.body.decision, reviewedBy: req.user.name, reviewedById: req.user.id, reviewedRole: req.user.role, reviewedAt: now(), reason });
   })));
 
   app.post('/api/manager/bookings/:id/escalate-overdue', requireManager, async (req, res) => res.json(await transaction(async () => {
@@ -784,9 +803,23 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     const normalize = value => String(value || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
     if ((await fleet.fleet(true)).some(v => v.id !== s.id && (normalize(v.fleetCode) === normalize(fleetCode) || normalize(v.id) === normalize(fleetCode)))) D.fail('This fleet code is already in use.', 409);
     const changes = { fleetCode, registrationExpiry: expiryDate(profile.registrationExpiry, 'OR/CR registration expiry'), insuranceExpiry: expiryDate(profile.insuranceExpiry, 'insurance expiry'), imageId: await validateVehicleImage(profile.imageId, req.user, current.imageId) };
+    const specFields = ['brand', 'model', 'category', 'plate', 'transmission', 'seats', 'fuelType', 'tankCapacity', 'rate'];
+    if (specFields.some(key => req.body[key] !== undefined)) {
+      const validated = vehicleProfile(profile, (await fleet.fleet(true)).filter(v => v.id !== s.id));
+      for (const key of [...specFields, 'name']) changes[key] = validated[key];
+      await reserveVehicleIdentifier('vehicle-plate', changes.plate, s.id);
+    }
+    if (req.body.status !== undefined && req.body.status !== s.status) {
+      if (!['Under Inspection', 'Out of Service'].includes(req.body.status)) D.fail('A mechanic inspection is required to clear a vehicle. Choose Under Inspection or Out of Service to place a hold.');
+      if (current.status === 'Rented' || current.status === 'Overdue') D.fail('Return the active rental before changing its operational status.', 409);
+      changes.status = req.body.status;
+    }
+    const rateChange = changes.rate !== undefined ? Math.abs(changes.rate - current.rate) / current.rate * 100 : 0;
+    const reason = rateChange ? D.text(req.body.reason, 'Rate modification reason', 1000) : D.text(req.body.reason, 'Profile change reason', 1000, false) || 'Vehicle details and renewal dates updated.';
     await reserveVehicleIdentifier('fleet-code', fleetCode, s.id);
     Object.assign(s, changes);
-    await fleet.changeState(s, req.user, 'Vehicle profile updated', 'Fleet code, photo and renewal dates updated.', { oldValue: { fleetCode: current.fleetCode, registrationExpiry: current.registrationExpiry, insuranceExpiry: current.insuranceExpiry }, newValue: changes });
+    await fleet.changeState(s, req.user, 'Vehicle profile updated', reason, { oldValue: Object.fromEntries(Object.keys(changes).map(key => [key, current[key] ?? null])), newValue: changes, alertType: rateChange > 20 ? 'Rate change > 20%' : '' });
+    if (changes.status) await fleet.invalidateVehiclePasses(s.id, req.user, reason);
     return (await fleet.fleet()).find(v => v.id === s.id);
   })));
 

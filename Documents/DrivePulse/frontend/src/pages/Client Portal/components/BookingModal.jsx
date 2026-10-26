@@ -8,9 +8,23 @@ import UploadField from '../../../components/ui/UploadField.jsx'
 import { api } from '../../../api.js'
 import ReservationConfirmation, { RentalAgreementSummary } from '../../../components/operations/ReservationConfirmation.jsx'
 import { bookingStepError, duplicateDocumentsError } from '../../../utils/bookingSteps.js'
+import BookingDatePicker from '../../../components/ui/BookingDatePicker.jsx'
 
-export default function BookingModal({ vehicle, initialDates, bookings, documents, onDocument, onReserve, onClose, onBack, onViewTrips }) {
+export default function BookingModal({ vehicle, initialDates, bookings, documents: savedDocuments, onDocument, onReserve, onClose, onBack, onViewTrips }) {
   const [step, setStep] = useState(0)
+  const [uploadedDocuments, setUploadedDocuments] = useState({})
+  const [uploadingDocuments, setUploadingDocuments] = useState({})
+  const documents = { ...savedDocuments, ...uploadedDocuments }
+  const [liveAvailability, setLiveAvailability] = useState(null)
+  const [availabilityError, setAvailabilityError] = useState('')
+  const availability = liveAvailability || bookings
+  useEffect(() => {
+    let active = true
+    const refresh = () => api('/availability').then(data => { if (active) { setLiveAvailability(data); setAvailabilityError('') } }).catch(err => { if (active) setAvailabilityError(err.message) })
+    refresh()
+    const interval = setInterval(refresh, 30000)
+    return () => { active = false; clearInterval(interval) }
+  }, [vehicle.id])
   const [dates, setDates] = useState(initialDates)
   const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState('')
@@ -45,7 +59,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
   const stepValidationContext = {
     dates,
     vehicleId: vehicle.id,
-    bookings,
+    bookings: availability,
     documents,
     requiredDocs: requiredDocuments,
     preview,
@@ -53,7 +67,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
     agreed,
   }
   const currentStepProblem = bookingStepError({ step, ...stepValidationContext })
-  const availabilityProblem = step === 0 ? getAvailabilityReason(vehicle.id, dates, bookings) : ''
+  const availabilityProblem = step === 0 ? getAvailabilityReason(vehicle.id, dates, availability) : ''
   const duplicateDocsProblem = step === 1 ? duplicateDocumentsError(documents, requiredDocuments) : ''
   const uploadedCount = requiredDocuments.filter(doc => Boolean(documents[doc.id])).length
 
@@ -149,7 +163,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
                 </label>
                 <label className="form-field">
                   Pick-up date
-                  <ValidatedField name="start" required type="date" min={dateISO()} value={dates.start} onChange={e => update('start', e.target.value)} />
+                  <BookingDatePicker name="start" value={dates.start} min={dateISO()} onChange={day => update('start', day)} vehicleId={vehicle.id} dates={dates} bookings={availability} disabled={!liveAvailability || Boolean(availabilityError)} />
                 </label>
                 <label className="form-field">
                   Pick-up time
@@ -157,7 +171,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
                 </label>
                 <label className="form-field">
                   Return date
-                  <ValidatedField name="end" required type="date" min={dates.start > dateISO() ? dates.start : dateISO()} value={dates.end} onChange={e => update('end', e.target.value)} />
+                  <BookingDatePicker name="end" value={dates.end} min={dates.start > dateISO() ? dates.start : dateISO()} onChange={day => update('end', day)} vehicleId={vehicle.id} dates={dates} bookings={availability} disabled={!liveAvailability || Boolean(availabilityError)} />
                 </label>
                 <label className="form-field">
                   Return time
@@ -186,7 +200,9 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
                       documentId={doc.id}
                       label={doc.label}
                       value={documents[doc.id]}
+                      onBusyChange={uploading => setUploadingDocuments(previous => ({ ...previous, [doc.id]: uploading }))}
                       onUpload={value => {
+                        setUploadedDocuments(previous => ({ ...previous, [doc.id]: value }))
                         setError('')
                         return onDocument(doc.id, value)
                       }}
@@ -239,6 +255,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
             </div>
           )}
 
+          {availabilityError && <p className="error-banner" role="alert">Availability could not be refreshed: {availabilityError}</p>}
           {error && <p className="error-banner" role="alert"><Icon name="info" size={18} />{error}</p>}
 
           <div className="form-actions">
@@ -253,7 +270,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
             ) : null}
             <button
               type="submit"
-              disabled={busy || Boolean(currentStepProblem)}
+              disabled={busy || Object.values(uploadingDocuments).some(Boolean) || !liveAvailability || Boolean(availabilityError) || Boolean(currentStepProblem)}
               className="button button-dark"
             >
               {busy ? 'Saving…' : step === 2 ? 'Submit reservation' : 'Continue'}

@@ -2,6 +2,7 @@ const { AsyncLocalStorage } = require('node:async_hooks');
 const { mkdirSync, readFileSync } = require('node:fs');
 const { dirname, isAbsolute, resolve } = require('node:path');
 const { sqliteSchema, postgresSchema, emailUpgrade, profileUpgrade, profileColumns } = require('./schema');
+const { preparedSql, assertBindings } = require('./sql');
 
 class SQLiteDatabase {
   constructor(filename) {
@@ -22,7 +23,13 @@ class SQLiteDatabase {
     for (const column of profileColumns) if (!columns.some(item => item.name === column)) this.connection.exec(`ALTER TABLE users ADD COLUMN ${column} TEXT NOT NULL DEFAULT '';`);
   }
   exec(sql) { return this.connection.exec(sql); }
-  prepare(sql) { return this.connection.prepare(sql); }
+  prepare(sql) {
+    const { count } = preparedSql(sql), statement = this.connection.prepare(sql);
+    return Object.fromEntries(['all', 'get', 'run'].map(method => [method, (...params) => {
+      assertBindings(params, count);
+      return statement[method](...params);
+    }]));
+  }
   async exclusive(callback) {
     if (this.context.getStore()) return callback();
     const previous = this.queue;
@@ -76,12 +83,12 @@ class PostgresDatabase {
   }
   exec(sql) { return this.query(sql); }
   prepare(sql) {
-    let index = 0;
-    const text = sql.replace(/\?/g, () => `$${++index}`);
+    const { postgres: text, count } = preparedSql(sql);
+    const execute = (...params) => { assertBindings(params, count); return this.query(text, params); };
     return {
-      all: async (...params) => (await this.query(text, params)).rows,
-      get: async (...params) => (await this.query(text, params)).rows[0],
-      run: async (...params) => ({ changes: (await this.query(text, params)).rowCount })
+      all: async (...params) => (await execute(...params)).rows,
+      get: async (...params) => (await execute(...params)).rows[0],
+      run: async (...params) => ({ changes: (await execute(...params)).rowCount })
     };
   }
   exclusive(callback) {

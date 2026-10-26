@@ -11,6 +11,7 @@ import WalkInReservation from './components/WalkInReservation.jsx'
 import AgentBookingDetails from './components/AgentBookingDetails.jsx'
 import { api } from '../../api.js'
 import ReservationConfirmation from '../../components/operations/ReservationConfirmation.jsx'
+import ExtensionApprovals from '../../components/operations/ExtensionApprovals.jsx'
 
 const navigation = [
   ['agent-overview', 'grid', 'Overview'],
@@ -94,6 +95,7 @@ export default function AgentPortal({ page, user, workspace, availability, onRef
         <section className="agent-page-heading"><div><p className="workspace-kicker">{activePage === 'agent-overview' ? `WELCOME BACK, ${user.name.split(' ')[0].toUpperCase()}` : 'YOUR FRONT DESK, CONNECTED'}</p><h1>{title[0]}</h1><p>{title[1]}</p></div>{actions}</section>
         {notice && <div className="workspace-notice" role="status"><Icon name="check" size={18} /><span>{notice}</span><button className="icon-button" aria-label="Dismiss update" onClick={() => setNotice('')}><Icon name="close" size={16} /></button></div>}
         {error && <p className="error-banner" role="alert">{error}</p>}
+        {['agent-overview', 'agent-reservations'].includes(activePage) && <ExtensionApprovals bookings={bookings} onRefresh={onRefresh} onNotice={setNotice} />}
         {activePage === 'agent-overview' && <AgentOverviewPage pending={pending} reviews={reviews} paymentQueue={paymentQueue} ready={ready} go={go} open={open} active={active} />}
         {activePage === 'agent-reservations' && <AgentReservationsPage query={query} setQuery={setQuery} status={status} setStatus={setStatus} channel={channel} setChannel={setChannel} reservationList={reservationList} open={open} onArchive={archiveBooking} />}
         {activePage === 'agent-calendar' && <AvailabilityCalendar bookings={bookings} availability={availability} onOpen={open} onCreate={values => setDialog({ kind: 'walkin', values })} />}

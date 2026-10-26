@@ -3,12 +3,12 @@ const { inputError } = require('../shared/validation.mjs');
 const REQUIRED_DOCUMENTS = ['license', 'government-1', 'government-2'];
 const LOCATIONS = ['Makati City, Metro Manila', 'BGC, Taguig City', 'NAIA Terminal 3, Pasay', 'Quezon City, Metro Manila'];
 const FLEET = [
-  { id: 'bmw-3', name: 'BMW 3 Series', rate: 4200 },
-  { id: 'mercedes-c', name: 'Mercedes-Benz C-Class', rate: 5500 },
-  { id: 'porsche-panamera', name: 'Porsche Panamera', rate: 8500 },
-  { id: 'toyota-camry', name: 'Toyota Camry', rate: 2800 },
-  { id: 'range-rover', name: 'Range Rover Sport', rate: 7200 },
-  { id: 'tesla-3', name: 'Tesla Model 3', rate: 4800 },
+  { id: 'bmw-3', name: 'BMW 3 Series', brand: 'BMW', model: '3 Series', category: 'Sedan', rate: 4200 },
+  { id: 'mercedes-c', name: 'Mercedes-Benz C-Class', brand: 'Mercedes-Benz', model: 'C-Class', category: 'Luxury', rate: 5500 },
+  { id: 'porsche-panamera', name: 'Porsche Panamera', brand: 'Porsche', model: 'Panamera', category: 'Luxury', rate: 8500 },
+  { id: 'toyota-camry', name: 'Toyota Camry', brand: 'Toyota', model: 'Camry', category: 'Sedan', rate: 2800 },
+  { id: 'range-rover', name: 'Range Rover Sport', brand: 'Range Rover', model: 'Sport', category: 'SUV', rate: 7200 },
+  { id: 'tesla-3', name: 'Tesla Model 3', brand: 'Tesla', model: 'Model 3', category: 'Electric', rate: 4800 },
 ];
 function fail(message, status = 400) { const error = new Error(message); error.status = status; throw error; }
 function text(value, label, max = 200, required = true) {

@@ -18,7 +18,8 @@ export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSu
   const [error, setError] = useState('')
 
   const additionalDays = Math.max(0, rentalDays(booking.start, newEnd, booking.startTime, newEndTime) - booking.days)
-  const additionalCost = additionalDays * (vehicle?.rate || 3500)
+  const dailyRate = booking.dailyRate || booking.rental / booking.days
+  const additionalCost = additionalDays * dailyRate
   const scheduleProblem = extensionError(booking, newEnd, newEndTime)
 
   async function handleExtend(e) {
@@ -58,7 +59,7 @@ export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSu
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '13px', color: '#6b7280' }}>Daily rental rate:</span>
-            <span style={{ fontSize: '13px', color: '#111827' }}>{money(vehicle?.rate || booking.rental / booking.days)} / day</span>
+            <span style={{ fontSize: '13px', color: '#111827' }}>{money(dailyRate)} / day</span>
           </div>
         </div>
 
@@ -96,7 +97,7 @@ export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSu
             <strong style={{ fontSize: '15px', color: '#15803d' }}>{money(additionalCost)}</strong>
           </div>
           <p style={{ margin: '8px 0 0', fontSize: '11px', color: '#166534' }}>
-            * Charged in cash at counter upon return. Security deposit of {money(booking.deposit)} remains unchanged.
+            The Operations Manager or Booking Agent must verify availability and approve this request before the return date or contract changes. Any approved charge is paid in cash. Security deposit: {money(booking.deposit)}.
           </p>
         </div>
 
@@ -108,7 +109,7 @@ export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSu
           </button>
           <button type="submit" className="button button-dark" style={{ flex: 1 }} disabled={busy || additionalDays <= 0 || Boolean(scheduleProblem)}>
             <Icon name="check" size={17} />
-            {busy ? 'Confirming extension…' : 'Confirm rental extension'}
+            {busy ? 'Submitting request…' : 'Request extension approval'}
           </button>
         </div>
       </ValidatedForm>

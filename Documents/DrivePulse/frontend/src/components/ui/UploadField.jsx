@@ -4,20 +4,22 @@ import { validateFile } from '../../storage.js'
 import { uploadDocument } from '../../api.js'
 import Icon from './Icon.jsx'
 
-export default function UploadField({ documentId, label, value, onUpload, bookingId }) {
+export default function UploadField({ documentId, label, value, onUpload, bookingId, onBusyChange }) {
   const inputId = useId()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   async function upload(file) {
+    if (!file) return
     const problem = validateFile(file)
     if (problem) { setError(problem); return }
     setBusy(true)
+    onBusyChange?.(true)
     setError('')
     try {
       const uploaded = await uploadDocument(documentId, file, bookingId)
       await onUpload(uploaded)
     } catch (problem) { setError(problem.message || 'Your file could not be uploaded. Please try again.') }
-    finally { setBusy(false) }
+    finally { setBusy(false); onBusyChange?.(false) }
   }
   return <div className="upload-group">
     <label className={`upload-field ${value ? 'uploaded' : ''} ${busy ? 'is-busy' : ''}`} htmlFor={inputId} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (!busy) upload(e.dataTransfer.files[0]) }}>
