@@ -9,7 +9,7 @@ let startupError;
 app.disable('x-powered-by');
 app.use(async (req, res, next) => {
   await ready;
-  if (startupError) return res.status(503).set('Cache-Control', 'no-store').json({ error: 'DrivePulse is not configured. Check the server database settings.' });
+  if (startupError) return res.status(503).set('Cache-Control', 'no-store').json({ error: 'DrivePulse is temporarily unavailable. Please try again shortly.', code: 'SERVICE_UNAVAILABLE' });
   next();
 });
 const ready = createApp({ app }).then(value => { runtime = value; }).catch(error => {

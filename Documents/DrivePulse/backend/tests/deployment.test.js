@@ -28,6 +28,7 @@ test('an unconfigured production entrypoint returns 503 instead of using volatil
         const response = await fetch('http://127.0.0.1:' + server.address().port + '/api/health');
         assert.equal(response.status, 503);
         assert.equal(response.headers.get('cache-control'), 'no-store');
+        assert.deepEqual(await response.json(), { error: 'DrivePulse is temporarily unavailable. Please try again shortly.', code: 'SERVICE_UNAVAILABLE' });
       } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
     })().catch(error => { console.error(error.message); process.exitCode = 1; });
   `], { cwd: path.resolve(__dirname, '..'), env: { ...process.env, NODE_ENV: 'production', DATABASE_URL: '' }, timeout: 10000, encoding: 'utf8', windowsHide: true });

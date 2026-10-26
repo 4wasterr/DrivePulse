@@ -32,7 +32,7 @@ function StatusPanel({ icon, title, children }) {
   </div>
 }
 
-export default function AuthPage({ mode, emailDelivery = false, onSuccess, onNavigate }) {
+export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavigate }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -142,7 +142,7 @@ export default function AuthPage({ mode, emailDelivery = false, onSuccess, onNav
   } else {
     const recovery = ['forgot-password', 'reset-password'].includes(mode)
     body = <>
-      {mode === 'forgot-password' && !emailDelivery && <p className="info-note"><Icon name="info" />Password recovery email is not configured on this server yet. Ask your operations manager to reset your password.</p>}
+      {mode === 'forgot-password' && emailDelivery === false && <p className="info-note"><Icon name="info" />Password recovery is currently unavailable. Please contact your operations manager for help.</p>}
       <ValidatedForm onSubmit={submit} className="auth-form"><fieldset disabled={busy}>
         {signup && <label className="form-field">Full name<ValidatedField name="name" required maxLength={70} autoComplete="name" placeholder="Your full name" /></label>}
         {mode !== 'reset-password' && <label className="form-field">{login ? 'Email or username' : 'Email address'}<ValidatedField name={login ? 'username' : 'email'} type={login ? 'text' : 'email'} data-validate={login ? 'login-identifier' : 'email'} required maxLength={160} autoComplete={mode === 'forgot-password' ? 'email' : 'username'} autoCapitalize="none" spellCheck={false} placeholder={login ? 'Username or you@example.com' : 'you@example.com'} /></label>}
