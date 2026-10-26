@@ -135,6 +135,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
         const booking = { id, ...dates, ...D.quote(dates, true), ownerId: client.id, renter: { name: client.name, email: client.email, phone: 'Demo customer' }, status, source, sample: true, version: 1, documents: structuredClone(docs), payments: [], payment: 'Demo payment record', createdAt: now(), lateFee: 0, activity: [] };
         const confirmed = status !== 'Pending Approval';
         booking.payments = ['rental', 'deposit'].map((type) => ({ id: randomUUID(), type, amount: booking[type], method: 'Cash (sample)', reference: `SAMPLE-${id}-${type}`, status: confirmed ? 'confirmed' : 'pending', at: now(), simulated: true }));
+        await saveBooking(booking);
         await rentalDocuments.contract(booking, agent);
         if (confirmed) {
           booking.documents.forEach((doc) => {doc.review = { status: 'approved', by: agent.name, at: now(), note: 'Illustrative sample review' };});
@@ -605,6 +606,10 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     if (!walkin) {
       booking.payments = ['rental', 'deposit'].map((type) => ({ id: randomUUID(), type, amount: booking[type], status: 'pending', method: 'Cash', reference: 'Awaiting cash at the counter', at: now() }));
     }
+    // Issued documents reference bookings immediately in migrated Supabase
+    // databases. Persist the parent first, in this same transaction, so any
+    // later document/audit failure still rolls the entire reservation back.
+    await saveBooking(booking);
     await rentalDocuments.contract(booking, req.user);
     booking.confirmation = await rentalDocuments.issue(booking, 'confirmation', req.user, { terms: booking.agreement.terms, agreementId: booking.agreement.id, signature: renter.name, bookingStatus: booking.status });
     await audit(booking, req.user, walkin ? 'Walk-in scheduled' : 'Online booking received', '', { oldValue: null, newValue: { id: booking.id, vehicleId: booking.vehicleId, total: booking.total } });
@@ -949,8 +954,9 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   app.get('/api/manager/archives', requireManager, async (req, res) => {
     const allVehicles = await fleet.fleet(true);
     const archivedUsers = (await db.prepare('SELECT * FROM users WHERE archived_at IS NOT NULL ORDER BY archived_at DESC').all()).map(publicUser);
+    const retainedBookings = new Set((await db.prepare('SELECT DISTINCT booking_id FROM rental_documents').all()).map(row => row.booking_id));
     res.json({
-      bookings: await asyncMap((await rawBookings()).filter((b) => b.archivedAt), fleet.present),
+      bookings: await asyncMap((await rawBookings()).filter((b) => b.archivedAt), async b => ({ ...await fleet.present(b), canPurge: !retainedBookings.has(b.id) })),
       vehicles: allVehicles.filter((v) => v.archivedAt),
       pendingDecommissions: allVehicles.filter((v) => v.decommissionRequested && !v.archivedAt),
       users: archivedUsers
@@ -991,6 +997,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     if (kind === 'booking') {
       const b = await getBooking(id, true);
       if (!b.archivedAt) D.fail('Soft-delete the reservation before permanently purging it.', 409);
+      if (await db.prepare('SELECT id FROM rental_documents WHERE booking_id=? LIMIT 1').get(id)) D.fail('This reservation has issued contracts or receipts. Keep it archived to preserve its rental records.', 409);
       await db.prepare('DELETE FROM bookings WHERE id=?').run(id);
       await systemAudit.write(req.user, 'Booking permanently purged', `booking:${id}`, reason, 200, {
         oldValue: { id: b.id, renter: b.renter.name, status: b.status },

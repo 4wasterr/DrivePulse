@@ -88,7 +88,7 @@ export default function ArchivesPage({ onRefresh, onDone }) {
         <div>
           <p className="workspace-kicker">SOFT-DELETED RESERVATIONS</p>
           <h2>Historical bookings archive</h2>
-          <p className="workspace-muted">Standard staff handle one-click soft deletes of completed or cancelled bookings; Operations Managers can restore or permanently purge them.</p>
+          <p className="workspace-muted">Restore archived bookings here. Reservations with issued contracts or receipts remain archived to preserve their rental records.</p>
         </div>
         <Tag>{`${data.bookings.length} archived`}</Tag>
       </div>
@@ -100,7 +100,7 @@ export default function ArchivesPage({ onRefresh, onDone }) {
         </div>
         <div className="staff-card-actions">
           <button className="button button-outline" disabled={busy} onClick={() => restore('booking', b.id, `Booking ${b.id}`)}>Restore</button>
-          <button className="text-link" disabled={busy} onClick={() => setPurgeTarget({ kind: 'booking', id: b.id, label: `Booking ${b.id} (${b.renter.name})` })}>Permanent purge</button>
+          <button className="text-link" disabled={busy || b.canPurge === false} title={b.canPurge === false ? 'Issued contracts or receipts retain this reservation. Restore it or keep it archived.' : undefined} onClick={() => setPurgeTarget({ kind: 'booking', id: b.id, label: `Booking ${b.id} (${b.renter.name})` })}>{b.canPurge === false ? 'Rental records retained' : 'Permanent purge'}</button>
         </div>
       </article>)}</PaginatedList> : <Empty>No archived reservations.</Empty>}
     </section>

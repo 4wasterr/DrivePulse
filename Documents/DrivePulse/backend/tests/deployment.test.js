@@ -5,6 +5,43 @@ const path = require('node:path');
 const { createApp } = require('../application');
 const { createDatabase } = require('../db');
 
+test('serverless startup waits for a request, shares attempts, and recovers after a database timeout', () => {
+  const result = spawnSync(process.execPath, ['-e', `
+    const assert = require('node:assert/strict');
+    const express = require('express');
+    let attempts = 0, closed = 0, elapsed = 0;
+    const originalNow = Date.now;
+    Date.now = () => originalNow() + elapsed;
+    require('./db').createDatabase = () => ({ close: async () => { closed++; } });
+    require('./application').createApp = async ({ database }) => {
+      attempts++;
+      if (attempts === 1) throw new Error('Connection terminated due to connection timeout');
+      const child = express(); child.get('/api/health', (req, res) => res.json({ ok: true }));
+      return { app: child, db: database };
+    };
+    const app = require('./index');
+    assert.equal(attempts, 0, 'Import must not start a database connection');
+    (async () => {
+      const server = app.listen(0, '127.0.0.1');
+      await new Promise(resolve => server.once('listening', resolve));
+      const url = 'http://127.0.0.1:' + server.address().port + '/api/health';
+      try {
+        const unavailable = await Promise.all([fetch(url), fetch(url), fetch(url)]);
+        assert.ok(unavailable.every(response => response.status === 503));
+        assert.equal(unavailable[0].headers.get('retry-after'), '15');
+        assert.equal(attempts, 1); assert.equal(closed, 1);
+        elapsed = 16000;
+        const recovered = await Promise.all([fetch(url), fetch(url), fetch(url)]);
+        assert.ok(recovered.every(response => response.status === 200));
+        assert.equal(attempts, 2); assert.equal(closed, 1);
+        assert.deepEqual(await recovered[0].json(), { ok: true });
+      } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+    })().catch(error => { console.error(error.message); process.exitCode = 1; });
+  `], { cwd: path.resolve(__dirname, '..'), env: { ...process.env, NODE_ENV: 'production' }, timeout: 10000, encoding: 'utf8', windowsHide: true });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test('Vercel can import the Express entrypoint without opening a standalone listener', () => {
   const result = spawnSync(process.execPath, ['-e', `
     const assert = require('node:assert/strict');

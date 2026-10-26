@@ -26,6 +26,11 @@ const diagnostics = new Map([
 ]);
 
 function databaseDiagnostic(error) {
+  if (/connection (?:terminated due to connection timeout|terminated unexpectedly)|connection timeout/i.test(error?.message || '')) return 'Database connection timed out or closed during startup. Retry the request and check the Supabase pooler connection.';
+  if (error?.cause) {
+    const cause = databaseDiagnostic(error.cause);
+    if (cause !== fallback) return cause;
+  }
   if (error instanceof AggregateError) {
     return error.errors.map(databaseDiagnostic).find(message => message !== fallback) || fallback;
   }
@@ -38,4 +43,23 @@ function databaseDiagnostic(error) {
   return code ? `${fallback} Diagnostic code: ${code}.` : fallback;
 }
 
-module.exports = { databaseDiagnostic };
+// Private startup logs need enough context to diagnose unclassified driver
+// failures. Redact configured credentials and URLs before emitting messages.
+function databaseFailureDetails(error, env = process.env) {
+  const secrets = Object.entries(env).filter(([key, value]) => /PASSWORD|PASS|SECRET|TOKEN|DATABASE_URL|DATABASE_CA_CERT/i.test(key) && typeof value === 'string' && value.length > 3).map(([, value]) => value);
+  try {
+    const connection = new URL(env.DATABASE_URL);
+    for (const value of [connection.password, decodeURIComponent(connection.password), connection.username, decodeURIComponent(connection.username)]) if (value.length > 3) secrets.push(value);
+  } catch { /* An invalid URL is already covered by the normal diagnostic. */ }
+  const clean = value => {
+    let message = String(value || '').replace(/[a-z][a-z\d+.-]*:\/\/[^\s"'<>]+/gi, '[redacted URL]');
+    for (const secret of secrets.sort((a, b) => b.length - a.length)) message = message.split(secret).join('[redacted]');
+    return message.replace(/[\r\n\x00-\x1f]+/g, ' ').slice(0, 300);
+  };
+  const describe = (value, depth = 0) => ({ name: clean(value?.name), code: clean(value?.code), message: clean(value?.message), ...(depth < 2 && value?.cause ? { cause: describe(value.cause, depth + 1) } : {}), ...(depth < 2 && value instanceof AggregateError ? { errors: [...value.errors].slice(0, 4).map(child => describe(child, depth + 1)) } : {}) });
+  let databaseHostType = 'not configured';
+  try { const host = new URL(env.DATABASE_URL).hostname; databaseHostType = host.includes('.pooler.supabase.com') ? 'Supabase pooler' : host.startsWith('db.') && host.endsWith('.supabase.co') ? 'Supabase direct' : 'other PostgreSQL host'; } catch { /* Keep the configuration summary credential-free. */ }
+  return { error: describe(error), configuration: { databaseHostType, caCertificateConfigured: Boolean(env.DATABASE_CA_CERT), caFileConfigured: Boolean(env.DATABASE_CA_PATH), productionMode: env.NODE_ENV === 'production' } };
+}
+
+module.exports = { databaseDiagnostic, databaseFailureDetails };

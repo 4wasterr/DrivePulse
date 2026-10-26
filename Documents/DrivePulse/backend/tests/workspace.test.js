@@ -437,6 +437,7 @@ test('one-click soft deletes and data archives support restore and permanent pur
   // Visible in manager archives
   let archives = (await f.request('/manager/archives', { cookie: f.manager.cookie })).data;
   assert.equal(archives.bookings.length, 1);
+  assert.equal(archives.bookings[0].canPurge, false);
   // Mechanic requests vehicle decommission, manager confirms
   const v = (await f.operations()).fleet.find(item => item.id === 'range-rover');
   const reqDecom = await f.request('/vehicles/range-rover/decommission', { method: 'POST', cookie: f.mechanic.cookie, body: { version: v.version, reason: 'Major engine overhaul needed' } });
@@ -449,10 +450,17 @@ test('one-click soft deletes and data archives support restore and permanent pur
   assert.equal((await f.request(`/manager/archives/booking/${b.id}/restore`, { method: 'POST', cookie: f.manager.cookie, body: {} })).status, 200);
   assert.equal((await f.request('/manager/archives/vehicle/range-rover/restore', { method: 'POST', cookie: f.manager.cookie, body: {} })).status, 200);
   assert.equal((await f.request('/workspace', { cookie: f.agent.cookie })).data.bookings.length, 1);
-  // Re-archive booking and permanently purge it
+  // Issued contracts and receipts retain their booking; archival stays reversible.
   await f.request(`/bookings/${b.id}/archive`, { method: 'POST', cookie: f.agent.cookie, body: {} });
   const purged = await f.request(`/manager/archives/booking/${b.id}`, { method: 'DELETE', cookie: f.manager.cookie, body: { reason: 'Retention period expired' } });
-  assert.equal(purged.status, 200);
+  assert.equal(purged.status, 409); assert.match(purged.data.error, /issued contracts or receipts/);
+  archives = (await f.request('/manager/archives', { cookie: f.manager.cookie })).data;
+  assert.equal(archives.bookings.length, 1);
+  // Legacy reservations without issued records remain eligible for permanent purge.
+  const legacy = { ...b, id: 'LEGACY-PURGE', archivedAt: new Date().toISOString(), agreement: null, confirmation: null };
+  await f.db.prepare('INSERT INTO bookings(id,owner_id,payload) VALUES(?,?,?)').run(legacy.id, b.ownerId, JSON.stringify(legacy));
+  assert.equal((await f.request(`/manager/archives/booking/${legacy.id}`, { method: 'DELETE', cookie: f.manager.cookie, body: { reason: 'Retention expired for unissued legacy record' } })).status, 200);
+  assert.equal((await f.request(`/manager/archives/booking/${b.id}/restore`, { method: 'POST', cookie: f.manager.cookie, body: {} })).status, 200);
   archives = (await f.request('/manager/archives', { cookie: f.manager.cookie })).data;
   assert.equal(archives.bookings.length, 0);
   const audit = await f.request('/manager/audit?alertsOnly=true', { cookie: f.manager.cookie });
@@ -743,4 +751,33 @@ test('SQL injection payloads cannot change lookup, search, role or pagination qu
   assert.equal((await f.db.prepare('SELECT COUNT(*) AS count FROM users').get()).count, 4);
   assert.equal((await f.db.prepare('SELECT COUNT(*) AS count FROM bookings').get()).count, 1);
   assert.equal((await f.request('/workspace', { cookie: f.client.cookie })).data.bookings[0].id, booking.id);
+});
+
+
+test('online and walk-in reservations persist their parent before contracts and roll back partial document failures', async t => {
+  const f = await fixture(t);
+  for (const kind of D.REQUIRED_DOCUMENTS) await f.upload(kind);
+  // Force document issuance to fail after the parent was inserted.
+  if (f.db.kind === 'postgres') await f.db.exec("CREATE FUNCTION reject_test_document() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Test document save failure'; END $$; CREATE TRIGGER reject_test_document BEFORE INSERT ON rental_documents FOR EACH ROW EXECUTE FUNCTION reject_test_document();");
+  else await f.db.exec("CREATE TRIGGER reject_test_document BEFORE INSERT ON rental_documents BEGIN SELECT RAISE(ABORT, 'Test document save failure'); END;");
+  const before = (await f.db.prepare('SELECT COUNT(*) AS count FROM bookings').get()).count;
+  const result = await f.request('/bookings', { method: 'POST', cookie: f.client.cookie, body: f.dates() });
+  assert.equal(result.status, 500);
+  assert.equal((await f.db.prepare('SELECT COUNT(*) AS count FROM bookings').get()).count, before);
+  assert.equal((await f.db.prepare('SELECT COUNT(*) AS count FROM rental_documents').get()).count, 0);
+  assert.equal((await f.request('/availability')).data.some(b => b.vehicleId === 'bmw-3' && !b.blocked), false);
+  if (f.db.kind === 'postgres') await f.db.exec('DROP TRIGGER reject_test_document ON rental_documents; DROP FUNCTION reject_test_document();');
+  else await f.db.exec('DROP TRIGGER reject_test_document;');
+  const online = await f.request('/bookings', { method: 'POST', cookie: f.client.cookie, body: f.dates() });
+  assert.equal(online.status, 201, JSON.stringify(online.data));
+  const walkin = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('mercedes-c'), renter: { name: 'Walkin save test', phone: '09171234567' } } });
+  assert.equal(walkin.status, 201, JSON.stringify(walkin.data));
+  for (const booking of [online.data, walkin.data]) {
+    const row = await f.db.prepare('SELECT payload FROM bookings WHERE id=?').get(booking.id);
+    const saved = JSON.parse(row.payload);
+    assert.equal(saved.agreement.id, booking.agreement.id);
+    assert.equal(saved.confirmation.id, booking.confirmation.id);
+    const documents = await f.db.prepare('SELECT kind FROM rental_documents WHERE booking_id=?').all(booking.id);
+    assert.deepEqual(documents.map(d => d.kind).sort(), ['agreement', 'confirmation']);
+  }
 });
