@@ -1,3 +1,4 @@
+import useDraftState from '../../hooks/useDraftState.js'
 import { useState, useRef, useEffect } from 'react'
 import { initialDates, requiredDocuments, rentalPeriodError, vehicles as baseVehicles, isAvailable, getAvailabilityReason, prettyDate, money } from '../../data.js'
 import { api, fetchDocument } from '../../api.js'
@@ -31,14 +32,13 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
   const documents = workspace?.documents || {}
   const profile = user || { name: 'Client', email: '' }
   const vehicles = baseVehicles.filter(v => !v.archivedAt).map(v => ({ ...v, rate: rates[v.id] || v.rate }))
-  const [dates, setDates] = useState(initialDates)
+  const [dates, setDates] = useDraftState('trip-search', 'dates', initialDates)
   const [category, setCategory] = useState('All cars')
   const [brand, setBrand] = useState('all')
   const brands = [...new Set(vehicles.map(v => v.brand).filter(Boolean))].sort()
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('recommended')
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [maxRate, setMaxRate] = useState(100000)
   const [seats, setSeats] = useState('any')
   const [transmission, setTransmission] = useState('any')
   const [onlyAvailable, setOnlyAvailable] = useState(false)
@@ -89,7 +89,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
     try { const blob = await fetchDocument(id); downloadFile(blob, documents[id]?.name || 'document') }
     catch (error) { notify(error.message) }
   }
-  const filtered = vehicles.filter(v => (category === 'All cars' || v.category === category) && (brand === 'all' || v.brand === brand) && `${v.name} ${v.model || ""} ${v.fleetCode || ""} ${v.id} ${v.plate || ""} ${v.category} ${v.fuel}`.toLowerCase().includes(query.toLowerCase()) && v.rate <= maxRate && (seats === 'any' || v.seats >= Number(seats)) && (transmission === 'any' || v.transmission === transmission) && (!onlyAvailable || isAvailable(v.id, dates, availability))).sort((a, b) => sort === 'price-low' ? a.rate - b.rate : sort === 'price-high' ? b.rate - a.rate : sort === 'rating' ? Number(b.rating) - Number(a.rating) : 0)
+  const filtered = vehicles.filter(v => (category === 'All cars' || v.category === category) && (brand === 'all' || v.brand === brand) && `${v.name} ${v.model || ""} ${v.fleetCode || ""} ${v.id} ${v.plate || ""} ${v.category} ${v.fuel}`.toLowerCase().includes(query.toLowerCase()) && (seats === 'any' || v.seats >= Number(seats)) && (transmission === 'any' || v.transmission === transmission) && (!onlyAvailable || isAvailable(v.id, dates, availability))).sort((a, b) => sort === 'price-low' ? a.rate - b.rate : sort === 'price-high' ? b.rate - a.rate : 0)
   const card = vehicle => {
     const reason = getAvailabilityReason(vehicle.id, dates, availability)
     const available = reason === ''
@@ -113,7 +113,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
 
         {page === 'overview' && <ClientOverviewPage navigate={navigate} setModal={setModal} dates={dates} setDates={setDates} search={search} card={card} upcoming={upcoming} nextTrip={nextTrip} documentCount={documentCount} />}
 
-        {page === 'fleet' && <ClientFleetPage brand={brand} setBrand={setBrand} brands={brands} dates={dates} setDates={setDates} category={category} setCategory={setCategory} query={query} setQuery={setQuery} filtersOpen={filtersOpen} setFiltersOpen={setFiltersOpen} maxRate={maxRate} setMaxRate={setMaxRate} seats={seats} setSeats={setSeats} transmission={transmission} setTransmission={setTransmission} onlyAvailable={onlyAvailable} setOnlyAvailable={setOnlyAvailable} filtered={filtered} sort={sort} setSort={setSort} card={card} navigate={navigate} />}
+        {page === 'fleet' && <ClientFleetPage brand={brand} setBrand={setBrand} brands={brands} dates={dates} setDates={setDates} category={category} setCategory={setCategory} query={query} setQuery={setQuery} filtersOpen={filtersOpen} setFiltersOpen={setFiltersOpen} seats={seats} setSeats={setSeats} transmission={transmission} setTransmission={setTransmission} onlyAvailable={onlyAvailable} setOnlyAvailable={setOnlyAvailable} filtered={filtered} sort={sort} setSort={setSort} card={card} navigate={navigate} />}
 
         {page === 'bookings' && <ClientBookingsPage bookingTab={bookingTab} setBookingTab={setBookingTab} upcoming={upcoming} completed={completed} bookings={bookings} navigate={navigate} setModal={setModal} />}
 
@@ -126,15 +126,15 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
 
     {modal?.type === 'booking' && <BookingModal vehicle={modal.vehicle} initialDates={dates} bookings={availability} documents={documents} onDocument={onDocument} onReserve={reserve} onClose={() => setModal(null)} onBack={modal.previous ? () => setModal(modal.previous) : undefined} onViewTrips={() => { setModal(null); setBookingTab('Upcoming'); navigate('bookings') }} />}
     {modal?.type === 'vehicle' && (() => {
-      const reason = modal.reason !== undefined ? modal.reason : getAvailabilityReason(modal.vehicle.id, dates, availability)
+      const reason = getAvailabilityReason(modal.vehicle.id, dates, availability)
       const isCarAvailable = reason === ''
       return <Modal title={modal.vehicle.name} eyebrow={modal.vehicle.label.toUpperCase()} wide onClose={() => setModal(null)}>
         <div className="vehicle-detail-layout">
           <img className="vehicle-detail-image" src={modal.vehicle.image} alt={modal.vehicle.name} />
           <div className="vehicle-detail-copy">
-            <span className="rating"><Icon name="star" size={15} />{modal.vehicle.rating}<span className="muted"> · {modal.vehicle.trips} trips</span></span>
             <h3>{modal.vehicle.tagline}</h3>
             <p className="muted">{modal.vehicle.description}</p>
+            <p className="small muted">License plate: <strong>{modal.vehicle.plate}</strong></p>
             {!isCarAvailable && (
               <div className="unavailability-callout" role="alert">
                 <Icon name="info" size={18} />

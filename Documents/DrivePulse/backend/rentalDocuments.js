@@ -24,7 +24,7 @@ function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit
     const state = stateRow ? JSON.parse(stateRow.payload) : {};
     const vehicleProfile = { ...definition };
     for (const key of ['name', 'brand', 'model', 'category', 'plate', 'transmission', 'seats', 'fuelType', 'tankCapacity']) if (state[key] !== undefined) vehicleProfile[key] = state[key];
-    const document = { id: `${kind.toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`, kind, bookingId: b.id, createdAt: stamp(), by: user.name, actorId: user.id, sample: !!b.sample,
+    const document = { id: `${kind.toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`, kind, bookingId: b.id, transactionReference: b.transactionReference || b.id, createdAt: stamp(), by: user.name, actorId: user.id, sample: !!b.sample,
       renter: structuredClone(b.renter), vehicle: { ...vehicleProfile, fleetCode: state.fleetCode || definition?.fleetCode || `CAR-${String(D.FLEET.findIndex(v => v.id === b.vehicleId) + 1).padStart(5, '0')}` },
       schedule: { start: b.start, startTime: b.startTime, end: b.end, endTime: b.endTime, pickup: b.pickup, dropoff: b.dropoff },
       billing: { ...D.billing(b), rental: b.rental, deposit: b.deposit, lateFee: b.lateFee || 0, days: b.days, dailyRate: b.dailyRate || b.rental / b.days, total: b.rental + b.deposit + (b.lateFee || 0) }, ...extra };
@@ -109,7 +109,8 @@ function render(d) {
       ['Payment Amount', money(d.payment.amount)],
       ['Allocation Category', d.payment.type],
       ['Payment Mode', `${d.payment.method} (Counter Verified)`],
-      ['Cash Reference', d.payment.reference]
+      ['Cash Reference', d.payment.reference],
+      ['Booking Transaction', d.transactionReference || d.bookingId]
     );
   }
   if (d.disbursement) {

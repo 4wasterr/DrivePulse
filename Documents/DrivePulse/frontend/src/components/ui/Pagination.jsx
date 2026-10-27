@@ -10,7 +10,6 @@ function useRows(children, resetKey) {
 export function Pagination({ page, pages, total, setPage }) {
   return <nav className="data-pagination" aria-label="Record pagination">
     <span role="status">{total ? `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} of ${total}` : '0 records'}</span>
-    <span>{PAGE_SIZE} records per page</span>
     <div><button type="button" className="button button-outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page} of {pages}</span><button type="button" className="button button-outline" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</button></div>
   </nav>
 }

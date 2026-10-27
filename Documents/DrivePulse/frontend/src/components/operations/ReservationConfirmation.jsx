@@ -25,6 +25,7 @@ export default function ReservationConfirmation({ booking, onClose, onContinue, 
   const preview = { renter: booking.renter, vehicle: booking.vehicle, schedule: booking, quote: { days: booking.days, dailyRate: booking.dailyRate || booking.rental / booking.days, rental: booking.rental, deposit: booking.deposit, total: booking.total }, terms: booking.agreement?.terms || '' }
   return <Modal title="Reservation Confirmation" eyebrow={booking.id + ' · ' + booking.status} wide onClose={onClose}>
     <p className="info-note">Your reservation was received. Staff approval, verified documents, cash payment and a mechanic inspection are required before vehicle release.</p>
+    <p className="info-note">Transaction reference: <strong>{booking.transactionReference || booking.id}</strong></p>
     <RentalAgreementSummary preview={preview} />
     <div className="confirmation-actions">
       {record && <a className="button button-outline" href={'/api/rental-documents/' + encodeURIComponent(record.id) + '?view=inline'} target="_blank" rel="noreferrer">Print / Save as PDF</a>}

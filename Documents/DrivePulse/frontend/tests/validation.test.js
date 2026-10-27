@@ -1,8 +1,9 @@
+const locations = ['Makati City, Metro Manila']
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { inputError, validDate, phtTime, extensionError, returnError, duplicateVehicleErrors } from '../../shared/validation.mjs'
 import { validateFile } from '../src/storage.js'
-import { dateISO, locations, formatPaymentStatus } from '../src/data.js'
+import { dateISO, formatPaymentStatus } from '../src/data.js'
 import { bookingStepError, canAdvanceBookingStep, duplicateDocumentsError } from '../src/utils/bookingSteps.js'
 
 test('names and contact details reject obvious mistakes while allowing common real formats', () => {

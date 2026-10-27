@@ -10,7 +10,7 @@ export function confirmationFor(path, { method = 'GET', body } = {}) {
   if (verb === 'DELETE') return { title: 'Delete this record?', message: 'Are you sure you want to delete this record? This action cannot be undone.', confirmLabel: 'Delete record', destructive: true }
   if (path === '/logout') return { title: 'Log out?', message: 'Are you sure you want to log out?', confirmLabel: 'Log Out' }
   if (!['POST', 'PATCH', 'PUT'].includes(verb)) return null
-  if (/^\/(?:auth\/|notifications(?:\/|$)|saved(?:\/|$)|documents(?:\/|\?|$)|vehicle-images(?:\/|$))/.test(path)) return null
+  if (/^\/(?:auth\/|session\/activity$|notifications(?:\/|$)|saved(?:\/|$)|documents(?:\/|\?|$)|vehicle-images(?:\/|$))/.test(path)) return null
   if (['/bookings', '/bookings/agreement-preview', '/support'].includes(path) || /^\/support\/[^/]+\/messages$/.test(path)) return null
   if (/archive|deactivate/.test(path)) return { title: 'Archive this record?', message: 'Confirm that this record should be removed from active operations. Its history will remain in the archive.', confirmLabel: 'Confirm archive', destructive: true }
   if (/cancel/.test(path)) return { title: 'Cancel this reservation?', message: 'Confirm cancellation before updating availability and any related refund obligations.', confirmLabel: 'Cancel reservation', destructive: true }

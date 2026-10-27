@@ -2,6 +2,8 @@ const DAY = 86400000;
 const { inputError } = require('../shared/validation.mjs');
 const REQUIRED_DOCUMENTS = ['license', 'government-1', 'government-2'];
 const LOCATIONS = ['Makati City, Metro Manila', 'BGC, Taguig City', 'NAIA Terminal 3, Pasay', 'Quezon City, Metro Manila'];
+const fleetExpansion = require('../shared/fleetExpansion.json');
+const fleetPlates = require('../shared/fleetPlates.json');
 const FLEET = [
   { id: 'bmw-3', name: 'BMW 3 Series', brand: 'BMW', model: '3 Series', category: 'Sedan', rate: 4200 },
   { id: 'mercedes-c', name: 'Mercedes-Benz C-Class', brand: 'Mercedes-Benz', model: 'C-Class', category: 'Luxury', rate: 5500 },
@@ -9,7 +11,8 @@ const FLEET = [
   { id: 'toyota-camry', name: 'Toyota Camry', brand: 'Toyota', model: 'Camry', category: 'Sedan', rate: 2800 },
   { id: 'range-rover', name: 'Range Rover Sport', brand: 'Range Rover', model: 'Sport', category: 'SUV', rate: 7200 },
   { id: 'tesla-3', name: 'Tesla Model 3', brand: 'Tesla', model: 'Model 3', category: 'Electric', rate: 4800 },
-];
+  ...fleetExpansion,
+].map(vehicle => ({ ...vehicle, plate: fleetPlates[vehicle.id] }));
 function fail(message, status = 400) { const error = new Error(message); error.status = status; throw error; }
 function text(value, label, max = 200, required = true) {
   if (value != null && typeof value !== 'string') fail(`Enter valid text for ${label.toLowerCase()}.`);
@@ -25,14 +28,14 @@ function time(date, hour = '10:00') {
   if (!Number.isFinite(stamp) || new Date(stamp + 8 * 3600000).toISOString().slice(0, 10) !== date) return NaN;
   return stamp;
 }
-function quote(input, allowPast = false, customRate = null, definition = null) {
+function quote(input, allowPast = false, customRate = null, definition = null, locations = LOCATIONS) {
   const vehicle = definition?.id === input.vehicleId ? definition : FLEET.find(v => v.id === input.vehicleId);
   if (!vehicle) fail('Choose a vehicle from the fleet.');
   const start = time(input.start, input.startTime), end = time(input.end, input.endTime);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) fail('Choose valid dates, with return after pick-up.');
   if (!allowPast && start <= Date.now()) fail('Pick-up must be in the future.');
   if (end - start > 366 * DAY) fail('A rental can be at most 366 days.');
-  if (!LOCATIONS.includes(input.pickup) || !LOCATIONS.includes(input.dropoff)) fail('Choose supported pick-up and return locations.');
+  if (!locations.includes(input.pickup) || !locations.includes(input.dropoff)) fail('Choose supported pick-up and return locations.');
   const days = Math.ceil((end - start) / DAY);
   const dailyRate = typeof customRate === 'number' && customRate > 0 ? customRate : vehicle.rate;
   return { days, rental: dailyRate * days, deposit: 5000, total: dailyRate * days + 5000 };

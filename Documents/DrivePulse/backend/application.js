@@ -19,6 +19,8 @@ const hash = (value) => createHash('sha256').update(value).digest('hex');
 const now = () => new Date().toISOString();
 const VERIFY_TOKEN_TTL = 24 * 3600000;
 const EMAIL_RESEND_COOLDOWN = 60000;
+const SESSION_IDLE_MS = 15 * 60000;
+const sessionCookieOptions = { path: '/', httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' };
 function publicUser(user) {
   return {
     id: user.id, name: user.name, email: user.email, role: user.role,
@@ -33,21 +35,11 @@ function passwordRecord(password) {
   const salt = randomBytes(16).toString('hex');
   return { salt, passwordHash: scryptSync(password, salt, 64).toString('hex') };
 }
-function samplePDF(label) {
-  const content = `BT /F1 18 Tf 45 740 Td (DRIVEPULSE - ILLUSTRATIVE SAMPLE) Tj 0 -40 Td /F1 13 Tf (${label}) Tj 0 -30 Td (Demo review document. Not a real identity document.) Tj ET`;
-  const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`];
-  let pdf = '%PDF-1.4\n',offsets = [0];
-  objects.forEach((body, index) => {offsets.push(Buffer.byteLength(pdf));pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;});
-  const xref = Buffer.byteLength(pdf);
-  pdf += `xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return Buffer.from(pdf);
-}
 
 async function createApp({ app = express(), database = null, dbPath, mailer = createMailer(), seedDemo = process.env.ENABLE_DEMO_ACCOUNTS === 'true' || process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL, allowAgentSignup = process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL && process.env.ALLOW_AGENT_SIGNUP !== 'false' || process.env.ALLOW_AGENT_SIGNUP === 'true' } = {}) {
   if (process.env.NODE_ENV === 'production' && (allowAgentSignup || seedDemo && process.env.ENABLE_DEMO_ACCOUNTS !== 'true')) throw new Error('Demo data and staff self-registration must be disabled in production.');
   const db = database || createDatabase({ filename: dbPath });
   await db.initialize();
-  await db.prepare("UPDATE documents SET owner_id='sample-owner-archive' WHERE name LIKE 'sample-%.pdf' AND owner_id<>'sample-owner-archive'").run();
 
   const rawBookings = async () => (await db.prepare('SELECT payload FROM bookings').all()).map((row) => JSON.parse(row.payload));
   const allBookings = async () => (await rawBookings()).filter((b) => !b.archivedAt);
@@ -88,6 +80,19 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   };
   const rentalDocuments = createRentalDocuments({ db, getBooking, saveBooking, transaction, audit });
   const fleet = createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, transaction, audit, rentalDocuments, systemAudit });
+  await fleet.initializePlates();
+  // Branch records can be maintained without shipping a new frontend bundle.
+  if (!(await fleet.records('location')).length) await transaction(async () => {
+    for (const [index, name] of D.LOCATIONS.entries()) await fleet.save('location', { id: `branch-${index + 1}`, name, active: true, type: name.includes('NAIA') ? 'Airport hub' : 'Branch' });
+  });
+  const pickupLocations = async () => (await fleet.records('location')).filter(location => location.active !== false).sort((a, b) => a.id.localeCompare(b.id));
+  const locationNames = async () => (await pickupLocations()).map(location => location.name);
+  const transactionReference = async () => {
+    const existing = new Set((await rawBookings()).map(b => b.transactionReference));
+    let reference;
+    do { reference = `DP-TXN-${randomBytes(8).toString('hex').toUpperCase()}`; } while (existing.has(reference));
+    return reference;
+  };
   const updateBooking = async (req, action, fn) => await transaction(async () => {
     const booking = await getBooking(req.params.id);
     if (req.body.version !== booking.version) D.fail('This reservation changed. Refresh it and try again.', 409);
@@ -100,7 +105,6 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     return await fleet.present(booking);
   });
 
-  const seedReservations = seedDemo && !(await db.prepare('SELECT id FROM users WHERE email=?').get('client@drivepulse.demo'));
   if (seedDemo) {
     await transaction(async () => {
       for (const account of demoAccounts) {
@@ -113,39 +117,6 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
           await db.prepare('DELETE FROM sessions WHERE user_id=?').run(existing.id);
         }
       }
-    });
-  }
-  if (seedReservations) {
-    await transaction(async () => {
-      const client = await db.prepare('SELECT * FROM users WHERE email=?').get('client@drivepulse.demo');
-      const agent = await db.prepare('SELECT * FROM users WHERE email=?').get('agent@drivepulse.demo');
-      const docs = await asyncMap(D.REQUIRED_DOCUMENTS, async (kind) => {
-        const id = randomUUID(),data = samplePDF(kind);
-        await db.prepare('INSERT INTO documents(id,owner_id,kind,name,mime,fingerprint,uploaded_at,data) VALUES(?,?,?,?,?,?,?,?)').run(id, 'sample-owner-archive', kind, `sample-${kind}.pdf`, 'application/pdf', hash(data), now(), data);
-        return { ...meta(await db.prepare('SELECT * FROM documents WHERE id=?').get(id)), review: { status: 'pending' } };
-      });
-      const date = (offset) => new Date(Date.now() + 8 * 3600000 + offset * D.DAY).toISOString().slice(0, 10);
-      const specifications = [
-      ['DP-10248', 'bmw-3', 2, 5, 'Pending Approval', 'Online'], ['DP-10249', 'range-rover', 1, 3, 'Pending Approval', 'Walk-in'],
-      ['DP-10250', 'tesla-3', 1, 4, 'Ready for Dispatch', 'Online'], ['DP-10251', 'toyota-camry', -3, -1, 'On Rental', 'Online'],
-      ['DP-10182', 'mercedes-c', -10, -8, 'Completed', 'Online']];
-
-      for (const [id, vehicleId, start, end, status, source] of specifications) {
-        const dates = { vehicleId, start: date(start), end: date(end), startTime: '10:00', endTime: '10:00', pickup: D.LOCATIONS[0], dropoff: D.LOCATIONS[0] };
-        const booking = { id, ...dates, ...D.quote(dates, true), ownerId: client.id, renter: { name: client.name, email: client.email, phone: 'Demo customer' }, status, source, sample: true, version: 1, documents: structuredClone(docs), payments: [], payment: 'Demo payment record', createdAt: now(), lateFee: 0, activity: [] };
-        const confirmed = status !== 'Pending Approval';
-        booking.payments = ['rental', 'deposit'].map((type) => ({ id: randomUUID(), type, amount: booking[type], method: 'Cash (sample)', reference: `SAMPLE-${id}-${type}`, status: confirmed ? 'confirmed' : 'pending', at: now(), simulated: true }));
-        await saveBooking(booking);
-        await rentalDocuments.contract(booking, agent);
-        if (confirmed) {
-          booking.documents.forEach((doc) => {doc.review = { status: 'approved', by: agent.name, at: now(), note: 'Illustrative sample review' };});
-          booking.inspection = { status: 'approved', role: 'mechanic', by: 'Riley Cruz', at: now(), odometer: 14200, fuelLevel: 100, cleanliness: 'Clean', scratches: 'No visible scratches', tirePressure: { frontLeft: 33, frontRight: 33, rearLeft: 32, rearRight: 32 }, checks: { exterior: true, interior: true, tyres: true, controls: true, fuel: true }, photos: [{ id: 'sample-ext', view: 'exterior' }, { id: 'sample-int', view: 'interior' }], note: 'Illustrative inspection' };
-          if (status !== 'Completed') booking.dispatchPass = { id: `PASS-${randomUUID().slice(0, 8).toUpperCase()}`, issuedAt: now(), issuedBy: agent.name, end: booking.end, endTime: booking.endTime };
-        }
-        await audit(booking, agent, 'Sample reservation created', 'Illustrative data for the development workspace.', { oldValue: null, newValue: { id, status, vehicleId } });
-        await saveBooking(booking);
-      }
-      await saveTicket({ id: `Q-${randomUUID().slice(0, 8)}`, ownerId: client.id, bookingId: 'DP-10248', subject: 'Can I extend my rental?', category: 'Extension', status: 'open', createdAt: now(), version: 1, messages: [{ id: randomUUID(), by: client.name, role: 'client', message: 'Could you help me add one extra day to this reservation?', at: now() }] });
     });
   }
 
@@ -173,8 +144,15 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.get('origin') && !origins.includes(req.get('origin'))) return res.status(403).json({ error: 'This request origin is not allowed.' });
     const cookie = req.get('cookie')?.split(';').map((c) => c.trim()).find((c) => c.startsWith('drivepulse_session='))?.slice('drivepulse_session='.length);
     if (cookie) {
-      const record = await db.prepare('SELECT users.* FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token=? AND expires>? AND users.archived_at IS NULL').get(hash(cookie), Date.now());
-      if (record) req.user = record;
+      const token = hash(cookie);
+      const record = await db.prepare('SELECT users.*, sessions.last_activity, sessions.expires FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token=? AND users.archived_at IS NULL').get(token);
+      if (record && Number(record.expires) > Date.now() && Date.now() - Number(record.last_activity) < SESSION_IDLE_MS) { req.user = record; req.sessionToken = token; }
+      else {
+        await db.prepare('DELETE FROM sessions WHERE token=?').run(token);
+        res.clearCookie('drivepulse_session', sessionCookieOptions);
+        req.sessionExpired = true;
+        if (!['/session', '/logout'].includes(req.path) && !req.path.startsWith('/auth/')) return res.status(401).json({ error: 'Your session expired after 15 minutes of inactivity. Please sign in again.', code: 'SESSION_EXPIRED' });
+      }
     }
     next();
   });
@@ -252,6 +230,9 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   });
   app.get('/api/session', async (req, res) => res.json({
     user: req.user ? publicUser(req.user) : null,
+    sessionExpired: Boolean(req.sessionExpired),
+    lastActivity: req.user ? Number(req.user.last_activity) : null,
+    inactivityTimeout: SESSION_IDLE_MS,
     agentSignup: allowAgentSignup,
     staffSignup: allowAgentSignup,
     demo: seedDemo,
@@ -259,12 +240,19 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     rates: Object.fromEntries((await fleet.fleet(true)).map((v) => [v.id, v.rate]))
   }));
 
+  // Only explicit user activity renews idle time. Polling reads never extend it.
+  app.post('/api/session/activity', requireUser, async (req, res) => {
+    const at = Date.now();
+    await db.prepare('UPDATE sessions SET last_activity=? WHERE token=?').run(at, req.sessionToken);
+    res.json({ lastActivity: at });
+  });
+
   const createSession = async (user, res) => {
     const token = randomBytes(32).toString('hex'),loginAt = now();
     await db.prepare('UPDATE users SET last_login_at=? WHERE id=?').run(loginAt, user.id);
     user.last_login_at = loginAt;
     await db.prepare('DELETE FROM sessions WHERE expires<=?').run(Date.now());
-    await db.prepare('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)').run(hash(token), user.id, Date.now() + 7 * D.DAY);
+    await db.prepare('INSERT INTO sessions(token,user_id,expires,last_activity) VALUES(?,?,?,?)').run(hash(token), user.id, Date.now() + 7 * D.DAY, Date.now());
     res.cookie('drivepulse_session', token, { httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production', maxAge: 7 * D.DAY, path: '/' });
     return publicUser(user);
   };
@@ -488,6 +476,8 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     res.clearCookie('drivepulse_session', { path: '/', httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production' });res.json({ ok: true });
   });
 
+  app.get('/api/locations', async (req, res) => res.json(await pickupLocations()));
+
   app.get('/api/availability', async (req, res) => res.json([
   ...(await allBookings()).map(({ id, vehicleId, start, end, startTime, endTime, status }) => ({ id, vehicleId, start, end, startTime, endTime, status })),
   ...(await fleet.fleet(true)).filter((v) => v.archivedAt || ['Under Inspection', 'Maintenance', 'Out of Service', 'Overdue'].includes(v.status)).map((v) => ({ id: `hold-${v.id}`, vehicleId: v.id, status: v.status, rate: v.rate, blocked: true }))]
@@ -561,7 +551,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     if (!vehicle) D.fail('Choose an active fleet vehicle.', 404);
     const blocks = await fleet.operationalBlocks(vehicle.id);
     if (blocks.length || vehicle.status === 'Overdue') D.fail(blocks.join(' ') || 'This vehicle is overdue and unavailable.', 409);
-    const quote = D.quote(input, false, vehicle.rate, vehicle);
+    const quote = D.quote(input, false, vehicle.rate, vehicle, await locationNames());
     if (!D.available(await allBookings(), input)) D.fail('This vehicle is already reserved for those dates.', 409);
     const preview = {
       vehicle: { id: vehicle.id, fleetCode: vehicle.fleetCode, plate: vehicle.plate || '', name: vehicle.name },
@@ -577,7 +567,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     const input = req.body;
     const blocks = await fleet.operationalBlocks(input.vehicleId);
     if (blocks.length) D.fail(blocks.join(' '), 409);
-    const quotation = D.quote(input, false, await fleet.vehicleRate(input.vehicleId), await fleet.vehicle(input.vehicleId));
+    const quotation = D.quote(input, false, await fleet.vehicleRate(input.vehicleId), await fleet.vehicle(input.vehicleId), await locationNames());
     if (!walkin && input.agreementPreviewDigest) {
       const preview = await agreementPreview(input, req.user);
       if (input.agreementPreviewDigest !== preview.digest) D.fail('The rental agreement changed. Review the updated vehicle, dates and quotation before submitting again.', 409);
@@ -587,6 +577,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     if (!D.available(await allBookings(), input)) D.fail('This vehicle is already reserved for those dates.', 409);
     let ownerId = req.user.id,renter = publicUser(req.user),docs = [];
     if (walkin) {
+      if (input.customerConfirmed !== true) D.fail('Confirm the customer details and trip schedule before proceeding.');
       renter = { name: D.text(input.renter?.name, 'Customer name', 70), email: D.text(input.renter?.email, 'Email', 160, false).toLowerCase(), phone: D.text(input.renter?.phone, 'Contact number', 40) };
       if (renter.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(renter.email)) D.fail('Enter a valid customer email.');
       ownerId = (await db.prepare("SELECT id FROM users WHERE email=? AND role='client'").get(renter.email))?.id || null;
@@ -599,6 +590,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
       if (new Set(docs.map((d) => d.fingerprint)).size !== 3) D.fail('Your license and two IDs must be different files.');
     }
     const booking = { id: `DP-${randomUUID().slice(0, 8).toUpperCase()}`, ownerId, renter, vehicleId: input.vehicleId, start: input.start, end: input.end, startTime: input.startTime, endTime: input.endTime, pickup: input.pickup, dropoff: input.dropoff, ...quotation, source: walkin ? 'Walk-in' : 'Online', status: 'Pending Approval', version: 1, documents: docs, payments: [], lateFee: 0, createdAt: now(), activity: [], note: D.text(input.note, 'Reservation note', 1000, false), payment: 'Cash' };
+    booking.transactionReference = await transactionReference();
     booking.dailyRate = await fleet.vehicleRate(input.vehicleId);
     const selected = (await fleet.fleet()).find(v => v.id === input.vehicleId);
     booking.vehicle = { id: selected.id, name: selected.name, fleetCode: selected.fleetCode, plate: selected.plate || '' };
@@ -655,7 +647,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
       if (!['confirmed', 'rejected'].includes(req.body.decision)) D.fail('Choose confirm or reject.');
       if (req.body.decision === 'confirmed') {
         if (req.body.received !== true) D.fail('Confirm that the cash was physically received.');
-        pending.reference = D.text(req.body.reference, 'Cash receipt reference', 150);
+        pending.reference = req.body.reference ? D.text(req.body.reference, 'Cash receipt reference', 150) : `CASH-${randomBytes(8).toString('hex').toUpperCase()}`;
         pending.method = 'Cash';
       }
       if (req.body.decision === 'confirmed' && pending.amount > (pending.type === 'deposit' ? bill.depositBalance : bill.rentalBalance)) D.fail('This payment exceeds the outstanding balance. Reject it and record the correct amount.');
@@ -668,9 +660,17 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
       const maxAllowed = type === 'deposit' ? bill.depositBalance : bill.rentalBalance;
       if (amount > maxAllowed) D.fail('The payment exceeds the outstanding balance.');
       if (req.body.received !== true) D.fail('Confirm that the cash was physically received.');
-      const reference = D.text(req.body.reference, 'Cash receipt reference', 150);await assertCashReference(reference);
-      const payment = { id: randomUUID(), type, amount, status: 'confirmed', method: 'Cash', reference, at: now(), reviewedBy: req.user.name };
-      b.payments.push(payment);await rentalDocuments.cashReceipt(b, payment, req.user);
+      const reference = req.body.reference ? D.text(req.body.reference, 'Cash receipt reference', 150) : `CASH-${randomBytes(8).toString('hex').toUpperCase()}`;await assertCashReference(reference);
+      // Confirm an online booking's expected cash entry instead of leaving a
+      // duplicate pending deposit after the full amount has been collected.
+      const expected = b.payments.find(p => p.type === type && p.status === 'pending' && p.amount === amount && p.reference === 'Awaiting cash at the counter');
+      const payment = { ...(expected || {}), id: expected?.id || randomUUID(), type, amount, status: 'confirmed', method: 'Cash', reference, at: now(), reviewedAt: now(), reviewedBy: req.user.name };
+      if (expected) Object.assign(expected, payment); else b.payments.push(payment);
+      if (!expected) {
+        const cashIntent = b.payments.find(p => p.type === type && p.status === 'pending' && p.reference === 'Awaiting cash at the counter');
+        if (cashIntent) cashIntent.amount = Math.round((maxAllowed - amount) * 100) / 100;
+      }
+      await rentalDocuments.cashReceipt(b, expected || payment, req.user);
     }
   })));
 
@@ -693,7 +693,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   async function extensionQuote(b, end, endTime) {
     const updated = { ...b, end, endTime };
     if (D.time(end, endTime) <= Math.max(D.time(b.end, b.endTime), Date.now())) D.fail('Choose a future return time later than the current return.');
-    const quotation = D.quote(updated, true, b.dailyRate || b.rental / b.days, await fleet.vehicle(b.vehicleId));
+    const quotation = D.quote(updated, true, b.dailyRate || b.rental / b.days, await fleet.vehicle(b.vehicleId), [...new Set([...(await locationNames()), b.pickup, b.dropoff])]);
     if (!D.available(await allBookings(), updated, b.id)) D.fail('This extension overlaps another reservation.', 409);
     return { updated, quotation };
   }

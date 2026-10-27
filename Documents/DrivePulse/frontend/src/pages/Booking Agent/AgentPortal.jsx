@@ -1,3 +1,5 @@
+import SecurityDepositDialog from '../../components/operations/SecurityDepositDialog.jsx'
+import ReturnsSchedule from '../../components/operations/ReturnsSchedule.jsx'
 import { useState } from 'react'
 import { vehicleFor } from '../../utils/vehicles.js'
 import BrandMark from '../../components/ui/BrandMark.jsx'
@@ -17,9 +19,11 @@ const navigation = [
   ['agent-overview', 'grid', 'Overview'],
   ['agent-reservations', 'calendar', 'Reservations & intake'],
   ['agent-calendar', 'car', 'Availability calendar'],
+  ['agent-returns', 'road', 'Returns Schedule'],
 ]
 
 const headings = {
+  'agent-returns': ['Coordinate every return.', 'Track scheduled drop-offs and condition sign-offs. All return times are in PHT.'],
   'agent-overview': ['A smooth day starts here.', 'Your reservations, ID verifications, payments, and departures at a glance.'],
   'agent-reservations': ['Unified reservation & intake handling.', 'Manage walk-in and online bookings, verify IDs, record cash/deposits, issue dispatch passes, and archive closed records.'],
   'agent-calendar': ['A clear view of the road ahead.', 'Explore the fleet schedule and vehicle operational readiness. Select an open day to schedule a walk-in.'],
@@ -67,7 +71,7 @@ export default function AgentPortal({ page, user, workspace, availability, onRef
   })
 
   async function signout() { try { await onLogout() } catch (problem) { setError(problem.message) } }
-  const actions = <div className="staff-card-actions"><button className="button button-outline" onClick={() => setDialog({ kind: 'financial-request' })}>Security Deposit exception</button><button className="button button-dark" onClick={() => setDialog({ kind: 'walkin' })}><span aria-hidden="true">＋</span>New walk-in</button></div>
+  const actions = <div className="staff-card-actions"><button className="button button-outline" onClick={() => setDialog({ kind: 'security-deposit' })}>Security Deposit</button><button className="button button-outline" onClick={() => setDialog({ kind: 'financial-request' })}>Security Deposit exception</button><button className="button button-dark" onClick={() => setDialog({ kind: 'walkin' })}><span aria-hidden="true">＋</span>New walk-in</button></div>
 
   return <div className="agent-shell">
     {menuOpen && <button className="agent-scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
@@ -99,9 +103,11 @@ export default function AgentPortal({ page, user, workspace, availability, onRef
         {activePage === 'agent-overview' && <AgentOverviewPage pending={pending} reviews={reviews} paymentQueue={paymentQueue} ready={ready} go={go} open={open} active={active} />}
         {activePage === 'agent-reservations' && <AgentReservationsPage query={query} setQuery={setQuery} status={status} setStatus={setStatus} channel={channel} setChannel={setChannel} reservationList={reservationList} open={open} onArchive={archiveBooking} />}
         {activePage === 'agent-calendar' && <AvailabilityCalendar bookings={bookings} availability={availability} onOpen={open} onCreate={values => setDialog({ kind: 'walkin', values })} />}
+        {activePage === 'agent-returns' && <ReturnsSchedule bookings={bookings} onRecordReturn={id => open(id, 'adjustments')} />}
         <footer className="agent-footer"><span>One desk. Every journey. <strong>drivepulse.</strong></span><span>Booking Agent / Front Desk · All times in PHT</span></footer>
       </div>
     </main>
+    {dialog?.kind === 'security-deposit' && <SecurityDepositDialog bookings={bookings} onRefresh={onRefresh} onClose={() => setDialog(null)} onDone={async message => { await onRefresh(); setDialog(null); done(message) }} />}
     {dialog?.kind === 'financial-request' && <FinancialRequest bookings={bookings} onClose={() => setDialog(null)} onDone={async message => { await onRefresh(); setDialog(null); done(message) }} />}
     {dialog?.kind === 'walkin' && <WalkInReservation availability={availability} values={dialog.values} onClose={() => setDialog(null)} onCreated={async booking => { await onRefresh(); setDialog({ kind: 'confirmation', booking }); done('Reservation created with confirmation and rental terms.') }} />}
     {dialog?.kind === 'confirmation' && <ReservationConfirmation booking={dialog.booking} onClose={() => setDialog(null)} onContinue={() => open(dialog.booking.id)} continueLabel="Continue to reservation" />}

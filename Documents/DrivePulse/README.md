@@ -33,9 +33,13 @@ Account verification and forgot-password emails use Gmail SMTP. Follow [the emai
 
 ## Account security
 
+Sessions expire after 15 minutes of inactivity. Clicks, keypresses and route navigation count as activity; background refreshes do not. Expiry revokes the server token, clears the cookie and redirects to sign-in with an alert.
+
 Client registration collects first and last names, an optional middle name, a Philippine mobile number, and a complete address. Password recovery uses a six-digit, single-use email code with a 10-minute expiry and five-attempt limit. Three failed sign-ins trigger a 60-second account cooldown and an unlock notification through Gmail SMTP. Verification emails and recovery codes have a one-minute resend cooldown. Existing accounts and rental records are preserved by the additive database upgrades.
 
 ## Demo accounts
+
+Demo mode creates login accounts without sample reservations, transactions or support logs. The fleet includes sixteen preconfigured vehicles with persistent sample Philippine-format plates. See [workflow updates and verification](docs/workflow-updates.md) for the booking, draft, return schedule and cleanup changes.
 
 In local demo mode, sign in at `#login` using a username (or the email shown below) and its password:
 

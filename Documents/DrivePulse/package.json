@@ -14,7 +14,8 @@
     "preflight": "node backend/scripts/preflight.js",
     "package:deploy": "node scripts/package-deploy.mjs",
     "db:migrate": "node backend/scripts/manage-db.js migrate",
-    "db:manager": "node backend/scripts/manage-db.js manager"
+    "db:manager": "node backend/scripts/manage-db.js manager",
+    "db:clean-demo": "node backend/scripts/clean-demo.js"
   },
   "engines": { "node": "24.x" }
 }

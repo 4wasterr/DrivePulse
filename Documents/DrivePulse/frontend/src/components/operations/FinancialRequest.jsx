@@ -1,3 +1,4 @@
+import useDraftState from '../../hooks/useDraftState.js'
 import ValidatedField from '../ui/ValidatedField.jsx'
 import ValidatedForm from '../ui/ValidatedForm.jsx'
 import { useState } from 'react'
@@ -60,15 +61,15 @@ const COMMON_DISPUTES = [
 
 export default function FinancialRequest({ bookings, onClose, onDone }) {
   const eligible = bookings.filter(b => ['Cancelled', 'Completed'].includes(b.status) && (b.refundableDeposit > 0 || b.refundableRental > 0))
-  const [bookingId, setBookingId] = useState(eligible[0]?.id || '')
+  const [bookingId, setBookingId] = useDraftState('financial-request', 'bookingId', eligible[0]?.id || '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const b = eligible.find(b => b.id === bookingId)
-  const [allocation, setAllocation] = useState('deposit')
-  const [disputeType, setDisputeType] = useState('fuel_shortfall')
+  const [allocation, setAllocation] = useDraftState('financial-request', 'allocation', 'deposit')
+  const [disputeType, setDisputeType] = useDraftState('financial-request', 'disputeType', 'fuel_shortfall')
   const available = b ? (allocation === 'deposit' ? b.refundableDeposit : b.refundableRental) : 0
-  const [releaseAmount, setReleaseAmount] = useState(() => Math.max(0, available - 1500))
-  const [reasonText, setReasonText] = useState(COMMON_DISPUTES[0].template)
+  const [releaseAmount, setReleaseAmount] = useDraftState('financial-request', 'releaseAmount', () => Math.max(0, available - 1500))
+  const [reasonText, setReasonText] = useDraftState('financial-request', 'reasonText', COMMON_DISPUTES[0].template)
 
   function onDisputeChange(disputeId) {
     setDisputeType(disputeId)
@@ -96,7 +97,7 @@ export default function FinancialRequest({ bookings, onClose, onDone }) {
   const reasonSuffix = withheld > 0 ? ` (Withheld: PHP ${withheld.toLocaleString()})` : ''
 
   return (
-    <Modal title="Submit financial exception / dispute" eyebrow="OPERATIONS MANAGER EXCEPTION REVIEW" onClose={onClose}>
+    <Modal draftKey={'financial-request'} title="Submit financial exception / dispute" eyebrow="OPERATIONS MANAGER EXCEPTION REVIEW" onClose={onClose}>
       <p className="workspace-muted">
         Clean returns with zero damage flags and 100% fuel auto-release deposits within 24–48 hours. Submit this request only for <strong>disputed/withheld deposits</strong> (e.g. damage or fuel deductions) or <strong>cancelled booking payment returns</strong>.
       </p>

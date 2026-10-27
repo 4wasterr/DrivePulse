@@ -1,7 +1,10 @@
+import useLocations from '../../../hooks/useLocations.js'
+import useDraftState from '../../../hooks/useDraftState.js'
+import LocationField from '../../../components/ui/LocationField.jsx'
 import ValidatedField from '../../../components/ui/ValidatedField.jsx'
 import ValidatedForm from '../../../components/ui/ValidatedForm.jsx'
 import { useState, useRef, useEffect } from 'react'
-import { rentalDays, getAvailabilityReason, requiredDocuments, prettyDate, locations, dateISO, money } from '../../../data.js'
+import { rentalDays, getAvailabilityReason, requiredDocuments, prettyDate,  dateISO, money } from '../../../data.js'
 import Modal from '../../../components/ui/Modal.jsx'
 import Icon from '../../../components/ui/Icon.jsx'
 import UploadField from '../../../components/ui/UploadField.jsx'
@@ -11,8 +14,9 @@ import { bookingStepError, duplicateDocumentsError } from '../../../utils/bookin
 import BookingDatePicker from '../../../components/ui/BookingDatePicker.jsx'
 
 export default function BookingModal({ vehicle, initialDates, bookings, documents: savedDocuments, onDocument, onReserve, onClose, onBack, onViewTrips }) {
-  const [step, setStep] = useState(0)
-  const [uploadedDocuments, setUploadedDocuments] = useState({})
+  const { locations, loading: locationsLoading, error: locationsError } = useLocations()
+  const [step, setStep] = useDraftState(`booking:${vehicle.id}`, 'step', 0)
+  const [uploadedDocuments, setUploadedDocuments] = useDraftState(`booking:${vehicle.id}`, 'uploadedDocuments', {})
   const [uploadingDocuments, setUploadingDocuments] = useState({})
   const documents = { ...savedDocuments, ...uploadedDocuments }
   const [liveAvailability, setLiveAvailability] = useState(null)
@@ -25,7 +29,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
     const interval = setInterval(refresh, 30000)
     return () => { active = false; clearInterval(interval) }
   }, [vehicle.id])
-  const [dates, setDates] = useState(initialDates)
+  const [dates, setDates] = useDraftState(`booking:${vehicle.id}`, 'dates', initialDates)
   const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState('')
   const [reservation, setReservation] = useState(null)
@@ -66,7 +70,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
     agreementError: currentAgreement?.error || '',
     agreed,
   }
-  const currentStepProblem = bookingStepError({ step, ...stepValidationContext })
+  const currentStepProblem = bookingStepError({ step, ...stepValidationContext }) || (locationsLoading || locationsError || !locations.includes(dates.pickup) || !locations.includes(dates.dropoff) ? 'Select operational pick-up and return locations to continue.' : '')
   const availabilityProblem = step === 0 ? getAvailabilityReason(vehicle.id, dates, availability) : ''
   const duplicateDocsProblem = step === 1 ? duplicateDocumentsError(documents, requiredDocuments) : ''
   const uploadedCount = requiredDocuments.filter(doc => Boolean(documents[doc.id])).length
@@ -74,7 +78,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
   async function next(e) {
     e.preventDefault()
     setError('')
-    const problem = bookingStepError({ step, ...stepValidationContext })
+    const problem = currentStepProblem
     if (problem) {
       setError(problem)
       return
@@ -118,7 +122,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
   if (reservation) return <ReservationConfirmation booking={reservation} onClose={onClose} onContinue={onViewTrips} continueLabel="Track my booking" />
 
   return (
-    <Modal title="Make the journey yours." eyebrow="YOUR NEXT CHAPTER" wide onClose={onClose}>
+    <Modal draftKey={`booking:${vehicle.id}`} title="Make the journey yours." eyebrow="YOUR NEXT CHAPTER" wide onClose={onClose}>
       <div className="booking-steps" aria-label="Booking progress">
         {['Trip details', 'Your documents', 'Agreement & payment'].map((label, index) => (
           <div key={label} className={index <= step ? 'current' : ''} aria-current={step === index ? 'step' : undefined}>
@@ -151,15 +155,11 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
               <div className="form-grid">
                 <label className="form-field span-2">
                   Pick-up location
-                  <ValidatedField as="select" name="pickup" required value={dates.pickup} onChange={e => update('pickup', e.target.value)}>
-                    {locations.map(l => <option key={l}>{l}</option>)}
-                  </ValidatedField>
+                  <LocationField name="pickup" required value={dates.pickup} onChange={e => update('pickup', e.target.value)} />
                 </label>
                 <label className="form-field span-2">
                   Drop-off location
-                  <ValidatedField as="select" name="dropoff" required value={dates.dropoff} onChange={e => update('dropoff', e.target.value)}>
-                    {locations.map(l => <option key={l}>{l}</option>)}
-                  </ValidatedField>
+                  <LocationField name="dropoff" required value={dates.dropoff} onChange={e => update('dropoff', e.target.value)} />
                 </label>
                 <label className="form-field">
                   Pick-up date
@@ -284,7 +284,7 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
           <div className="summary-content">
             <span className="eyebrow">YOUR CHOSEN RIDE</span>
             <h3>{vehicle.name}</h3>
-            <p className="small muted">{vehicle.fleetCode || vehicle.id}</p>
+            <p className="small muted">{vehicle.fleetCode || vehicle.id} · {vehicle.plate}</p>
             <p className="muted small">{vehicle.category} · {vehicle.transmission} · {vehicle.seats} seats</p>
             <div className="summary-dates">
               <Icon name="calendar" size={18} />

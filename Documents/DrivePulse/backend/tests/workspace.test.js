@@ -25,7 +25,7 @@ async function fixture(t, options = {}) {
   const client = await account('client', 'alex'), agent = await account('agent', 'jamie');
   const mechanic = await account('mechanic', 'riley'), manager = await account('manager', 'sam');
   const date = offset => new Date(Date.now() + 8 * 3600000 + offset * D.DAY).toISOString().slice(0, 10);
-  const dates = (vehicleId = 'bmw-3', start = 2, end = 5) => ({ vehicleId, start: date(start), end: date(end), startTime: '10:00', endTime: '10:00', pickup: D.LOCATIONS[0], dropoff: D.LOCATIONS[0] });
+  const dates = (vehicleId = 'bmw-3', start = 2, end = 5) => ({ vehicleId, start: date(start), end: date(end), startTime: '10:00', endTime: '10:00', pickup: D.LOCATIONS[0], dropoff: D.LOCATIONS[0], customerConfirmed: true });
   const upload = async (kind, cookie = client.cookie, value = kind, query = '') => {
     const result = await request(`/documents/${kind}${query}`, { method: 'POST', cookie, body: Buffer.from(`%PDF-1.7\n${value}`), headers: { 'X-File-Name': encodeURIComponent(`${kind}.pdf`) } });
     assert.equal(result.status, 201, JSON.stringify(result.data)); return result.data;
@@ -58,7 +58,15 @@ async function fixture(t, options = {}) {
     const result = await inspect(booking);
     assert.equal(result.status, 201, JSON.stringify(result.data)); return (await operations(agent.cookie)).bookings.find(b => b.id === booking.id);
   };
-  return { request, account, client, agent, mechanic, manager, operations, photo, inspect, dates, date, upload, book, action, verifyAll, db };
+  const overdueRental = async () => {
+    let b = await verifyAll(await book());
+    b = (await action(b, 'pass')).data;
+    b = (await action(b, 'dispatch')).data;
+    b.start = date(-3); b.end = date(-1); b.dispatchedAt = new Date(Date.now() - 3 * D.DAY).toISOString();
+    await db.prepare('UPDATE bookings SET payload=? WHERE id=?').run(JSON.stringify(b), b.id);
+    return b;
+  };
+  return { overdueRental, request, account, client, agent, mechanic, manager, operations, photo, inspect, dates, date, upload, book, action, verifyAll, db };
 }
 
 test('input validation rejects invalid customer details without saving reservations and accepts formatted international contacts', async t => {
@@ -205,7 +213,7 @@ test('extensions check conflicts and price changes; cancellation releases availa
 
 test('late returns bill started hours and keep additional fees payable after completion', async t => {
   const f = await fixture(t, { seedDemo: true });
-  let b = (await f.request('/workspace', { cookie: f.agent.cookie })).data.bookings.find(booking => booking.status === 'On Rental');
+  let b = await f.overdueRental();
   const time = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour12: false, hour: '2-digit', minute: '2-digit' });
   const hours = Math.ceil((D.time(f.date(0), time) - D.time(b.end, b.endTime)) / 3600000);
   assert.equal((await f.action(b, 'return', { date: f.date(0), time, hourlyRate: -1 })).status, 400);
@@ -320,7 +328,7 @@ test('maintenance transitions retain invoices and require a fresh clearance befo
 
 test('clean returns with full fuel and zero damage flags auto-release deposits without manager bottleneck', async t => {
   const f = await fixture(t, { seedDemo: true });
-  let b = (await f.operations(f.agent.cookie)).bookings.find(b => b.status === 'On Rental');
+  let b = await f.overdueRental();
   const time = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour12: false, hour: '2-digit', minute: '2-digit' });
   b = (await f.action(b, 'return', { date: f.date(0), time, hourlyRate: 0 })).data;
   assert.equal((await f.operations()).fleet.find(v => v.id === b.vehicleId).status, 'Under Inspection');
@@ -340,7 +348,7 @@ test('clean returns with full fuel and zero damage flags auto-release deposits w
 
 test('disputed/withheld deposits and cancelled booking refunds require manager exception approval', async t => {
   const f = await fixture(t, { seedDemo: true });
-  let b = (await f.operations(f.agent.cookie)).bookings.find(b => b.status === 'On Rental');
+  let b = await f.overdueRental();
   const time = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour12: false, hour: '2-digit', minute: '2-digit' });
   b = (await f.action(b, 'return', { date: f.date(0), time, hourlyRate: 0 })).data;
   // Mechanic records post-return with 80% fuel and damageFlag, so it is NOT auto-released
@@ -378,6 +386,7 @@ test('high driver risk blocks related dispatches and manager overrides retain th
 
 test('overdue alert overrides do not make an overdue vehicle available or remove its rental status', async t => {
   const f = await fixture(t, { seedDemo: true });
+  await f.overdueRental();
   const data = await f.operations(f.manager.cookie), flag = data.flags[0]; assert.ok(flag);
   const approve = (cookie, reason) => f.request(`/manager/flags/${flag.bookingId}/override`, { method: 'POST', cookie, body: { version: flag.version, reason } });
   assert.equal((await approve(f.agent.cookie, 'Customer called.')).status, 403);

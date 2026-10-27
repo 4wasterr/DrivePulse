@@ -10,6 +10,8 @@ import { isPublicPage, workspaceHome } from './utils/roles.js'
 import { syncVehicles } from './data.js'
 import { NotificationContext } from './components/ui/notificationContext.js'
 import { readNavigationTrail, routeFromHash } from './utils/navigation.js'
+import { DraftOwnerContext, clearDrafts } from './utils/drafts.js'
+import { watchInactivity, EXPIRATION_MESSAGE } from './utils/inactivity.js'
 
 const clientPages = ['overview', 'fleet', 'bookings', 'documents', 'payments']
 
@@ -30,10 +32,31 @@ export default function App() {
   const [connectionError, setConnectionError] = useState('')
   const sequence = useRef(0)
   const returnTo = useRef('overview')
+  const expireSession = useCallback(() => {
+    sequence.current += 1
+    returnTo.current = 'overview'
+    navigationTrail.current = []
+    clearDrafts()
+    setWorkspace(null); setNotifications([]); setConnectionError(''); setLoading(false)
+    sessionStorage.setItem('drivepulse:session-expired', EXPIRATION_MESSAGE)
+    window.location.replace('#login'); setPage('login')
+    api('/logout', { method: 'POST', automatic: true }).catch(() => {})
+  }, [])
+  useEffect(() => {
+    window.addEventListener('drivepulse:session-expired', expireSession)
+    return () => window.removeEventListener('drivepulse:session-expired', expireSession)
+  }, [expireSession])
+  const userId = workspace?.user?.id
+  useEffect(() => {
+    if (!userId) return
+    return watchInactivity({ userId, lastActivity: config.lastActivity, onExpire: expireSession, onActivity: () => api('/session/activity', { method: 'POST' }).catch(() => {}) })
+  }, [userId, config.lastActivity, expireSession])
   const refresh = useCallback(() => {
     const current = ++sequence.current
     return Promise.all([api('/session'), api('/availability'), api('/vehicles')])
       .then(async ([session, schedule, fleet]) => {
+        if (current !== sequence.current) return
+        if (session.sessionExpired) { expireSession(); return }
         let data = null
         let notices = []
         if (session.user) {
@@ -48,7 +71,7 @@ export default function App() {
       })
       .catch(error => { if (current === sequence.current) { setConnectionError(error.message); if (error.status === 401) setWorkspace(null) } })
       .finally(() => { if (current === sequence.current) setLoading(false) })
-  }, [])
+  }, [expireSession])
   useEffect(() => {
     const change = () => {
       const next = routeFromHash()
@@ -66,11 +89,11 @@ export default function App() {
   }, [refresh])
   const navigate = to => { window.location.assign(`#${to}`); setPage(to) }
   const authenticate = (to = 'overview') => { returnTo.current = to; navigate('login') }
-  async function signedIn(user) { await refresh(); navigate(user.role !== 'client' ? workspaceHome(user.role) : clientPages.includes(page) ? page : returnTo.current) }
+  async function signedIn(user) { sessionStorage.removeItem('drivepulse:session-expired'); await refresh(); navigate(user.role !== 'client' ? workspaceHome(user.role) : clientPages.includes(page) ? page : returnTo.current) }
   async function logout() {
     try { await api('/logout', { method: 'POST' }) }
     catch (error) { if (error.code !== 'ACTION_CANCELLED') setConnectionError(error.message); return }
-    sequence.current += 1; returnTo.current = 'overview'; navigationTrail.current = []; setWorkspace(null); navigate('home')
+    clearDrafts(); localStorage.setItem(`drivepulse:logout:${workspace?.user?.id}`, String(Date.now())); sequence.current += 1; returnTo.current = 'overview'; navigationTrail.current = []; setWorkspace(null); navigate('home')
   }
   useEffect(() => {
     if (!authPages.includes(page) && clientPages.includes(page)) {
@@ -90,5 +113,5 @@ export default function App() {
   else if (user?.role === 'agent' && (page.startsWith('agent-') || clientPages.includes(page))) content = <AgentPortal page={page.startsWith('agent-') ? page : 'agent-overview'} user={user} workspace={workspace} availability={availability} onRefresh={refresh} onNavigate={navigate} onLogout={logout} />
   else if (user && pageRole(page) !== 'client') content = <div className="role-gate"><h1>Open your workspace.</h1><p>Your account has its own workspace.</p><a className="button button-dark" href={`#${user.role === 'client' ? 'overview' : `${user.role}-overview`}`}>Open my workspace</a><a className="button button-outline" href="#login">Sign in with another account</a></div>
   else content = <ClientPortal user={user} workspace={workspace} availability={availability} rates={config.rates} onRefresh={refresh} onLogout={logout} onAuthenticate={authenticate} />
-  return <NotificationContext.Provider value={{ user, notifications, onRefresh: refresh }}>{connectionError && <div className="connection-banner" role="alert"><span>{connectionError}</span><button onClick={refresh}>Reconnect</button></div>}{content}</NotificationContext.Provider>
+  return <DraftOwnerContext.Provider value={user?.id}><NotificationContext.Provider value={{ user, notifications, onRefresh: refresh }}>{connectionError && <div className="connection-banner" role="alert"><span>{connectionError}</span><button onClick={refresh}>Reconnect</button></div>}{content}</NotificationContext.Provider></DraftOwnerContext.Provider>
 }

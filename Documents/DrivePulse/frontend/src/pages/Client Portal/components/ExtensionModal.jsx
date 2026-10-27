@@ -1,3 +1,4 @@
+import useDraftState from '../../../hooks/useDraftState.js'
 import ValidatedField from '../../../components/ui/ValidatedField.jsx'
 import ValidatedForm from '../../../components/ui/ValidatedForm.jsx'
 import { useState } from 'react'
@@ -8,12 +9,12 @@ import { prettyDate, money, rentalDays, dateISO } from '../../../data.js'
 import { extensionError } from '../../../../../shared/validation.mjs'
 
 export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSuccess }) {
-  const [newEnd, setNewEnd] = useState(() => {
+  const [newEnd, setNewEnd] = useDraftState(`extension:${booking.id}`, 'newEnd', () => {
     const cur = new Date(Date.parse(`${booking.end}T12:00:00Z`))
     cur.setDate(cur.getDate() + 1)
     return cur.toISOString().slice(0, 10)
   })
-  const [newEndTime, setNewEndTime] = useState(booking.endTime || '10:00')
+  const [newEndTime, setNewEndTime] = useDraftState(`extension:${booking.id}`, 'newEndTime', booking.endTime || '10:00')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -44,7 +45,7 @@ export default function ExtensionModal({ booking, vehicle, onClose, onBack, onSu
   }
 
   return (
-    <Modal title="Extend your journey" eyebrow={`RESERVATION · ${booking.id}`} onClose={onClose}>
+    <Modal draftKey={`extension:${booking.id}`} title="Extend your journey" eyebrow={`RESERVATION · ${booking.id}`} onClose={onClose}>
       <ValidatedForm onSubmit={handleExtend} validate={form => [{ name: 'end', message: extensionError(booking, form.elements.namedItem('end').value, form.elements.namedItem('endTime').value) }]}>
         <div style={{ background: '#f9fafb', padding: '14px', borderRadius: '8px', border: '1px solid #e5e7eb', marginBottom: '18px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import ReturnsSchedule from '../../components/operations/ReturnsSchedule.jsx'
 import StaffLayout from '../../layouts/StaffLayout.jsx'
 import ManagerOverviewPage from './OverviewPage.jsx'
 import ApprovalPanel from './FinancialApprovalsPage.jsx'
@@ -19,6 +20,7 @@ import ExtensionApprovals from '../../components/operations/ExtensionApprovals.j
 const navigation = [
   ['overview', 'grid', 'Fleet & oversight'],
   ['approvals', 'wallet', 'Exceptions & overrides'],
+  ['returns', 'road', 'Returns Schedule'],
   ['analytics', 'chart', 'Macro dashboards'],
   ['users', 'users', 'User management'],
   ['audit', 'shield', 'Audit & security logs'],
@@ -26,6 +28,7 @@ const navigation = [
 ]
 
 const titles = {
+  'manager-returns': ['Coordinate every return.', 'Review scheduled returns, drop-off progress and mechanic condition sign-offs.'],
   'manager-overview': ['Aggregated oversight. Zero bottlenecks.', 'Monitor live fleet deployment, threshold alerts, rate modifications, and anomalies by exception.'],
   'manager-approvals': ['Intervene only on exceptions.', 'Clean returns auto-release deposits. Review disputed/withheld deposits, Security Deposit updates, and risk overrides here.'],
   'manager-analytics': ['Understand every kilometre.', 'Review fleet utilization percentages, net rental revenue growth, driver risk summaries, and maintenance costs.'],
@@ -64,6 +67,7 @@ export default function ManagerPortal({ page, user, operations, onRefresh, onNav
     {section === 'overview' && <ManagerOverviewPage operations={operations} fleetFilters={fleetFilters} onRefresh={onRefresh} setDialog={setDialog} onSection={goSection} />}
     {section === 'approvals' && <ApprovalPanel approvals={approvals} bookings={bookings} flags={flags} risks={risks} setDialog={setDialog} onRequest={() => setDialog({ kind: 'financial-request' })} onReview={a => setDialog({ kind: 'approval-review', approval: a })} />}
     {section === 'analytics' && <Analytics />}
+    {section === 'returns' && <ReturnsSchedule bookings={bookings} />}
     {section === 'users' && <UserManagementPage currentUser={user} onDone={done} />}
     {section === 'audit' && <AuditLog />}
     {section === 'archives' && <ArchivesPage onRefresh={onRefresh} onDone={done} />}

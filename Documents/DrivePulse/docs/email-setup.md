@@ -43,3 +43,9 @@ After three unsuccessful sign-in attempts, the account has a 60-second cooldown.
 Existing SQLite and PostgreSQL databases receive additive profile columns and security tables at startup. Existing accounts remain usable. New public client registrations require first and last names, a Philippine mobile number, and a complete address; the middle name is optional.
 
 Previously issued password-reset links are superseded by the code flow. Request a new recovery code after deploying this version. Verification activation links continue to work.
+
+## Logo and sender avatar
+
+All transactional messages use the DrivePulse display name and attach the official DrivePulse mark as an inline PNG in the header. The source asset is `backend/assets/drivepulse-logo.png`; the same image is available at `/images/drivepulse-logo.png` for the sender profile. CID attachments keep the header logo independent of public image hosting.
+
+Gmail's inbox avatar is controlled by the sending Google account and the recipient's email client. SMTP does not provide an avatar/profile-picture setting. Sign in to the **sending account**, then use [Google Account → Personal info → Profile picture](https://myaccount.google.com/personal-info) to upload the DrivePulse logo. This is an account setting; deploying the email template cannot change it. Google documents [profile picture changes](https://support.google.com/accounts/answer/27442). Recipients may see cached pictures or their own contact images.

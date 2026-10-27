@@ -41,8 +41,8 @@
 .auth-footnote .icon { margin-top: 1px; }
 
 /* Account recovery and email verification (same monochrome auth language). */
-.auth-forgot-row { display: flex; justify-content: flex-end; margin: -8px 0 14px; }
-.auth-forgot-row .text-link { min-height: 32px; font-size: 14px; font-weight: 550; color: #222; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #bbb; }
+.auth-forgot-row { display: flex; justify-content: flex-end; margin: 8px 0 20px; padding: 0 6px; }
+.auth-forgot-row .text-link { min-height: 36px; padding: 6px 4px; font-size: 14px; font-weight: 550; color: #222; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #bbb; }
 .auth-forgot-row .text-link:hover { text-decoration-color: #222; }
 .auth-notice { display: flex; align-items: flex-start; gap: 8px; color: #276342; background: #f2f7f3; padding: 12px; border-radius: 7px; font-size: 14px; line-height: 1.6; margin-top: 20px; border: 1px solid #d6e6da; }
 .auth-notice .icon { flex-shrink: 0; margin-top: 1px; }

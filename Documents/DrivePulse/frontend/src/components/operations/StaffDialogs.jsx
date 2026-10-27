@@ -1,3 +1,4 @@
+import useDraftState from '../../hooks/useDraftState.js'
 import ValidatedField from '../ui/ValidatedField.jsx'
 import ValidatedForm from '../ui/ValidatedForm.jsx'
 import { PaginatedList } from '../ui/Pagination.jsx'
@@ -12,9 +13,9 @@ import { money } from '../../data.js'
 import Icon from '../ui/Icon.jsx'
 
 function RateModal({ vehicle, onClose, onDone }) {
-  const [rate, setRate] = useState(vehicle.rate), [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [rate, setRate] = useDraftState(`rate:${vehicle.id}`, 'rate', vehicle.rate), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const pct = Math.abs(Number(rate) - vehicle.rate) / vehicle.rate * 100
-  return <Modal title={`Modify daily rate · ${vehicle.name}`} eyebrow="OPERATIONS MANAGER · RATE OVERRIDE" onClose={onClose}>
+  return <Modal draftKey={`rate:${vehicle.id}`} title={`Modify daily rate · ${vehicle.name}`} eyebrow="OPERATIONS MANAGER · RATE OVERRIDE" onClose={onClose}>
     <ValidatedForm className="staff-form" onSubmit={async e => {
       e.preventDefault(); const data = new FormData(e.currentTarget); setBusy(true); setError('')
       try {
@@ -36,7 +37,7 @@ function RateModal({ vehicle, onClose, onDone }) {
 
 function DecommissionModal({ vehicle, mechanic, onClose, onDone }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
-  return <Modal title={mechanic ? `Request decommission · ${vehicle.name}` : `Confirm decommission · ${vehicle.name}`} eyebrow={mechanic ? 'FLEET MECHANIC · ARCHIVE REQUEST' : 'OPERATIONS MANAGER · ARCHIVE CONFIRMATION'} onClose={onClose}>
+  return <Modal draftKey={`decommission:${vehicle.id}`} title={mechanic ? `Request decommission · ${vehicle.name}` : `Confirm decommission · ${vehicle.name}`} eyebrow={mechanic ? 'FLEET MECHANIC · ARCHIVE REQUEST' : 'OPERATIONS MANAGER · ARCHIVE CONFIRMATION'} onClose={onClose}>
     <ValidatedForm className="staff-form" onSubmit={async e => {
       e.preventDefault(); const data = new FormData(e.currentTarget); setBusy(true); setError('')
       try {

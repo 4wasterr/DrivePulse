@@ -13,7 +13,6 @@ export default function VehicleCard({ vehicle, onDetails, onReserve, available, 
     <div className="vehicle-content">
       <div className="vehicle-title-row">
         <button className="text-button vehicle-name" onClick={onDetails}>{vehicle.name}</button>
-        <span className="rating"><Icon name="star" size={13} />{vehicle.rating}</span>
       </div>
       <p className="vehicle-tagline">{vehicle.tagline}</p>
       <p className="small muted">{vehicle.fleetCode || vehicle.id}{vehicle.plate ? ` · ${vehicle.plate}` : ''}</p>

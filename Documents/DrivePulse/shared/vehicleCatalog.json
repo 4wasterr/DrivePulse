@@ -1,28 +1,141 @@
 {
   "brands": {
-    "Toyota": ["Camry", "Vios", "Corolla Altis", "Wigo", "Yaris", "Fortuner", "Innova", "Hiace", "Hilux"],
-    "Honda": ["Civic", "City", "Accord", "Brio", "HR-V", "CR-V", "BR-V"],
-    "Ford": ["Everest", "Explorer", "Ranger", "Territory", "Transit"],
-    "Mitsubishi": ["Mirage", "Mirage G4", "Xpander", "Montero Sport", "L300", "Triton"],
-    "Nissan": ["Almera", "Navara", "Terra", "Urvan", "Patrol"],
-    "Suzuki": ["Swift", "Dzire", "Ertiga", "XL7", "Jimny", "Carry"],
-    "Hyundai": ["Accent", "Elantra", "Tucson", "Santa Fe", "Staria", "H-100"],
-    "Kia": ["Soluto", "Seltos", "Sportage", "Carnival", "K2500"],
-    "Isuzu": ["D-Max", "mu-X", "N-Series"],
-    "BMW": ["3 Series", "5 Series", "X3", "X5"],
-    "Mercedes-Benz": ["C-Class", "E-Class", "GLC", "V-Class"],
-    "Porsche": ["Panamera", "Cayenne", "Macan"],
-    "Range Rover": ["Sport", "Evoque", "Velar"],
-    "Tesla": ["Model 3", "Model Y", "Model S", "Model X"]
+    "Toyota": [
+      "Camry",
+      "Vios",
+      "Corolla Altis",
+      "Wigo",
+      "Yaris",
+      "Fortuner",
+      "Innova",
+      "Hiace",
+      "Hilux",
+      "Avanza"
+    ],
+    "Honda": [
+      "Civic",
+      "City",
+      "Accord",
+      "Brio",
+      "HR-V",
+      "CR-V",
+      "BR-V"
+    ],
+    "Ford": [
+      "Everest",
+      "Explorer",
+      "Ranger",
+      "Territory",
+      "Transit"
+    ],
+    "Mitsubishi": [
+      "Mirage",
+      "Mirage G4",
+      "Xpander",
+      "Montero Sport",
+      "L300",
+      "Triton"
+    ],
+    "Nissan": [
+      "Almera",
+      "Navara",
+      "Terra",
+      "Urvan",
+      "Patrol"
+    ],
+    "Suzuki": [
+      "Swift",
+      "Dzire",
+      "Ertiga",
+      "XL7",
+      "Jimny",
+      "Carry"
+    ],
+    "Hyundai": [
+      "Accent",
+      "Elantra",
+      "Tucson",
+      "Santa Fe",
+      "Staria",
+      "H-100"
+    ],
+    "Kia": [
+      "Soluto",
+      "Seltos",
+      "Sportage",
+      "Carnival",
+      "K2500"
+    ],
+    "Isuzu": [
+      "D-Max",
+      "mu-X",
+      "N-Series"
+    ],
+    "BMW": [
+      "3 Series",
+      "5 Series",
+      "X3",
+      "X5"
+    ],
+    "Mercedes-Benz": [
+      "C-Class",
+      "E-Class",
+      "GLC",
+      "V-Class"
+    ],
+    "Porsche": [
+      "Panamera",
+      "Cayenne",
+      "Macan"
+    ],
+    "Range Rover": [
+      "Sport",
+      "Evoque",
+      "Velar"
+    ],
+    "Tesla": [
+      "Model 3",
+      "Model Y",
+      "Model S",
+      "Model X"
+    ]
   },
   "categories": {
-    "Sedan": { "seats": 5, "tankCapacity": 50 },
-    "SUV": { "seats": 7, "tankCapacity": 70 },
-    "Van": { "seats": 12, "tankCapacity": 70 },
-    "Hatchback": { "seats": 5, "tankCapacity": 40 },
-    "Truck": { "seats": 3, "tankCapacity": 80 },
-    "Compact": { "seats": 5, "tankCapacity": 40 },
-    "Luxury": { "seats": 5, "tankCapacity": 65 },
-    "Electric": { "seats": 5, "tankCapacity": 60 }
+    "Sedan": {
+      "seats": 5,
+      "tankCapacity": 50
+    },
+    "SUV": {
+      "seats": 7,
+      "tankCapacity": 70
+    },
+    "Van": {
+      "seats": 12,
+      "tankCapacity": 70
+    },
+    "Hatchback": {
+      "seats": 5,
+      "tankCapacity": 40
+    },
+    "Truck": {
+      "seats": 3,
+      "tankCapacity": 80
+    },
+    "Compact": {
+      "seats": 5,
+      "tankCapacity": 40
+    },
+    "Luxury": {
+      "seats": 5,
+      "tankCapacity": 65
+    },
+    "Electric": {
+      "seats": 5,
+      "tankCapacity": 60
+    },
+    "MPV": {
+      "seats": 7,
+      "tankCapacity": 45
+    }
   }
 }

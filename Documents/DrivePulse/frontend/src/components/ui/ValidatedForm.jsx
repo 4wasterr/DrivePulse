@@ -1,23 +1,10 @@
-import { useId, useRef, useState } from 'react'
+import { useId, useRef, useState, useContext } from 'react'
+import { DraftOwnerContext, ModalDraftContext, FormDraftContext, draftKey as storageKey } from '../../utils/drafts.js'
 import { inputError } from '../../../../shared/validation.mjs'
 import { rentalPeriodError } from '../../data.js'
 import { validateFile } from '../../storage.js'
 import { validPassword } from '../../utils/password.js'
 import { FormValidationContext } from './formValidationContext.js'
-import Icon from './Icon.jsx'
-
-function formatSummaryMessage(label, message) {
-  if (!label || !message) return message
-  if (message.toLowerCase() === `${label.toLowerCase()} is required.`) {
-    return 'Please enter a value.'
-  }
-  const prefix = `${label} `
-  if (message.toLowerCase().startsWith(prefix.toLowerCase())) {
-    const rest = message.slice(prefix.length)
-    return rest.charAt(0).toUpperCase() + rest.slice(1)
-  }
-  return message
-}
 
 const controls = form => [...form.elements].filter(field => ['INPUT', 'SELECT', 'TEXTAREA'].includes(field.tagName) && !field.matches(':disabled') && !['hidden', 'submit', 'button', 'reset', 'range'].includes(field.type) && !field.readOnly)
 
@@ -63,7 +50,11 @@ function controlError(field, form, submitter) {
   return ''
 }
 
-export default function ValidatedForm({ onSubmit, onChange, onChangeCapture, onBlurCapture, onPointerDownCapture, onPointerUpCapture, validate, validation, children, ...props }) {
+export default function ValidatedForm({ onSubmit, onChange, onChangeCapture, onBlurCapture, onPointerDownCapture, onPointerUpCapture, validate, validation, children, draftKey, ...props }) {
+  const owner = useContext(DraftOwnerContext)
+  const modalScope = useContext(ModalDraftContext)
+  const fieldIndex = useRef(0)
+  const draft = { key: modalScope ? storageKey(owner, `${modalScope}:form:${draftKey || props.className || 'default'}`) : null, nextIndex: () => fieldIndex.current++ }
   const [errors, setErrors] = useState([])
   const [submitted, setSubmitted] = useState(false)
   const id = useId()
@@ -100,7 +91,7 @@ export default function ValidatedForm({ onSubmit, onChange, onChangeCapture, onB
     setErrors(next)
   }
 
-  return <FormValidationContext.Provider value={errors}><form {...props} noValidate onSubmit={event => {
+  return <FormDraftContext.Provider value={draft}><FormValidationContext.Provider value={errors}><form {...props} noValidate onSubmit={event => {
     lastSubmitter.current = event.nativeEvent.submitter
     const next = check(event.currentTarget)
     setSubmitted(true)
@@ -117,31 +108,6 @@ export default function ValidatedForm({ onSubmit, onChange, onChangeCapture, onB
     submittingPointer.current = event.target.closest('button,input')?.type === 'submit'
     onPointerDownCapture?.(event)
   }} onPointerUpCapture={event => { submittingPointer.current = false; onPointerUpCapture?.(event) }} onPointerCancelCapture={() => { submittingPointer.current = false }}>
-    {submitted && errors.length === 1 && (
-      <div className="validation-summary is-single" role="alert">
-        <Icon name="info" size={16} />
-        <button type="button" onClick={() => errors[0].field.focus()}>
-          <strong>{errors[0].label}:</strong> {formatSummaryMessage(errors[0].label, errors[0].message)}
-        </button>
-      </div>
-    )}
-    {submitted && errors.length > 1 && (
-      <div className="validation-summary" role="alert">
-        <div className="validation-summary-header">
-          <Icon name="info" size={16} />
-          <strong>Please check the highlighted fields ({errors.length})</strong>
-        </div>
-        <ul>
-          {errors.map(error => (
-            <li key={error.id}>
-              <button type="button" onClick={() => error.field.focus()}>
-                <strong>{error.label}:</strong> {formatSummaryMessage(error.label, error.message)}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    )}
     {children}
-  </form></FormValidationContext.Provider>
+  </form></FormValidationContext.Provider></FormDraftContext.Provider>
 }

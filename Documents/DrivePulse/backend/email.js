@@ -1,3 +1,6 @@
+const { readFileSync } = require('node:fs');
+const { join } = require('node:path');
+const logo = readFileSync(join(__dirname, 'assets', 'drivepulse-logo.png'));
 const nodemailer = require('nodemailer');
 const { emailConfig, emailConfigurationProblems } = require('./email-config');
 
@@ -37,7 +40,7 @@ function renderEmailLayout({ eyebrow, heading, greeting, body, actionLabel, acti
             <td style="padding:36px 36px 12px 36px;">
               <table role="presentation" cellspacing="0" cellpadding="0">
                 <tr>
-                  <td style="width:36px;height:36px;background-color:#111111;border-radius:9px;text-align:center;vertical-align:middle;color:#ffffff;font-weight:800;font-size:18px;line-height:36px;">D</td>
+                  <td style="width:40px;height:40px;"><img src="cid:drivepulse-logo" width="40" height="40" alt="DrivePulse logo" style="display:block;border:0;" /></td>
                   <td style="padding-left:10px;font-size:22px;font-weight:700;letter-spacing:-0.8px;color:#111111;">drivepulse.</td>
                 </tr>
               </table>
@@ -97,6 +100,7 @@ function createMailer({ env = process.env, smtpTransport = null } = {}) {
         subject,
         html,
         text,
+        attachments: [{ filename: 'drivepulse-logo.png', content: logo, contentType: 'image/png', cid: 'drivepulse-logo', contentDisposition: 'inline' }],
       };
       const result = await transport.sendMail(message);
       if (!result.accepted?.length || result.rejected?.length) throw deliveryError('We could not deliver the email. Please try again in a moment.');

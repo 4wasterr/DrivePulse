@@ -1,11 +1,14 @@
+import useLocations from '../../../hooks/useLocations.js'
+import LocationField from '../../../components/ui/LocationField.jsx'
 import ValidatedField from '../../../components/ui/ValidatedField.jsx'
 import ValidatedForm from '../../../components/ui/ValidatedForm.jsx'
 import Icon from '../../../components/ui/Icon.jsx'
-import { locations, dateISO, rentalPeriodError } from '../../../data.js'
+import { dateISO, rentalPeriodError } from '../../../data.js'
 
 export default function SearchBar({ dates, onChange, onSearch }) {
+  const { locations, loading, error } = useLocations()
   const hasSearchAction = typeof onSearch === 'function'
-  const invalidSchedule = !dates?.pickup || !dates?.start || !dates?.startTime || !dates?.end || !dates?.endTime || Boolean(rentalPeriodError(dates))
+  const invalidSchedule = !locations.includes(dates?.pickup) || loading || Boolean(error) || !dates?.start || !dates?.startTime || !dates?.end || !dates?.endTime || Boolean(rentalPeriodError(dates))
 
   function handleStartChange(newStart) {
     const next = { ...dates, start: newStart }
@@ -26,15 +29,12 @@ export default function SearchBar({ dates, onChange, onSearch }) {
     >
       <label className="search-field location-field">
         <span className="search-label"><Icon name="pin" size={17} />Pick-up location</span>
-        <ValidatedField
-          as="select"
+        <LocationField
           name="pickup"
           required
           value={dates.pickup}
           onChange={e => onChange({ ...dates, pickup: e.target.value, dropoff: e.target.value })}
-        >
-          {locations.map(location => <option key={location}>{location}</option>)}
-        </ValidatedField>
+        />
       </label>
 
       <label className="search-field">

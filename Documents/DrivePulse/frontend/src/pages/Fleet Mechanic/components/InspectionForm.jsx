@@ -1,3 +1,4 @@
+import useDraftState from '../../../hooks/useDraftState.js'
 import ValidatedField from '../../../components/ui/ValidatedField.jsx'
 import ValidatedForm from '../../../components/ui/ValidatedForm.jsx'
 import { useState } from 'react'
@@ -11,12 +12,12 @@ import { CONDITION_STATUSES, conditionProblem } from '../../../../../shared/insp
 
 export default function InspectionForm({ operations, initial, onClose, onDone }) {
   const initialType = initial.type || (operations.bookings.some(b => b.vehicleId === initial.vehicleId && ['Pending Approval', 'Ready for Dispatch'].includes(b.status)) || !initial.vehicleId ? 'pre-dispatch' : 'clearance')
-  const [type, setType] = useState(initialType), [vehicleId, setVehicleId] = useState(initial.booking?.vehicleId || initial.vehicleId || operations.fleet[0]?.id || '')
-  const [bookingId, setBookingId] = useState(initial.booking?.id || ''), [busy, setBusy] = useState(false)
+  const [type, setType] = useDraftState('inspection', 'type', initialType), [vehicleId, setVehicleId] = useDraftState('inspection', 'vehicleId', initial.booking?.vehicleId || initial.vehicleId || operations.fleet[0]?.id || '')
+  const [bookingId, setBookingId] = useDraftState('inspection', 'bookingId', initial.booking?.id || ''), [busy, setBusy] = useState(false)
   const vehicle = operations.fleet.find(v => v.id === vehicleId)
   const eligible = operations.bookings.filter(b => b.vehicleId === vehicleId && (type === 'pre-dispatch' ? ['Pending Approval', 'Ready for Dispatch'].includes(b.status) : b.status === 'Completed' && b.returnedAt))
   const chosen = eligible.find(b => b.id === bookingId) || eligible[0]
-  return <Modal title="Digital vehicle inspection" eyebrow="FLEET MECHANIC · INDIVIDUAL VERIFICATION" wide onClose={onClose}>
+  return <Modal draftKey={'inspection'} title="Digital vehicle inspection" eyebrow="FLEET MECHANIC · INDIVIDUAL VERIFICATION" wide onClose={onClose}>
     {!vehicle ? <p>No active vehicles are available for inspection.</p> : <>
       <VehicleIdentity vehicle={vehicle} />
       <fieldset className="inspection-selector" disabled={busy}><div className="form-grid">
@@ -31,10 +32,10 @@ export default function InspectionForm({ operations, initial, onClose, onDone })
 }
 
 function InspectionChecklist({ vehicle, type, booking, busy, setBusy, onDone }) {
-  const [outcome, setOutcome] = useState('approved'), [damageFlag, setDamageFlag] = useState(false), [error, setError] = useState('')
-  const [step, setStep] = useState(0), [driverVerification, setDriverVerification] = useState('')
-  const [checks, setChecks] = useState({})
-  const [photos, setPhotos] = useState({}), [uploading, setUploading] = useState(0)
+  const [outcome, setOutcome] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'outcome', 'approved'), [damageFlag, setDamageFlag] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'damageFlag', false), [error, setError] = useState('')
+  const [step, setStep] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'step', 0), [driverVerification, setDriverVerification] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'driverVerification', '')
+  const [checks, setChecks] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'checks', {})
+  const [photos, setPhotos] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'photos', {}), [uploading, setUploading] = useState(0)
   async function upload(view, file) {
     if (!file) return
     const problem = validateFile(file)
@@ -64,7 +65,7 @@ function InspectionChecklist({ vehicle, type, booking, busy, setBusy, onDone }) 
       await onDone(outcome === 'unsafe' ? 'Inspection saved. Vehicle release is blocked.' : result.cleanReturn ? 'Inspection saved. Clean return verified and Security Deposit release recorded.' : 'Inspection saved with condition photo proof.')
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }
-  return <ValidatedForm className="staff-form inspection-form" onSubmit={submit}><fieldset disabled={busy}>
+  return <ValidatedForm draftKey={`${vehicle.id}:${type}:${booking?.id || ''}`} className="staff-form inspection-form" onSubmit={submit}><fieldset disabled={busy}>
     <div className="booking-steps" aria-label="Inspection progress"><span aria-current={step === 0 ? 'step' : undefined}>01 / Individual / driver verification</span><span aria-current={step === 1 ? 'step' : undefined}>02 / Vehicle condition record</span></div>
     <fieldset hidden={step !== 0} disabled={step !== 0}>
       <h3>Individual / driver verification</h3>

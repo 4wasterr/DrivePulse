@@ -1,3 +1,4 @@
+import useDraftState from '../../../hooks/useDraftState.js'
 import ValidatedField from '../../../components/ui/ValidatedField.jsx'
 import ValidatedForm from '../../../components/ui/ValidatedForm.jsx'
 import { useState } from 'react'
@@ -10,19 +11,19 @@ import { duplicateVehicleErrors, inputError } from '../../../../../shared/valida
 import { vehicles } from '../../../data.js'
 
 export default function AddVehicleModal({ onClose, onDone }) {
-  const [brand, setBrand] = useState('')
-  const [model, setModel] = useState('')
-  const [category, setCategory] = useState('Sedan')
-  const [rate, setRate] = useState(3500)
-  const [plate, setPlate] = useState('')
-  const [transmission, setTransmission] = useState('Automatic')
-  const [seats, setSeats] = useState(5)
-  const [fuelType, setFuelType] = useState('Gasoline')
-  const [tankCapacity, setTankCapacity] = useState(50)
-  const [mileage, setMileage] = useState(15000)
-  const [fleetCode, setFleetCode] = useState('')
-  const [registrationExpiry, setRegistrationExpiry] = useState(''), [insuranceExpiry, setInsuranceExpiry] = useState('')
-  const [photo, setPhoto] = useState(null)
+  const [brand, setBrand] = useDraftState('add-vehicle', 'brand', '')
+  const [model, setModel] = useDraftState('add-vehicle', 'model', '')
+  const [category, setCategory] = useDraftState('add-vehicle', 'category', 'Sedan')
+  const [rate, setRate] = useDraftState('add-vehicle', 'rate', 3500)
+  const [plate, setPlate] = useDraftState('add-vehicle', 'plate', '')
+  const [transmission, setTransmission] = useDraftState('add-vehicle', 'transmission', 'Automatic')
+  const [seats, setSeats] = useDraftState('add-vehicle', 'seats', 5)
+  const [fuelType, setFuelType] = useDraftState('add-vehicle', 'fuelType', 'Gasoline')
+  const [tankCapacity, setTankCapacity] = useDraftState('add-vehicle', 'tankCapacity', 50)
+  const [mileage, setMileage] = useDraftState('add-vehicle', 'mileage', 15000)
+  const [fleetCode, setFleetCode] = useDraftState('add-vehicle', 'fleetCode', '')
+  const [registrationExpiry, setRegistrationExpiry] = useDraftState('add-vehicle', 'registrationExpiry', ''), [insuranceExpiry, setInsuranceExpiry] = useDraftState('add-vehicle', 'insuranceExpiry', '')
+  const [photo, setPhoto] = useDraftState('add-vehicle', 'photo', null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -70,10 +71,10 @@ export default function AddVehicleModal({ onClose, onDone }) {
   }
 
   return (
-    <Modal title="Add vehicle to fleet" eyebrow="OPERATIONS MANAGER · FLEET EXPANSION" wide onClose={onClose}>
+    <Modal draftKey={'add-vehicle'} title="Add vehicle to fleet" eyebrow="OPERATIONS MANAGER · FLEET EXPANSION" wide onClose={onClose}>
       <ValidatedForm onSubmit={handleSubmit} validate={form => duplicateVehicleErrors(Object.fromEntries(new FormData(form)), vehicles)}>
         <fieldset disabled={busy}>
-        <VehicleImageField onChange={setPhoto} disabled={busy} />
+        <VehicleImageField file={photo} onChange={setPhoto} disabled={busy} />
         <div className="form-grid">
           <label className="form-field">Unique Vehicle ID / Fleet code<ValidatedField name="fleetCode" data-validate="fleet-code" maxLength={30} placeholder="Leave blank to generate CAR-XXXXXXXX" value={fleetCode} onChange={e => setFleetCode(e.target.value)} /></label>
           <label className="form-field">

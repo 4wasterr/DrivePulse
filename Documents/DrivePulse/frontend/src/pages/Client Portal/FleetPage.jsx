@@ -1,19 +1,18 @@
 import { PaginatedList } from '../../components/ui/Pagination.jsx'
 import SearchBar from './components/SearchBar.jsx'
 import Icon from '../../components/ui/Icon.jsx'
-import { money, prettyDate } from '../../data.js'
+import { prettyDate } from '../../data.js'
 import EmptyState from './components/EmptyState.jsx'
 
-export default function ClientFleetPage({ dates, setDates, category, setCategory, brand, setBrand, brands, query, setQuery, filtersOpen, setFiltersOpen, maxRate, setMaxRate, seats, setSeats, transmission, setTransmission, onlyAvailable, setOnlyAvailable, filtered, sort, setSort, card }) {
-  function reset() { setMaxRate(100000); setSeats('any'); setTransmission('any'); setOnlyAvailable(false); setQuery(''); setCategory('All cars'); setBrand('all') }
-  const filterKey = JSON.stringify({ category, brand, query, maxRate, seats, transmission, onlyAvailable, sort, dates })
+export default function ClientFleetPage({ dates, setDates, category, setCategory, brand, setBrand, brands, query, setQuery, filtersOpen, setFiltersOpen, seats, setSeats, transmission, setTransmission, onlyAvailable, setOnlyAvailable, filtered, sort, setSort, card }) {
+  function reset() { setSeats('any'); setTransmission('any'); setOnlyAvailable(false); setQuery(''); setCategory('All cars'); setBrand('all') }
+  const filterKey = JSON.stringify({ category, brand, query, seats, transmission, onlyAvailable, sort, dates })
   return <section className="find-ride" aria-label="Explore the fleet">
     <SearchBar dates={dates} onChange={setDates} />
     <div className="ride-filter-bar">
       <label className="form-field ride-search"><span>Find a vehicle</span><input id="fleet-search" type="search" placeholder="Name, model, fleet ID or plate" maxLength={150} value={query} onChange={e => setQuery(e.target.value)} /></label>
-      <label className="form-field"><span>Category</span><select value={category} onChange={e => setCategory(e.target.value)}>{['All cars', 'Sedan', 'SUV', 'Van', 'Hatchback', 'Truck', 'Compact', 'Luxury', 'Electric'].map(c => <option key={c}>{c}</option>)}</select></label>
+      <label className="form-field"><span>Category</span><select value={category} onChange={e => setCategory(e.target.value)}>{['All cars', 'Sedan', 'SUV', 'MPV', 'Van', 'Hatchback', 'Truck', 'Compact', 'Luxury', 'Electric'].map(c => <option key={c}>{c}</option>)}</select></label>
       <label className="form-field"><span>Brand</span><select value={brand} onChange={e => setBrand(e.target.value)}><option value="all">All brands</option>{brands.map(b => <option key={b}>{b}</option>)}</select></label>
-      <label className="form-field ride-price"><span>Maximum daily rate · {money(maxRate)}</span><input type="range" aria-label="Maximum daily rate" min="500" max="100000" step="500" value={maxRate} onChange={e => setMaxRate(Number(e.target.value))} /></label>
       <button type="button" className="button button-outline" aria-expanded={filtersOpen} aria-controls="ride-extra-filters" onClick={() => setFiltersOpen(!filtersOpen)}><Icon name="filter" size={17} />More filters</button>
     </div>
     {filtersOpen && <div id="ride-extra-filters" className="ride-extra-filters">
@@ -22,8 +21,7 @@ export default function ClientFleetPage({ dates, setDates, category, setCategory
       <label className="checkbox-label"><input type="checkbox" checked={onlyAvailable} onChange={e => setOnlyAvailable(e.target.checked)} />Available for selected dates</label>
       <button type="button" className="text-link" onClick={reset}>Reset filters</button>
     </div>}
-    <div className="results-header"><p><strong>{filtered.length}</strong> vehicles<span> · {prettyDate(dates.start)} – {prettyDate(dates.end)}</span></p><label>Sort by<select aria-label="Sort vehicles" value={sort} onChange={e => setSort(e.target.value)}><option value="recommended">Recommended</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="rating">Highest rated</option></select></label></div>
-    {filtered.length ? <div className="fleet-grid ride-fleet-grid"><PaginatedList resetKey={filterKey}>{filtered.map(card)}</PaginatedList></div> : <EmptyState icon="search" title="No vehicles match these filters." description="Adjust the category, brand, price or dates to find your ride." action="Reset filters" onAction={reset} />}
-    <div className="fleet-note"><Icon name="info" size={17} />Availability reflects current reservations and fleet readiness.</div>
+    <div className="results-header"><p><strong>{filtered.length}</strong> vehicles<span> · {prettyDate(dates.start)} – {prettyDate(dates.end)}</span></p><label>Sort by<select aria-label="Sort vehicles" value={sort} onChange={e => setSort(e.target.value)}><option value="recommended">Recommended</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option></select></label></div>
+    {filtered.length ? <div className="fleet-grid ride-fleet-grid"><PaginatedList resetKey={filterKey}>{filtered.map(card)}</PaginatedList></div> : <EmptyState icon="search" title="No vehicles match these filters." description="Adjust the category, brand or dates to find your ride." action="Reset filters" onAction={reset} />}
   </section>
 }

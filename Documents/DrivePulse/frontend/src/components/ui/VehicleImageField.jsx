@@ -1,9 +1,9 @@
 import ValidatedField from './ValidatedField.jsx'
 import { useEffect, useRef, useState } from 'react'
 
-export default function VehicleImageField({ image, onChange, disabled }) {
-  const [preview, setPreview] = useState(''), [error, setError] = useState('')
-  const objectURL = useRef(null)
+export default function VehicleImageField({ image, file: selectedFile, onChange, disabled }) {
+  const [preview, setPreview] = useState(() => selectedFile ? URL.createObjectURL(selectedFile) : ''), [error, setError] = useState('')
+  const objectURL = useRef(preview || null)
   useEffect(() => () => { if (objectURL.current) URL.revokeObjectURL(objectURL.current) }, [])
   return <div className="vehicle-image-field">
     {(preview || image) && <img src={preview || image} alt="Vehicle profile preview" />}
@@ -17,6 +17,7 @@ export default function VehicleImageField({ image, onChange, disabled }) {
         setPreview(objectURL.current || ''); onChange(file || null)
       }} />
       <small>JPG, PNG or WebP · up to 4 MB</small>
+      {selectedFile && <small>Selected: {selectedFile.name}</small>}
     </label>
     {error && <p className="error-banner" role="alert">{error}</p>}
   </div>

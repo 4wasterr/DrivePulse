@@ -23,6 +23,25 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     return saved ? { rate: base.rate, ...saved } : { id, status: 'Available', version: 1, rate: base.rate, odometer: base.mileage ?? null, fuelLevel: null, activity: [] };
   };
   const vehicleRate = async (id) => (await state(id)).rate || (await vehicle(id)).rate;
+  const initializePlates = () => transaction(async () => {
+    const definitions = await allFleetDef(), saved = await records('vehicle');
+    const known = new Set(D.FLEET.map(vehicle => vehicle.id));
+    const used = new Set([
+      ...saved.map(vehicle => vehicle.plate),
+      ...definitions.filter(vehicle => !known.has(vehicle.id)).map(vehicle => vehicle.plate)
+    ].filter(Boolean).map(plate => plate.replace(/[^a-z0-9]/gi, '').toUpperCase()));
+    for (const definition of D.FLEET) {
+      const current = saved.find(vehicle => vehicle.id === definition.id);
+      if (current?.plate) continue;
+      let plate = definition.plate, suffix = 2000;
+      while (used.has(plate.replace(/[^a-z0-9]/gi, '').toUpperCase())) plate = `NDP ${suffix++}`;
+      used.add(plate.replace(/[^a-z0-9]/gi, '').toUpperCase());
+      const updated = current || await state(definition.id);
+      updated.plate = plate;
+      if (current) updated.version += 1;
+      await save('vehicle', updated);
+    }
+  });
   const stale = (value, version) => {if (version !== undefined && value.version !== version) D.fail('This record changed. Refresh and try again.', 409);};
   const changeState = async (s, user, action, reason, extraAudit = {}) => {
     const previous = await state(s.id),at = stamp();
@@ -423,6 +442,6 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     }
   }
 
-  return { register, fleet, present, dispatchBlocks, operationalBlocks, records, state, save, vehicleRate, vehicle, changeState, recordReturn, invalidateVehiclePasses, saveDynamicVehicle: async (v) => await save('dynamic_vehicle', v) };
+  return { register, fleet, present, dispatchBlocks, operationalBlocks, records, state, save, vehicleRate, vehicle, changeState, recordReturn, invalidateVehiclePasses, initializePlates, saveDynamicVehicle: async (v) => await save('dynamic_vehicle', v) };
 }
 module.exports = { createFleet };

@@ -1,3 +1,4 @@
+import useDraftState from '../../../hooks/useDraftState.js'
 import ValidatedField from '../../../components/ui/ValidatedField.jsx'
 import ValidatedForm from '../../../components/ui/ValidatedForm.jsx'
 import { useState } from 'react'
@@ -9,9 +10,9 @@ import { vehicles } from '../../../data.js'
 import catalog from '../../../../../shared/vehicleCatalog.json'
 
 export default function VehicleProfileModal({ vehicle, onClose, onDone }) {
-  const [photo, setPhoto] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState('')
-  const [brand, setBrand] = useState(vehicle.brand || ''), [model, setModel] = useState(vehicle.model || '')
-  return <Modal title={vehicle.name} eyebrow="VEHICLE PROFILE & RENEWALS" onClose={onClose}>
+  const [photo, setPhoto] = useDraftState(`vehicle-profile:${vehicle.id}`, 'photo', null), [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [brand, setBrand] = useDraftState(`vehicle-profile:${vehicle.id}`, 'brand', vehicle.brand || ''), [model, setModel] = useDraftState(`vehicle-profile:${vehicle.id}`, 'model', vehicle.model || '')
+  return <Modal draftKey={`vehicle-profile:${vehicle.id}`} title={vehicle.name} eyebrow="VEHICLE PROFILE & RENEWALS" onClose={onClose}>
     <ValidatedForm validate={form => duplicateVehicleErrors(Object.fromEntries(new FormData(form)), vehicles, vehicle.id)} onSubmit={async e => {
       e.preventDefault(); const form = new FormData(e.currentTarget); setBusy(true); setError('')
       try {
@@ -20,7 +21,7 @@ export default function VehicleProfileModal({ vehicle, onClose, onDone }) {
         await onDone('Vehicle specifications, status and renewal dates updated.')
       } catch (err) { setError(err.message) } finally { setBusy(false) }
     }}><fieldset disabled={busy}>
-      <VehicleImageField image={vehicle.image} onChange={setPhoto} disabled={busy} />
+      <VehicleImageField file={photo} image={vehicle.image} onChange={setPhoto} disabled={busy} />
       <label className="form-field">Unique Vehicle ID / Fleet code<ValidatedField name="fleetCode" data-validate="fleet-code" defaultValue={vehicle.fleetCode} required maxLength={30} /></label>
       <div className="form-grid">
         <label className="form-field">Brand<ValidatedField as="select" name="brand" required value={brand} onChange={e => { setBrand(e.target.value); setModel('') }}><option value="" disabled>Select brand</option>{Object.keys(catalog.brands).map(value => <option key={value}>{value}</option>)}</ValidatedField></label>

@@ -1,7 +1,9 @@
 function emailConfig(env = process.env) {
   const smtpUser = (env.SMTP_USER || '').trim();
+  const configuredFrom = (env.SMTP_FROM || smtpUser).trim();
+  const senderAddress = configuredFrom.match(/<([^>]+)>/)?.[1] || configuredFrom;
   return {
-    from: (env.SMTP_FROM || (smtpUser ? `DrivePulse <${smtpUser}>` : '')).trim(),
+    from: senderAddress ? `DrivePulse <${senderAddress}>` : '',
     replyTo: (env.SMTP_REPLY_TO || smtpUser).trim(),
     smtp: {
       host: (env.SMTP_HOST || 'smtp.gmail.com').trim(),

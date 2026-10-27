@@ -126,6 +126,9 @@ test('SMTP sends verification links and recovery codes to the client, using the 
   assert.equal(messages[0].to, 'customer@example.com');
   assert.equal(messages[0].from, 'DrivePulse <sender@gmail.com>');
   assert.equal(messages[0].replyTo, 'sender@gmail.com');
+  assert.match(messages[0].html, /cid:drivepulse-logo/);
+  assert.equal(messages[0].attachments[0].contentType, 'image/png');
+  assert.equal(messages[0].attachments[0].content.subarray(1, 4).toString(), 'PNG');
   assert.match(messages[0].html, /Verify email &amp; open DrivePulse/);
   const verificationUrl = messages[0].text.match(/http[^\s]+/)[0];
   const verified = await f.request('/auth/verify-email', { token: f.tokenFrom(verificationUrl) });

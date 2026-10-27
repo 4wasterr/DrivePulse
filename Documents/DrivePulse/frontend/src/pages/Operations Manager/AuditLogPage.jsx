@@ -96,7 +96,7 @@ export default function AuditLog() {
       </div>
       <div className="record-actions">
         <button className="button button-outline" disabled={result.page <= 1} onClick={() => { const p = new URLSearchParams(query); p.set('through', result.through); p.set('page', result.page - 1); setQuery(p.toString()) }}>Previous</button>
-        <span>Page {result.page} · 10 records per page</span>
+        <span>Page {result.page}</span>
         <button className="button button-outline" disabled={result.page * result.size >= result.total} onClick={() => { const p = new URLSearchParams(query); p.set('through', result.through); p.set('page', result.page + 1); setQuery(p.toString()) }}>Next</button>
       </div>
     </section>

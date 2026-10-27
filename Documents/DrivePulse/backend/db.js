@@ -21,6 +21,7 @@ class SQLiteDatabase {
       this.connection.exec("ALTER TABLE users ADD COLUMN email_verified_at TEXT NOT NULL DEFAULT ''; UPDATE users SET email_verified_at = CASE WHEN created_at <> '' THEN created_at ELSE 'verified' END;");
     }
     for (const column of profileColumns) if (!columns.some(item => item.name === column)) this.connection.exec(`ALTER TABLE users ADD COLUMN ${column} TEXT NOT NULL DEFAULT '';`);
+    if (!this.connection.prepare('PRAGMA table_info(sessions)').all().some(column => column.name === 'last_activity')) this.connection.exec('ALTER TABLE sessions ADD COLUMN last_activity BIGINT NOT NULL DEFAULT 0;');
   }
   exec(sql) { return this.connection.exec(sql); }
   prepare(sql) {
@@ -75,6 +76,8 @@ class PostgresDatabase {
   async initialize() {
     const { rows } = await this.query('SELECT version FROM schema_version WHERE version=1');
     if (!rows.length) throw Object.assign(new Error('Run npm run db:migrate before starting the production API.'), { code: 'DATABASE_SCHEMA_MISSING' });
+    const activityColumn = await this.query("SELECT COUNT(*) AS columns FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='sessions' AND column_name='last_activity'");
+    if (!Number(activityColumn.rows[0].columns)) await this.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_activity BIGINT NOT NULL DEFAULT 0');
     // Additive, idempotent upgrade for email verification and password recovery.
     const ready = await this.query("SELECT (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users' AND column_name='email_verified_at') AS columns, (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='auth_tokens') AS tables");
     if (!Number(ready.rows[0].columns) || !Number(ready.rows[0].tables)) await this.transaction(() => this.query(emailUpgrade));

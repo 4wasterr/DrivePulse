@@ -1,0 +1,9 @@
+.returns-table td { vertical-align: middle; }
+.returns-table th { white-space: normal; }
+.return-overdue { background: #fff1f1; color: #b42318; }
+.return-details-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 24px; margin: 8px 0 28px; }
+.return-details-grid div { min-width: 0; }
+.return-details-grid dt { font-size: 12px; color: #737373; margin-bottom: 7px; }
+.return-details-grid dd { margin: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.return-details-grid small { display: block; margin-top: 5px; font-size: 12px; color: #737373; font-weight: 400; }
+@media(max-width:520px) { .return-details-grid { grid-template-columns: minmax(0,1fr); gap: 20px; } }

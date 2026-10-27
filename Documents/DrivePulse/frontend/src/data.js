@@ -1,24 +1,26 @@
+import fleetExpansion from '../../shared/fleetExpansion.json' with { type: 'json' }
+import fleetPlates from '../../shared/fleetPlates.json' with { type: 'json' }
 import { phtTime } from '../../shared/validation.mjs'
 
 export const vehicles = [
-  { id: 'bmw-3', brand: 'BMW', name: 'BMW 3 Series', tagline: 'A little more extraordinary.', category: 'Sedan', label: 'The everyday upgrade', image: '/images/bmw.jpg', rate: 4200, seats: 5, transmission: 'Automatic', fuel: 'Petrol', rating: '4.9', trips: 48, color: 'Alpine White', luggage: 3, description: 'Effortless performance meets thoughtful comfort. From city meetings to scenic detours, make every kilometre feel like the best part of your day.' },
-  { id: 'mercedes-c', brand: 'Mercedes-Benz', name: 'Mercedes-Benz C-Class', tagline: 'Arrive in your element.', category: 'Luxury', label: 'Comfort, reimagined', image: '/images/mercedes.jpg', rate: 5500, seats: 5, transmission: 'Automatic', fuel: 'Petrol', rating: '4.9', trips: 36, color: 'Obsidian Black', luggage: 3, description: 'An elegant cabin, a wonderfully quiet ride, and all the details that make the journey special. Your invitation to take the long way home.' },
-  { id: 'porsche-panamera', brand: 'Porsche', name: 'Porsche Panamera', tagline: 'For the love of the drive.', category: 'Luxury', label: 'The open-road favourite', image: '/images/hero-porsche.jpg', rate: 8500, seats: 4, transmission: 'Automatic', fuel: 'Petrol', rating: '5.0', trips: 24, color: 'Jet Black', luggage: 2, description: 'Sporting spirit with room to unwind. Turn a weekend escape into a memorable experience with confident performance and remarkable comfort.' },
-  { id: 'toyota-camry', brand: 'Toyota', name: 'Toyota Camry', tagline: 'Everyday, made effortless.', category: 'Sedan', label: 'Your city companion', image: '/images/toyota.jpg', rate: 2800, seats: 5, transmission: 'Automatic', fuel: 'Petrol', rating: '4.8', trips: 67, color: 'Pearl White', luggage: 3, description: 'Reliable, spacious, and easy to love. An inviting cabin and smooth ride make this your perfect companion for everyday plans and spontaneous getaways.' },
-  { id: 'range-rover', brand: 'Range Rover', name: 'Range Rover Sport', tagline: 'Go beyond the usual.', category: 'SUV', label: 'Room for adventure', image: '/images/range-rover.jpg', rate: 7200, seats: 5, transmission: 'Automatic', fuel: 'Diesel', rating: '4.9', trips: 31, color: 'Santorini Black', luggage: 4, description: 'Bring your people and your sense of adventure. Elevated comfort and generous space turn every route into something worth looking forward to.' },
-  { id: 'tesla-3', brand: 'Tesla', name: 'Tesla Model 3', tagline: 'A quieter kind of escape.', category: 'Electric', label: 'A fresh perspective', image: '/images/tesla.jpg', rate: 4800, seats: 5, transmission: 'Automatic', fuel: 'Electric', rating: '4.9', trips: 42, color: 'Pearl White', luggage: 3, description: 'Discover a refreshingly simple drive. Enjoy instant acceleration, a peaceful cabin, and the freedom to move a little differently.' },
-]
+  { id: 'bmw-3', brand: 'BMW', name: 'BMW 3 Series', tagline: 'A little more extraordinary.', category: 'Sedan', label: 'The everyday upgrade', image: '/images/bmw.jpg', rate: 4200, seats: 5, transmission: 'Automatic', fuel: 'Petrol', trips: 48, color: 'Alpine White', luggage: 3, description: 'Effortless performance meets thoughtful comfort. From city meetings to scenic detours, make every kilometre feel like the best part of your day.' },
+  { id: 'mercedes-c', brand: 'Mercedes-Benz', name: 'Mercedes-Benz C-Class', tagline: 'Arrive in your element.', category: 'Luxury', label: 'Comfort, reimagined', image: '/images/mercedes.jpg', rate: 5500, seats: 5, transmission: 'Automatic', fuel: 'Petrol', trips: 36, color: 'Obsidian Black', luggage: 3, description: 'An elegant cabin, a wonderfully quiet ride, and all the details that make the journey special. Your invitation to take the long way home.' },
+  { id: 'porsche-panamera', brand: 'Porsche', name: 'Porsche Panamera', tagline: 'For the love of the drive.', category: 'Luxury', label: 'The open-road favourite', image: '/images/hero-porsche.jpg', rate: 8500, seats: 4, transmission: 'Automatic', fuel: 'Petrol', trips: 24, color: 'Jet Black', luggage: 2, description: 'Sporting spirit with room to unwind. Turn a weekend escape into a memorable experience with confident performance and remarkable comfort.' },
+  { id: 'toyota-camry', brand: 'Toyota', name: 'Toyota Camry', tagline: 'Everyday, made effortless.', category: 'Sedan', label: 'Your city companion', image: '/images/toyota.jpg', rate: 2800, seats: 5, transmission: 'Automatic', fuel: 'Petrol', trips: 67, color: 'Pearl White', luggage: 3, description: 'Reliable, spacious, and easy to love. An inviting cabin and smooth ride make this your perfect companion for everyday plans and spontaneous getaways.' },
+  { id: 'range-rover', brand: 'Range Rover', name: 'Range Rover Sport', tagline: 'Go beyond the usual.', category: 'SUV', label: 'Room for adventure', image: '/images/range-rover.jpg', rate: 7200, seats: 5, transmission: 'Automatic', fuel: 'Diesel', trips: 31, color: 'Santorini Black', luggage: 4, description: 'Bring your people and your sense of adventure. Elevated comfort and generous space turn every route into something worth looking forward to.' },
+  { id: 'tesla-3', brand: 'Tesla', name: 'Tesla Model 3', tagline: 'A quieter kind of escape.', category: 'Electric', label: 'A fresh perspective', image: '/images/tesla.jpg', rate: 4800, seats: 5, transmission: 'Automatic', fuel: 'Electric', trips: 42, color: 'Pearl White', luggage: 3, description: 'Discover a refreshingly simple drive. Enjoy instant acceleration, a peaceful cabin, and the freedom to move a little differently.' },
+  ...fleetExpansion.map(vehicle => ({ ...vehicle, fuel: vehicle.fuelType })),
+].map(vehicle => ({ ...vehicle, plate: fleetPlates[vehicle.id] }))
 
 const vehiclePresentation = vehicles.map(v => ({ ...v }))
 export function syncVehicles(fleet) {
   const next = fleet.map(v => {
-    const presentation = vehiclePresentation.find(base => base.id === v.id) || { image: '/images/car-sedan.jpg', label: 'Fleet vehicle', tagline: 'Ready for your next journey.', description: 'A vehicle from the DrivePulse fleet.', rating: '—', trips: 0, luggage: 2, seats: 5, transmission: 'Automatic' }
+    const presentation = vehiclePresentation.find(base => base.id === v.id) || { image: '/images/car-sedan.jpg', label: 'Fleet vehicle', tagline: 'Ready for your next journey.', description: 'A vehicle from the DrivePulse fleet.', trips: 0, luggage: 2, seats: 5, transmission: 'Automatic' }
     return { ...presentation, ...v, image: v.image || presentation.image, fuel: v.fuelType || presentation.fuel }
   })
   vehicles.splice(0, vehicles.length, ...next)
 }
 
-export const locations = ['Makati City, Metro Manila', 'BGC, Taguig City', 'NAIA Terminal 3, Pasay', 'Quezon City, Metro Manila']
 export const statuses = ['Pending Approval', 'Ready for Dispatch', 'On Rental', 'Completed']
 export const requiredDocuments = [
   {
@@ -58,18 +60,13 @@ export function rentalPeriodError(dates) {
   if (end - start > 366 * 86400000) return 'A rental can be at most 366 days.'
   return ''
 }
-export const initialDates = () => ({ start: dateISO(2), end: dateISO(5), startTime: '10:00', endTime: '10:00', pickup: locations[0], dropoff: locations[0] })
+export const initialDates = () => ({ start: dateISO(2), end: dateISO(5), startTime: '10:00', endTime: '10:00', pickup: '', dropoff: '' })
 export function formatPaymentStatus(status) {
   if (!status) return ''
   const cleaned = String(status).replace(/^Simulated\s*·\s*/i, '')
   return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : ''
 }
-export function sampleBookings() {
-  return [
-    { id: 'DP-10248', vehicleId: 'bmw-3', start: dateISO(8), end: dateISO(11), startTime: '10:00', endTime: '10:00', pickup: locations[0], dropoff: locations[0], days: 3, rental: 12600, deposit: 5000, total: 17600, status: 'Ready for Dispatch', payment: 'Cash', paymentStatus: 'Paid', sample: true, createdAt: new Date().toISOString() },
-    { id: 'DP-10182', vehicleId: 'mercedes-c', start: dateISO(-15), end: dateISO(-13), startTime: '10:00', endTime: '10:00', pickup: locations[1], dropoff: locations[1], days: 2, rental: 11000, deposit: 5000, total: 16000, status: 'Completed', payment: 'Cash', paymentStatus: 'Paid', sample: true, createdAt: new Date().toISOString() },
-  ]
-}
+export function sampleBookings() { return [] }
 
 export function getAvailabilityReason(vehicleId, dates, bookings = []) {
   if (!dates?.start || !dates?.end) return 'Please choose pick-up and return dates.'
