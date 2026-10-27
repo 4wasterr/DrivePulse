@@ -1,6 +1,7 @@
 import fleetExpansion from '../../shared/fleetExpansion.json' with { type: 'json' }
 import fleetPlates from '../../shared/fleetPlates.json' with { type: 'json' }
 import { phtTime } from '../../shared/validation.mjs'
+import { overlaps } from '../../shared/availability.mjs'
 
 export const vehicles = [
   { id: 'bmw-3', brand: 'BMW', name: 'BMW 3 Series', tagline: 'A little more extraordinary.', category: 'Sedan', label: 'The everyday upgrade', image: '/images/bmw.jpg', rate: 4200, seats: 5, transmission: 'Automatic', fuel: 'Petrol', trips: 48, color: 'Alpine White', luggage: 3, description: 'Effortless performance meets thoughtful comfort. From city meetings to scenic detours, make every kilometre feel like the best part of your day.' },
@@ -42,7 +43,7 @@ export const requiredDocuments = [
     examples: 'SSS ID, GSIS, Postal ID, Voter’s ID, or recent Utility Statement'
   }
 ]
-export const money = (amount) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(amount)
+export const money = (amount) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount)
 export const dateISO = (offset = 0) => {
   const date = new Date()
   date.setDate(date.getDate() + offset)
@@ -76,7 +77,7 @@ export function getAvailabilityReason(vehicleId, dates, bookings = []) {
   if (end <= start) return 'Return must be after your pick-up date and time.'
 
   // Operational fleet holds
-  const hold = bookings.find(b => b.blocked && b.vehicleId === vehicleId)
+  const hold = bookings.find(b => b.blocked && b.vehicleId === vehicleId && overlaps(b, dates))
   if (hold) {
     if (hold.status === 'Maintenance') return 'Vehicle is currently in scheduled maintenance.'
     if (hold.status === 'Under Inspection') return 'Vehicle is undergoing post-return inspection.'
@@ -89,9 +90,7 @@ export function getAvailabilityReason(vehicleId, dates, bookings = []) {
   const conflict = bookings.find(b =>
     b.vehicleId === vehicleId &&
     !b.blocked &&
-    !['Completed', 'Cancelled'].includes(b.status) &&
-    start < tripTime(b.end, b.endTime || '10:00') &&
-    end > tripTime(b.start, b.startTime || '10:00')
+    overlaps(b, dates)
   )
 
   if (conflict) {

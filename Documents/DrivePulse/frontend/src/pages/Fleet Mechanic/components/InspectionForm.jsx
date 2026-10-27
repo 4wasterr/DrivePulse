@@ -9,6 +9,7 @@ import Icon from '../../../components/ui/Icon.jsx'
 import VehicleIdentity from '../../../components/fleet/VehicleIdentity.jsx'
 import checklist from '../../../../../shared/inspectionChecklist.json'
 import { CONDITION_STATUSES, conditionProblem } from '../../../../../shared/inspection.mjs'
+import { mileageConsumption } from '../../../../../shared/mileage.mjs'
 
 export default function InspectionForm({ operations, initial, onClose, onDone }) {
   const initialType = initial.type || (operations.bookings.some(b => b.vehicleId === initial.vehicleId && ['Pending Approval', 'Ready for Dispatch'].includes(b.status)) || !initial.vehicleId ? 'pre-dispatch' : 'clearance')
@@ -32,6 +33,12 @@ export default function InspectionForm({ operations, initial, onClose, onDone })
 }
 
 function InspectionChecklist({ vehicle, type, booking, busy, setBusy, onDone }) {
+  const [odometer, setOdometer] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'odometer', '')
+  const dispatchOdometer = booking?.dispatchOdometer ?? booking?.inspection?.odometer
+  let distance = null, mileageError = ''
+  if (type === 'post-return') {
+    try { distance = mileageConsumption(dispatchOdometer, odometer === '' ? null : Number(odometer)) } catch (error) { mileageError = error.message }
+  }
   const [outcome, setOutcome] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'outcome', 'approved'), [damageFlag, setDamageFlag] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'damageFlag', false), [error, setError] = useState('')
   const [step, setStep] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'step', 0), [driverVerification, setDriverVerification] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'driverVerification', '')
   const [checks, setChecks] = useDraftState(`inspection:checklist:${vehicle.id}:${type}:${booking?.id || ''}`, 'checks', {})
@@ -55,6 +62,7 @@ function InspectionChecklist({ vehicle, type, booking, busy, setBusy, onDone }) 
     try {
       const problem = conditionProblem(checks, checklist, outcome)
       if (problem) throw new Error(problem)
+      if (type === 'post-return' && mileageError) throw new Error(mileageError)
       if (uploading || !photos.exterior || !photos.interior) throw new Error('Upload separate exterior and interior photos and wait for both uploads to finish.')
       const result = await api('/mechanic/inspections', { method: 'POST', body: {
         vehicleId: vehicle.id, vehicleVersion: vehicle.version, type, bookingId: type === 'clearance' ? null : booking?.id, version: booking?.version,
@@ -75,10 +83,11 @@ function InspectionChecklist({ vehicle, type, booking, busy, setBusy, onDone }) 
     <fieldset hidden={step !== 1} disabled={step !== 1}>
     <h3>Measured readings</h3>
     <div className="form-grid">
-      <label className="form-field"><span>Odometer (km)</span><ValidatedField name="odometer" type="number" required min={vehicle.odometer ?? 0} max="10000000" step="0.01" placeholder={vehicle.odometer == null ? 'Read at the vehicle' : 'Last reading: ' + vehicle.odometer} /></label>
+      <label className="form-field"><span>{type === 'post-return' ? 'Return odometer (km)' : 'Odometer (km)'}</span><ValidatedField name="odometer" type="number" required min={Math.max(vehicle.odometer ?? 0, type === 'post-return' ? dispatchOdometer ?? 0 : 0)} max="10000000" step="0.01" placeholder={vehicle.odometer == null ? 'Read at the vehicle' : 'Last reading: ' + vehicle.odometer} value={odometer} onChange={event => setOdometer(event.target.value)} /></label>
       <label className="form-field"><span>Fuel / battery level (%)</span><ValidatedField name="fuelLevel" type="number" required min="0" max="100" step="0.01" /></label>
       {[['frontLeft', 'Front left'], ['frontRight', 'Front right'], ['rearLeft', 'Rear left'], ['rearRight', 'Rear right']].map(([key, label]) => <label className="form-field" key={key}><span>{label} tire pressure (PSI)</span><ValidatedField name={key} type="number" required min="0" max="100" step="0.1" /></label>)}
     </div>
+    {type === 'post-return' && <section className="mileage-summary" aria-label="Trip mileage calculation" aria-live="polite"><h3>Total mileage consumption</h3><p>Dispatch: {Number.isFinite(dispatchOdometer) ? dispatchOdometer.toLocaleString('en-PH') : 'Not recorded'} km → Return: {odometer === '' ? 'Enter reading' : Number(odometer).toLocaleString('en-PH')} km</p>{distance !== null ? <strong>{Number(odometer).toLocaleString('en-PH')} − {dispatchOdometer.toLocaleString('en-PH')} = {distance.toLocaleString('en-PH')} km used</strong> : <p className="workspace-muted">{odometer === '' && Number.isFinite(dispatchOdometer) ? 'Enter the return odometer to calculate the distance before re-acceptance.' : mileageError}</p>}</section>}
     <h3>Condition record</h3>
     <label className="form-field"><span>Exterior condition / damage locations</span><ValidatedField as="textarea" name="scratches" required maxLength={1500} rows={3} placeholder="Describe observed damage and its location, or explicitly record no visible damage." /></label>
     <label className="form-field"><span>Interior condition</span><ValidatedField as="select" name="cleanliness" required defaultValue=""><option value="" disabled>Select observed condition</option><option>Clean</option><option>Needs cleaning</option><option>Damaged</option></ValidatedField></label>

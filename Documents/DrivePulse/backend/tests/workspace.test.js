@@ -19,7 +19,7 @@ async function fixture(t, options = {}) {
     return { status: response.status, data, cookie: response.headers.get('set-cookie')?.split(';')[0], headers: response.headers };
   }
   const account = async (role, name = role) => {
-    const result = await request('/auth/signup', { method: 'POST', body: { role, name, firstName: name, lastName: 'Client', phone: '0917 123 4567', street: '12 Main Street', city: 'Quezon City', postalCode: '1100', email: `${name}@example.com`, password: 'StrongPass123!' } });
+    const result = await request('/auth/signup', { method: 'POST', body: { role, name, firstName: name, lastName: 'Client', phone: '0917 123 4567', street: '12 Main Street', city: 'Quezon City', regionCode: '1300000000', cityCode: '1381300000', barangayCode: '1381300001', postalCode: '1100', email: `${name}@example.com`, password: 'StrongPass123!' } });
     assert.equal(result.status, 201, JSON.stringify(result.data)); return result;
   };
   const client = await account('client', 'alex'), agent = await account('agent', 'jamie');
@@ -47,7 +47,7 @@ async function fixture(t, options = {}) {
     for (const view of ['exterior', 'interior']) photos.push({ id: (await photo(vehicleId, `${view}-${Date.now()}-${Math.random()}`)).id, view });
     return request('/mechanic/inspections', { method: 'POST', cookie: mechanic.cookie, body: { vehicleId, vehicleVersion: data.fleet.find(v => v.id === vehicleId).version, bookingId: booking.id, version: booking.version, type, odometer: 12000, fuelLevel: 85, tirePressure: { frontLeft: 33, frontRight: 33, rearLeft: 32, rearRight: 32 }, cleanliness: 'Clean', scratches: 'No visible scratches.', checks: { tyres: true, controls: true, exterior: true, interior: true, fuel: true }, driverVerification: type === 'clearance' ? 'not-applicable' : 'matched', photos, outcome: 'approved', ...extra } });
   };
-  const verifyAll = async booking => {
+  const verifyAll = async (booking, inspection = {}) => {
     booking = (await operations(agent.cookie)).bookings.find(b => b.id === booking.id);
     for (const doc of [...booking.documents]) {
       const result = await action(booking, 'review', { documentId: doc.id, decision: 'approved' }); assert.equal(result.status, 200, JSON.stringify(result.data)); booking = result.data;
@@ -55,11 +55,11 @@ async function fixture(t, options = {}) {
     for (const payment of [...booking.payments]) {
       const result = await action(booking, 'payment', { paymentId: payment.id, decision: 'confirmed' }); assert.equal(result.status, 200, JSON.stringify(result.data)); booking = result.data;
     }
-    const result = await inspect(booking);
+    const result = await inspect(booking, 'pre-dispatch', inspection);
     assert.equal(result.status, 201, JSON.stringify(result.data)); return (await operations(agent.cookie)).bookings.find(b => b.id === booking.id);
   };
-  const overdueRental = async () => {
-    let b = await verifyAll(await book());
+  const overdueRental = async (inspection = {}) => {
+    let b = await verifyAll(await book(), inspection);
     b = (await action(b, 'pass')).data;
     b = (await action(b, 'dispatch')).data;
     b.start = date(-3); b.end = date(-1); b.dispatchedAt = new Date(Date.now() - 3 * D.DAY).toISOString();
@@ -71,13 +71,16 @@ async function fixture(t, options = {}) {
 
 test('input validation rejects invalid customer details without saving reservations and accepts formatted international contacts', async t => {
   const f = await fixture(t);
-  const base = { ...f.dates(), renter: { name: 'José O’Neill', phone: '+63 (917) 123-4567', email: '' } };
+  const base = { ...f.dates(), renter: { name: 'José O’Neill', phone: '+63 (917) 123-4567', email: 'walkin@example.com' } };
   for (const renter of [
     { ...base.renter, name: '   ' },
     { ...base.renter, name: '12345' },
     { ...base.renter, phone: 'call tomorrow' },
     { ...base.renter, phone: '123' },
     { ...base.renter, email: 'alex@example..com' },
+    { ...base.renter, email: '' },
+    { ...base.renter, email: null },
+    { ...base.renter, email: undefined },
   ]) {
     const result = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...base, renter } });
     assert.equal(result.status, 400, JSON.stringify(result.data));
@@ -165,7 +168,7 @@ test('bookings use server prices, isolate customer files and records, and block 
   assert.equal((await f.request(`/documents/${booking.documents[0].id}`)).status, 401);
   assert.equal((await f.request(`/documents/${booking.documents[0].id}`, { cookie: f.agent.cookie })).status, 200);
   const availability = await f.request('/availability'); assert.equal(availability.data.length, 1); assert.equal(availability.data[0].renter, undefined); assert.equal(availability.data[0].ownerId, undefined);
-  const body = { ...f.dates('tesla-3', 7, 9), renter: { name: 'Walk-in customer', phone: '09171234567' } };
+  const body = { ...f.dates('tesla-3', 7, 9), renter: { name: 'Walk-in customer', phone: '09171234567', email: 'walkin@example.com' } };
   const results = await Promise.all([1, 2].map(() => f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body })));
   assert.deepEqual(results.map(r => r.status).sort(), [201, 409]);
   assert.equal((await f.request('/documents/license', { method: 'POST', cookie: f.client.cookie, body: Buffer.from('<html>bad</html>') })).status, 400);
@@ -196,7 +199,7 @@ test('dispatch requires approved distinct documents, both payment allocations, i
 
 test('extensions check conflicts and price changes; cancellation releases availability and preserves refund accounting', async t => {
   const f = await fixture(t); let b = await f.book();
-  const next = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('bmw-3', 7, 9), renter: { name: 'Next renter', phone: '09171234567' } } });
+  const next = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('bmw-3', 7, 9), renter: { name: 'Next renter', phone: '09171234567', email: 'walkin@example.com' } } });
   assert.equal(next.status, 201);
   assert.equal((await f.action(b, 'extend', { end: f.date(8), endTime: '10:00' })).status, 409);
   b = (await f.action(b, 'extend', { end: f.date(6), endTime: '10:00', reason: 'Customer request' })).data;
@@ -205,9 +208,9 @@ test('extensions check conflicts and price changes; cancellation releases availa
   assert.equal(b.billing.rentalPaid, 4200);
   assert.equal((await f.action(b, 'payment', { type: 'deposit', amount: 5001, method: 'Cash', reference: 'too much' })).status, 400);
   b = (await f.action(b, 'cancel', { reason: 'Plans changed' })).data;
-  assert.equal(b.status, 'Cancelled'); assert.equal(b.cancellation.refundDue, 4200); assert.equal(b.billing.totalPaid, 4200);
+  assert.equal(b.status, 'Cancelled'); assert.equal(b.cancellation.refundDue, 3360); assert.equal(b.billing.totalPaid, 4200);
   assert.equal((await f.action(b, 'pass')).status, 400);
-  const replacement = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates(), renter: { name: 'Replacement renter', phone: '09171234567' } } });
+  const replacement = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates(), renter: { name: 'Replacement renter', phone: '09171234567', email: 'walkin@example.com' } } });
   assert.equal(replacement.status, 201);
 });
 
@@ -247,7 +250,7 @@ test('agent self-registration can be disabled independently of client registrati
 
 test('walk-in verification rejects reused ID files and payments cannot exceed their allocation', async t => {
   const f = await fixture(t);
-  const created = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates(), renter: { name: 'Walk-in customer', phone: '09171234567' } } });
+  const created = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates(), renter: { name: 'Walk-in customer', phone: '09171234567', email: 'walkin@example.com' } } });
   assert.equal(created.status, 201); let b = created.data;
   for (const kind of D.REQUIRED_DOCUMENTS) await f.upload(kind, f.agent.cookie, 'same file content', `?bookingId=${b.id}`);
   b = (await f.request('/workspace', { cookie: f.agent.cookie })).data.bookings.find(item => item.id === b.id);
@@ -293,7 +296,7 @@ test('mandatory inspection readings and fresh distinct photos gate dispatch and 
   assert.ok(b.dispatchBlocks.some(reason => reason.includes('out of service')));
   const schedule = (await f.request('/availability')).data;
   assert.ok(schedule.some(v => v.vehicleId === b.vehicleId && v.blocked && v.status === 'Out of Service'));
-  const walkin = { ...f.dates(b.vehicleId, 8, 9), renter: { name: 'Next driver', phone: '09171234567' } };
+  const walkin = { ...f.dates(b.vehicleId, 8, 9), renter: { name: 'Next driver', phone: '09171234567', email: 'walkin@example.com' } };
   assert.equal((await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: walkin })).status, 409);
   const photoId = report.data.photos[0].id;
   assert.equal((await f.request(`/documents/${photoId}`, { cookie: f.client.cookie })).status, 404);
@@ -344,6 +347,26 @@ test('clean returns with full fuel and zero damage flags auto-release deposits w
   const analytics = (await f.request(`/manager/analytics?start=${f.date(-29)}&end=${f.date(0)}`, { cookie: f.manager.cookie })).data;
   assert.equal(analytics.depositReleases, 5000);
   assert.equal(analytics.autoReleasedDeposits, 5000);
+});
+
+test('post-return inspection calculates mileage before re-acceptance and retains the dispatch baseline', async t => {
+  const f = await fixture(t, { seedDemo: true });
+  let b = await f.overdueRental({ odometer: 1500 });
+  assert.equal(b.dispatchOdometer, 1500);
+  const time = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour12: false, hour: '2-digit', minute: '2-digit' });
+  b = (await f.action(b, 'return', { date: f.date(0), time, hourlyRate: 0 })).data;
+  assert.equal((await f.inspect({ vehicleId: b.vehicleId }, 'clearance', { odometer: 2500 })).status, 400, 'clearance cannot bypass return mileage');
+  assert.equal((await f.inspect(b, 'post-return', { odometer: 1400 })).status, 400);
+  const result = await f.inspect(b, 'post-return', { odometer: 2500, fuelLevel: 100 });
+  assert.equal(result.status, 201, JSON.stringify(result.data));
+  assert.equal(result.data.dispatchOdometer, 1500);
+  assert.equal(result.data.mileageConsumption, 1000);
+  const operations = await f.operations();
+  assert.equal(operations.fleet.find(vehicle => vehicle.id === b.vehicleId).status, 'Available');
+  assert.equal(operations.bookings.find(booking => booking.id === b.id).mileageConsumption, 1000);
+  const report = (await f.operations(f.agent.cookie)).bookings.find(booking => booking.id === b.id);
+  const receipt = await f.request('/rental-documents/' + report.returnReceipt.id, { cookie: f.agent.cookie });
+  assert.match(receipt.data.toString(), /Total Mileage Consumption/);
 });
 
 test('disputed/withheld deposits and cancelled booking refunds require manager exception approval', async t => {
@@ -660,7 +683,7 @@ test('agreement previews use server prices and profile, reject stale terms, and 
   assert.match(inline.data.toString(), /Reservation Confirmation/); assert.ok(inline.data.toString().includes('Print / Save as PDF'));
   const other = await f.account('client', 'confirmations-other');
   assert.equal((await f.request('/rental-documents/' + b.confirmation.id, { cookie: other.cookie })).status, 404);
-  const walkin = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('toyota-camry'), renter: { name: 'Walk In', phone: '09171234567' } } });
+  const walkin = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('toyota-camry'), renter: { name: 'Walk In', phone: '09171234567', email: 'walkin@example.com' } } });
   assert.equal(walkin.status, 201); assert.equal(walkin.data.confirmation.kind, 'confirmation');
 });
 
@@ -692,7 +715,7 @@ test('extension approval rechecks newly booked conflicts and rejection preserves
   await f.db.prepare('UPDATE bookings SET payload=? WHERE id=?').run(JSON.stringify(b), b.id);
   const request = await f.request('/bookings/' + b.id + '/extend', { method: 'POST', cookie: f.client.cookie, body: { version: b.version, end: f.date(7), endTime: '10:00' } });
   assert.equal(request.status, 200); const pending = request.data;
-  const next = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('bmw-3', 6, 8), renter: { name: 'Next renter', phone: '09171234567' } } });
+  const next = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('bmw-3', 6, 8), renter: { name: 'Next renter', phone: '09171234567', email: 'walkin@example.com' } } });
   assert.equal(next.status, 201);
   const path = '/bookings/' + b.id + '/extensions/' + pending.extensionRequests[0].id + '/review';
   assert.equal((await f.request(path, { method: 'POST', cookie: f.agent.cookie, body: { version: pending.version, decision: 'approved', reason: 'Checked' } })).status, 409);
@@ -731,7 +754,7 @@ test('manager can edit complete vehicle specifications and apply holds without b
   assert.equal(edited.status, 200, JSON.stringify(edited.data));
   for (const key of ['brand', 'model', 'category', 'plate', 'transmission', 'seats', 'fuelType', 'tankCapacity', 'rate', 'status']) assert.equal(edited.data[key], body[key]);
   assert.equal(edited.data.name, 'Honda City');
-  const booking = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates(vehicle.id), renter: { name: 'Updated specs renter', phone: '09171234567' } } });
+  const booking = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates(vehicle.id), renter: { name: 'Updated specs renter', phone: '09171234567', email: 'walkin@example.com' } } });
   assert.equal(booking.status, 201, JSON.stringify(booking.data));
   const issued = JSON.parse((await f.db.prepare('SELECT payload FROM rental_documents WHERE id=?').get(booking.data.agreement.id)).payload);
   assert.equal(issued.vehicle.name, 'Honda City'); assert.equal(issued.vehicle.plate, 'EDIT 456'); assert.equal(issued.vehicle.transmission, 'Manual');
@@ -779,7 +802,7 @@ test('online and walk-in reservations persist their parent before contracts and 
   else await f.db.exec('DROP TRIGGER reject_test_document;');
   const online = await f.request('/bookings', { method: 'POST', cookie: f.client.cookie, body: f.dates() });
   assert.equal(online.status, 201, JSON.stringify(online.data));
-  const walkin = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('mercedes-c'), renter: { name: 'Walkin save test', phone: '09171234567' } } });
+  const walkin = await f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates('mercedes-c'), renter: { name: 'Walkin save test', phone: '09171234567', email: 'walkin@example.com' } } });
   assert.equal(walkin.status, 201, JSON.stringify(walkin.data));
   for (const booking of [online.data, walkin.data]) {
     const row = await f.db.prepare('SELECT payload FROM bookings WHERE id=?').get(booking.id);

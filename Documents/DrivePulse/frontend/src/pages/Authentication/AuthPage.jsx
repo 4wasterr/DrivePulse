@@ -29,7 +29,7 @@ function StatusPanel({ icon, title, children }) {
 function ResendButton({ email, busy, seconds, onResend }) {
   return <button type="button" className="button button-outline" disabled={busy || seconds > 0} onClick={() => onResend(email)}>{seconds ? `Resend available in ${seconds}s` : 'Resend Verification Email'}<Icon name="mail" /></button>
 }
-export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavigate }) {
+export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavigate, sessionNotice = '', onDismissNotice }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -95,7 +95,7 @@ export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavi
       }
       if (mode === 'forgot-password') { await requestRecovery(data.get('email')); return }
       const body = { [signup ? 'email' : 'username']: data.get(signup ? 'email' : 'username'), password: data.get('password') }
-      if (signup) Object.assign(body, Object.fromEntries(['firstName', 'middleName', 'lastName', 'phone', 'street', 'city', 'postalCode'].map(key => [key, data.get(key)])), { role: 'client' })
+      if (signup) Object.assign(body, Object.fromEntries(['firstName', 'middleName', 'lastName', 'phone', 'street', 'city', 'postalCode', 'regionCode', 'cityCode', 'barangayCode'].map(key => [key, data.get(key)])), { role: 'client' })
       const result = await api(`/auth/${mode}`, { method: 'POST', body })
       if (result.verificationRequired) { setSentTo(result.email); cooldown(result.retryAfterSeconds); return }
       sessionStorage.removeItem('drivepulse-login-until'); await onSuccess(result.user)
@@ -130,5 +130,5 @@ export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavi
     </>
   }
   const text = codeStage ? copy['reset-password'] : copy[mode] || copy.login
-  return <div className={`auth-page ${recovery || mode === 'verify-email' || signup && sentTo ? 'auth-account-flow' : ''}`}><aside className="auth-story"><div className="auth-story-image" /><a className="auth-brand" href="#home"><BrandMark /><span>drivepulse.</span></a><div className="auth-story-copy"><p className="landing-eyebrow">FLEET & RENTAL OPERATIONS</p><h2>Reliable fleets.<br />Coordinated operations.</h2><p>Manage bookings, dispatch, vehicle readiness, and operational records through DrivePulse.</p><div><Icon name="road" />One platform for rental operations and fleet management.</div></div><a className="auth-back" href="#home"><Icon name="arrow" />Back to DrivePulse</a></aside><main className="auth-main"><div className="auth-form-wrap"><a className="auth-mobile-brand" href="#home"><BrandMark /><span>drivepulse.</span></a><p className="landing-eyebrow">{text.eyebrow}</p><h1>{text.title}</h1><p className="auth-description">{text.description}</p>{login && sessionStorage.getItem('drivepulse:session-expired') && <p className="auth-notice" role="alert">{sessionStorage.getItem('drivepulse:session-expired')}</p>}{body}<div className="auth-footnote"><Icon name="shield" size={17} />{recovery ? 'Recovery codes expire after 10 minutes and can only be used once.' : 'Access is limited to your assigned workspace.'}</div></div></main></div>
+  return <div className={`auth-page ${recovery || mode === 'verify-email' || signup && sentTo ? 'auth-account-flow' : ''}`}><aside className="auth-story"><div className="auth-story-image" /><a className="auth-brand" href="#home"><BrandMark /><span>drivepulse.</span></a><div className="auth-story-copy"><p className="landing-eyebrow">FLEET & RENTAL OPERATIONS</p><h2>Reliable fleets.<br />Coordinated operations.</h2><p>Manage bookings, dispatch, vehicle readiness, and operational records through DrivePulse.</p><div><Icon name="road" />One platform for rental operations and fleet management.</div></div><a className="auth-back" href="#home"><Icon name="arrow" />Back to DrivePulse</a></aside><main className="auth-main" onFocusCapture={onDismissNotice} onInputCapture={onDismissNotice} onPointerDownCapture={onDismissNotice}><div className="auth-form-wrap"><a className="auth-mobile-brand" href="#home"><BrandMark /><span>drivepulse.</span></a><p className="landing-eyebrow">{text.eyebrow}</p><h1>{text.title}</h1><p className="auth-description">{text.description}</p>{login && sessionNotice && <p className="auth-notice" role="alert">{sessionNotice}</p>}{body}<div className="auth-footnote"><Icon name="shield" size={17} />{recovery ? 'Recovery codes expire after 10 minutes and can only be used once.' : 'Access is limited to your assigned workspace.'}</div></div></main></div>
 }

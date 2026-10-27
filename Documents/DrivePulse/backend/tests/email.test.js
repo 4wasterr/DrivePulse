@@ -31,7 +31,7 @@ async function fixture(t, mailer = fakeMailer()) {
   return { request, mailer, db, tokenFrom };
 }
 
-const signup = { role: 'client', name: 'Rei Zenoh', firstName: 'Rei', lastName: 'Zenoh', phone: '0917 123 4567', street: '12 Main Street', city: 'Quezon City', postalCode: '1100', email: 'reizenoh24@gmail.com', password: 'StrongPass123!' };
+const signup = { role: 'client', name: 'Rei Zenoh', firstName: 'Rei', lastName: 'Zenoh', phone: '0917 123 4567', street: '12 Main Street', city: 'Quezon City', regionCode: '1300000000', cityCode: '1381300000', barangayCode: '1381300001', postalCode: '1100', email: 'reizenoh24@gmail.com', password: 'StrongPass123!' };
 const smtpEnv = { SMTP_HOST: 'smtp.gmail.com', SMTP_PORT: '465', SMTP_USER: 'sender@gmail.com', SMTP_PASS: 'abcd efgh ijkl mnop' };
 
 test('client sign-up sends a verification button link and the link signs the client in', async t => {
@@ -273,7 +273,7 @@ test('signup validates and persists granular client identity without changing ex
   const verified = await f.request('/auth/verify-email', { token: f.tokenFrom(f.mailer.sent[0].verifyUrl) });
   assert.equal(verified.data.user.name, 'Rei Pauline Zenoh');
   assert.equal(verified.data.user.phone, '+639171234567');
-  assert.deepEqual(verified.data.user.address, { street: '12 Main Street', city: 'Quezon City', postalCode: '1100' });
+  assert.deepEqual(verified.data.user.address, { region: 'National Capital Region (NCR)', barangay: 'Alicia', street: '12 Main Street', city: 'Quezon City', regionCode: '1300000000', cityCode: '1381300000', barangayCode: '1381300001', postalCode: '1100' });
 });
 
 test('Admin client profiles persist granular fields and critical account changes revoke recovery codes', async t => {

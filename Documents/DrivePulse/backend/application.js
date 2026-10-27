@@ -14,6 +14,8 @@ const demoAccounts = require('../shared/demoAccounts.json');
 const { inputError } = require('../shared/validation.mjs');
 const { clientProfile } = require('../shared/clientProfile.mjs');
 const { createAccountSecurity } = require('./account-security');
+const { cancellationSettlement } = require('../shared/cancellation.mjs');
+const { geographicAddress, registerGeography } = require('./geography');
 
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const now = () => new Date().toISOString();
@@ -26,7 +28,7 @@ function publicUser(user) {
     id: user.id, name: user.name, email: user.email, role: user.role,
     emailVerified: Boolean(user.email_verified_at),
     firstName: user.first_name || '', middleName: user.middle_name || '', lastName: user.last_name || '', phone: user.phone || '',
-    address: { street: user.address_street || '', city: user.address_city || '', postalCode: user.address_postal || '' },
+    address: { street: user.address_street || '', city: user.address_city || '', postalCode: user.address_postal || '', ...(user.address_geography ? JSON.parse(user.address_geography) : {}) },
     createdAt: user.created_at || null, lastLoginAt: user.last_login_at || null,
     archivedAt: user.archived_at || null, archivedBy: user.archived_by || null, archiveReason: user.archive_reason || null
   };
@@ -57,8 +59,8 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   const allTickets = async () => (await db.prepare('SELECT payload FROM tickets').all()).map((row) => JSON.parse(row.payload));
   const saveTicket = async (ticket) => await db.prepare('INSERT INTO tickets(id,owner_id,payload) VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(ticket.id, ticket.ownerId || null, JSON.stringify(ticket));
   const meta = (doc) => ({ id: doc.id, kind: doc.kind, name: doc.name, mime: doc.mime, fingerprint: doc.fingerprint, size: doc.data.length, uploadedAt: doc.uploaded_at });
-  const readClientProfile = input => { try { return clientProfile(input); } catch (error) { D.fail(error.message); } };
-  const writeProfile = async (id, profile) => db.prepare('UPDATE users SET first_name=?,middle_name=?,last_name=?,phone=?,address_street=?,address_city=?,address_postal=? WHERE id=?').run(profile.firstName || '', profile.middleName || '', profile.lastName || '', profile.phone || '', profile.street || '', profile.city || '', profile.postalCode || '', id);
+  const readClientProfile = input => { try { const geography = geographicAddress(input); return { ...clientProfile({ ...input, city: geography.city }), geography }; } catch (error) { D.fail(error.message); } };
+  const writeProfile = async (id, profile) => db.prepare('UPDATE users SET first_name=?,middle_name=?,last_name=?,phone=?,address_street=?,address_city=?,address_postal=?,address_geography=? WHERE id=?').run(profile.firstName || '', profile.middleName || '', profile.lastName || '', profile.phone || '', profile.street || '', profile.city || '', profile.postalCode || '', profile.geography ? JSON.stringify(profile.geography) : '', id);
   const addUser = async (name, email, role, password, { verified = true, profile = {} } = {}) => {
     const record = passwordRecord(password),id = randomUUID(),createdAt = now();
     await db.prepare('INSERT INTO users(id,email,name,role,salt,password_hash,created_at,email_verified_at) VALUES(?,?,?,?,?,?,?,?)').run(id, email, name, role, record.salt, record.passwordHash, createdAt, verified ? createdAt : '');
@@ -85,7 +87,8 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   if (!(await fleet.records('location')).length) await transaction(async () => {
     for (const [index, name] of D.LOCATIONS.entries()) await fleet.save('location', { id: `branch-${index + 1}`, name, active: true, type: name.includes('NAIA') ? 'Airport hub' : 'Branch' });
   });
-  const pickupLocations = async () => (await fleet.records('location')).filter(location => location.active !== false).sort((a, b) => a.id.localeCompare(b.id));
+  const defaultBranchNames = { 'branch-1': 'Makati Branch', 'branch-2': 'BGC Branch', 'branch-3': 'NAIA Terminal 3 Branch', 'branch-4': 'Quezon City Branch' };
+  const pickupLocations = async () => (await fleet.records('location')).filter(location => location.active !== false).map(location => ({ ...location, branchName: location.branchName || defaultBranchNames[location.id] || location.name })).sort((a, b) => a.id.localeCompare(b.id));
   const locationNames = async () => (await pickupLocations()).map(location => location.name);
   const transactionReference = async () => {
     const existing = new Set((await rawBookings()).map(b => b.transactionReference));
@@ -228,7 +231,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     await db.health();
     res.json({ ok: true });
   });
-  app.get('/api/session', async (req, res) => res.json({
+  const sessionFor = async req => ({
     user: req.user ? publicUser(req.user) : null,
     sessionExpired: Boolean(req.sessionExpired),
     lastActivity: req.user ? Number(req.user.last_activity) : null,
@@ -238,7 +241,8 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     demo: seedDemo,
     emailDelivery: Boolean(mailer),
     rates: Object.fromEntries((await fleet.fleet(true)).map((v) => [v.id, v.rate]))
-  }));
+  });
+  app.get('/api/session', async (req, res) => res.json(await sessionFor(req)));
 
   // Only explicit user activity renews idle time. Polling reads never extend it.
   app.post('/api/session/activity', requireUser, async (req, res) => {
@@ -477,22 +481,21 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   });
 
   app.get('/api/locations', async (req, res) => res.json(await pickupLocations()));
+  registerGeography(app);
 
-  app.get('/api/availability', async (req, res) => res.json([
-  ...(await allBookings()).map(({ id, vehicleId, start, end, startTime, endTime, status }) => ({ id, vehicleId, start, end, startTime, endTime, status })),
-  ...(await fleet.fleet(true)).filter((v) => v.archivedAt || ['Under Inspection', 'Maintenance', 'Out of Service', 'Overdue'].includes(v.status)).map((v) => ({ id: `hold-${v.id}`, vehicleId: v.id, status: v.status, rate: v.rate, blocked: true }))]
-  ));
+  app.get('/api/availability', async (req, res) => res.json(await fleet.availability()));
 
-  app.get('/api/workspace', requireUser, async (req, res) => {
-    const agent = ['agent', 'manager'].includes(req.user.role),documents = {};
-    (await db.prepare('SELECT * FROM documents WHERE owner_id=? ORDER BY uploaded_at ASC, rowid ASC').all(req.user.id)).filter((d) => D.REQUIRED_DOCUMENTS.includes(d.kind)).forEach((doc) => {documents[doc.kind] = meta(doc);});
-    res.json({
-      user: publicUser(req.user),
-      bookings: (await asyncMap((await allBookings()).filter((b) => agent || b.ownerId === req.user.id), fleet.present)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  const workspaceFor = async user => {
+    const agent = ['agent', 'manager'].includes(user.role),documents = {};
+    (await db.prepare('SELECT * FROM documents WHERE owner_id=? ORDER BY uploaded_at ASC, rowid ASC').all(user.id)).filter((d) => D.REQUIRED_DOCUMENTS.includes(d.kind)).forEach((doc) => {documents[doc.kind] = meta(doc);});
+    return {
+      user: publicUser(user),
+      bookings: (await asyncMap((await allBookings()).filter((b) => agent || b.ownerId === user.id), fleet.present)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       documents,
-      tickets: (await allTickets()).filter((t) => req.user.role === 'agent' || t.ownerId === req.user.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    });
-  });
+      tickets: (await allTickets()).filter((t) => user.role === 'agent' || t.ownerId === user.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    };
+  };
+  app.get('/api/workspace', requireUser, async (req, res) => res.json(await workspaceFor(req.user)));
 
   const notificationsFor = async user => {
     const bookings = (await allBookings()).filter(b => user.role !== 'client' || b.ownerId === user.id);
@@ -517,6 +520,14 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     return notices.map(n => ({ ...n, read: ids.has(n.id) })).sort((a, b) => Number(a.read) - Number(b.read) || priority[a.severity] - priority[b.severity] || (a.days ?? Infinity) - (b.days ?? Infinity) || (b.at || '').localeCompare(a.at || ''));
   };
   app.get('/api/notifications', requireUser, async (req, res) => res.json(await notificationsFor(req.user)));
+  // One transaction supplies every viewport with the same fleet, booking and
+  // billing revision. Mutation transactions use this same database lock.
+  app.get('/api/sync', async (req, res) => res.json(await transaction(async () => ({
+    session: await sessionFor(req), vehicles: await fleet.fleet(), availability: await fleet.availability(),
+    workspace: req.user ? await workspaceFor(req.user) : null,
+    operations: req.user && req.user.role !== 'client' ? await fleet.operations(req.user) : null,
+    notifications: req.user ? await notificationsFor(req.user) : [], refreshedAt: now()
+  }))));
   app.post('/api/notifications/read', requireUser, async (req, res) => res.json(await transaction(async () => {
     if (!Array.isArray(req.body.ids) || req.body.ids.length > 300 || req.body.ids.some(id => typeof id !== 'string')) D.fail('Choose valid notifications.');
     const notices = await notificationsFor(req.user), allowed = new Set(notices.map(n => n.id));
@@ -549,7 +560,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   const agreementPreview = async (input, user) => {
     const vehicle = (await fleet.fleet()).find(v => v.id === input.vehicleId);
     if (!vehicle) D.fail('Choose an active fleet vehicle.', 404);
-    const blocks = await fleet.operationalBlocks(vehicle.id);
+    const blocks = await fleet.operationalBlocks(vehicle.id, input);
     if (blocks.length || vehicle.status === 'Overdue') D.fail(blocks.join(' ') || 'This vehicle is overdue and unavailable.', 409);
     const quote = D.quote(input, false, vehicle.rate, vehicle, await locationNames());
     if (!D.available(await allBookings(), input)) D.fail('This vehicle is already reserved for those dates.', 409);
@@ -565,7 +576,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
 
   const createBooking = async (req, walkin) => await transaction(async () => {
     const input = req.body;
-    const blocks = await fleet.operationalBlocks(input.vehicleId);
+    const blocks = await fleet.operationalBlocks(input.vehicleId, input);
     if (blocks.length) D.fail(blocks.join(' '), 409);
     const quotation = D.quote(input, false, await fleet.vehicleRate(input.vehicleId), await fleet.vehicle(input.vehicleId), await locationNames());
     if (!walkin && input.agreementPreviewDigest) {
@@ -578,7 +589,7 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     let ownerId = req.user.id,renter = publicUser(req.user),docs = [];
     if (walkin) {
       if (input.customerConfirmed !== true) D.fail('Confirm the customer details and trip schedule before proceeding.');
-      renter = { name: D.text(input.renter?.name, 'Customer name', 70), email: D.text(input.renter?.email, 'Email', 160, false).toLowerCase(), phone: D.text(input.renter?.phone, 'Contact number', 40) };
+      renter = { name: D.text(input.renter?.name, 'Customer name', 70), email: D.text(input.renter?.email, 'Email', 160).toLowerCase(), phone: D.text(input.renter?.phone, 'Contact number', 40) };
       if (renter.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(renter.email)) D.fail('Enter a valid customer email.');
       ownerId = (await db.prepare("SELECT id FROM users WHERE email=? AND role='client'").get(renter.email))?.id || null;
     } else {
@@ -628,11 +639,15 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     return { id: b.id, archivedAt: b.archivedAt };
   })));
 
-  app.post('/api/agent/bookings/:id/review', requireAgent, async (req, res) => res.json(await updateBooking(req, 'ID review recorded', (b) => {
+  app.post('/api/agent/bookings/:id/review', requireAgent, async (req, res) => res.json(await updateBooking(req, 'ID review recorded', async (b) => {
     if (['Cancelled', 'Completed', 'On Rental'].includes(b.status)) D.fail('Identity review is closed for this reservation.');
     const doc = b.documents.find((d) => d.id === req.body.documentId);
     if (!doc) D.fail('This document is no longer attached. Refresh the reservation.', 409);
     if (!['approved', 'rejected'].includes(req.body.decision)) D.fail('Choose approve or reject.');
+    if (req.body.decision === 'approved') {
+      const stored = await db.prepare('SELECT fingerprint FROM documents WHERE id=?').get(doc.id);
+      if (!stored || stored.fingerprint !== doc.fingerprint) D.fail('The original uploaded document is unavailable. Ask the client to upload a new copy before approval.', 409);
+    }
     if (req.body.decision === 'approved' && b.documents.some((other) => other.kind !== doc.kind && other.fingerprint === doc.fingerprint)) D.fail('The license and two government IDs must be three different files.');
     const note = D.text(req.body.reason, 'Review note', 1000, req.body.decision === 'rejected');
     doc.review = { status: req.body.decision, by: req.user.name, at: now(), note };
@@ -683,6 +698,8 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   })));
 
   app.post('/api/agent/bookings/:id/dispatch', requireAgent, async (req, res) => res.json(await updateBooking(req, 'Vehicle dispatched', async (b) => {
+    b.dispatchOdometer = b.inspection?.odometer;
+    if (!Number.isFinite(b.dispatchOdometer)) D.fail('A mechanic must record the dispatch odometer before vehicle release.');
     if (b.status !== 'Ready for Dispatch' || !b.dispatchPass || b.dispatchPass.revokedAt || (await fleet.dispatchBlocks(b)).length) D.fail('Issue a valid dispatch pass after all checks are complete.');
     b.releaseSignoff = { signature: b.renter.name, at: now(), by: req.user.name, actorId: req.user.id, method: 'Front-desk dispatch confirmation' };
     b.status = 'On Rental';b.dispatchedAt = now();
@@ -695,6 +712,8 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     if (D.time(end, endTime) <= Math.max(D.time(b.end, b.endTime), Date.now())) D.fail('Choose a future return time later than the current return.');
     const quotation = D.quote(updated, true, b.dailyRate || b.rental / b.days, await fleet.vehicle(b.vehicleId), [...new Set([...(await locationNames()), b.pickup, b.dropoff])]);
     if (!D.available(await allBookings(), updated, b.id)) D.fail('This extension overlaps another reservation.', 409);
+    const downtime = (await fleet.availability()).filter(item => item.blocked && item.id.startsWith('maintenance-'));
+    if (!D.available(downtime, updated)) D.fail('This extension overlaps scheduled maintenance.', 409);
     return { updated, quotation };
   }
   async function applyExtension(b, req, end, endTime, request = null) {
@@ -828,10 +847,17 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     return (await fleet.fleet()).find(v => v.id === s.id);
   })));
 
-  app.post('/api/agent/bookings/:id/cancel', requireAgent, async (req, res) => res.json(await updateBooking(req, 'Reservation cancelled', (b) => {
+  app.post('/api/agent/bookings/:id/cancel', requireAgent, async (req, res) => res.json(await updateBooking(req, 'Reservation cancelled', async (b) => {
     if (!['Pending Approval', 'Ready for Dispatch'].includes(b.status)) D.fail('Only reservations awaiting dispatch can be cancelled.');
-    b.cancellation = { reason: D.text(req.body.reason, 'Cancellation reason', 1000), by: req.user.name, at: now(), refundDue: D.billing(b).totalPaid };
+    const settlement = cancellationSettlement(b);
+    b.cancellation = { reason: D.text(req.body.reason, 'Cancellation reason', 1000), by: req.user.name, at: now(), policy: '20% of verified rental/downpayment, excluding security deposit', rate: 0.2, ...settlement };
     D.invalidatePass(b);b.status = 'Cancelled';
+    for (const payment of b.payments || []) if (payment.status === 'pending') { payment.status = 'cancelled'; payment.reviewedAt = now(); payment.reviewNote = 'Booking cancelled before dispatch.'; }
+    for (const [type, amount] of [['refund', settlement.rentalRefund], ['deposit', settlement.depositRefund]]) {
+      if (amount <= 0) continue;
+      await fleet.save('approval', { id: randomUUID(), bookingId: b.id, type, amount, withheldAmount: 0, disputed: false, reason: `Pre-dispatch cancellation: ${b.cancellation.reason}. Fee: PHP ${settlement.fee}.`, status: 'pending', version: 1, by: req.user.name, at: now(), highValue: amount >= 5000, source: 'cancellation' });
+    }
+    b.cancellationStatement = await rentalDocuments.issue(b, 'cancellation', req.user, { cancellation: b.cancellation, bookingStatus: b.status });
   })));
 
   app.post('/api/agent/bookings/:id/return', requireAgent, async (req, res) => res.json(await updateBooking(req, 'Vehicle returned', async (b) => {

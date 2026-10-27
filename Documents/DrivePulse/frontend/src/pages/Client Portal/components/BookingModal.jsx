@@ -154,11 +154,11 @@ export default function BookingModal({ vehicle, initialDates, bookings, document
               <p className="muted small">Choose where and when. All schedule fields are required before advancing.</p>
               <div className="form-grid">
                 <label className="form-field span-2">
-                  Pick-up location
+                  Pick-up branch
                   <LocationField name="pickup" required value={dates.pickup} onChange={e => update('pickup', e.target.value)} />
                 </label>
                 <label className="form-field span-2">
-                  Drop-off location
+                  Return branch
                   <LocationField name="dropoff" required value={dates.dropoff} onChange={e => update('dropoff', e.target.value)} />
                 </label>
                 <label className="form-field">

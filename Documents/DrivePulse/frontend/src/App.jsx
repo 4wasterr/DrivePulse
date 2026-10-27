@@ -30,15 +30,18 @@ export default function App() {
   const [config, setConfig] = useState({ demo: false, agentSignup: true, rates: {} })
   const [loading, setLoading] = useState(true)
   const [connectionError, setConnectionError] = useState('')
+  const [expirationNotice, setExpirationNotice] = useState('')
+  const refreshRequest = useRef(null)
   const sequence = useRef(0)
   const returnTo = useRef('overview')
   const expireSession = useCallback(() => {
     sequence.current += 1
+    refreshRequest.current?.abort()
     returnTo.current = 'overview'
     navigationTrail.current = []
     clearDrafts()
     setWorkspace(null); setNotifications([]); setConnectionError(''); setLoading(false)
-    sessionStorage.setItem('drivepulse:session-expired', EXPIRATION_MESSAGE)
+    setExpirationNotice(EXPIRATION_MESSAGE)
     window.location.replace('#login'); setPage('login')
     api('/logout', { method: 'POST', automatic: true }).catch(() => {})
   }, [])
@@ -53,28 +56,25 @@ export default function App() {
   }, [userId, config.lastActivity, expireSession])
   const refresh = useCallback(() => {
     const current = ++sequence.current
-    return Promise.all([api('/session'), api('/availability'), api('/vehicles')])
-      .then(async ([session, schedule, fleet]) => {
+    refreshRequest.current?.abort()
+    const controller = new AbortController()
+    refreshRequest.current = controller
+    return api('/sync', { signal: controller.signal })
+      .then(({ session, availability: schedule, vehicles: fleet, workspace, operations, notifications: notices }) => {
         if (current !== sequence.current) return
         if (session.sessionExpired) { expireSession(); return }
-        let data = null
-        let notices = []
-        if (session.user) {
-          const [workspace, operations, alerts] = await Promise.all([api('/workspace'), session.user.role !== 'client' ? api('/operations') : Promise.resolve(null), api('/notifications')])
-          data = { ...workspace, operations }
-          notices = alerts
-        }
-        if (current !== sequence.current) return
+        const data = workspace ? { ...workspace, operations } : null
         syncVehicles(fleet)
         setNotifications(notices)
         setConfig(session); setWorkspace(data); setAvailability(schedule); setConnectionError('')
       })
-      .catch(error => { if (current === sequence.current) { setConnectionError(error.message); if (error.status === 401) setWorkspace(null) } })
+      .catch(error => { if (!controller.signal.aborted && current === sequence.current) { setConnectionError(error.message); if (error.status === 401) setWorkspace(null) } })
       .finally(() => { if (current === sequence.current) setLoading(false) })
   }, [expireSession])
   useEffect(() => {
     const change = () => {
       const next = routeFromHash()
+      if (next !== 'login') setExpirationNotice('')
       navigationTrail.current = readNavigationTrail(next, window.history.state, navigationTrail.current)
       window.history.replaceState({ ...window.history.state, drivepulseNavigation: navigationTrail.current }, '')
       setPage(next)
@@ -82,14 +82,16 @@ export default function App() {
     }
     window.history.replaceState({ ...window.history.state, drivepulseNavigation: navigationTrail.current }, '')
     const focus = () => refresh()
-    window.addEventListener('hashchange', change); window.addEventListener('focus', focus)
+    const visible = () => { if (document.visibilityState === 'visible') refresh() }
+    window.addEventListener('hashchange', change); window.addEventListener('focus', focus); window.addEventListener('online', focus); window.addEventListener('drivepulse:mutation-succeeded', focus); document.addEventListener('visibilitychange', visible)
+    sessionStorage.removeItem('drivepulse:session-expired')
     refresh()
     const interval = setInterval(refresh, 30000)
-    return () => { sequence.current += 1; clearInterval(interval); window.removeEventListener('hashchange', change); window.removeEventListener('focus', focus) }
+    return () => { sequence.current += 1; refreshRequest.current?.abort(); clearInterval(interval); window.removeEventListener('hashchange', change); window.removeEventListener('focus', focus); window.removeEventListener('online', focus); window.removeEventListener('drivepulse:mutation-succeeded', focus); document.removeEventListener('visibilitychange', visible) }
   }, [refresh])
   const navigate = to => { window.location.assign(`#${to}`); setPage(to) }
   const authenticate = (to = 'overview') => { returnTo.current = to; navigate('login') }
-  async function signedIn(user) { sessionStorage.removeItem('drivepulse:session-expired'); await refresh(); navigate(user.role !== 'client' ? workspaceHome(user.role) : clientPages.includes(page) ? page : returnTo.current) }
+  async function signedIn(user) { setExpirationNotice(''); sessionStorage.removeItem('drivepulse:session-expired'); await refresh(); navigate(user.role !== 'client' ? workspaceHome(user.role) : clientPages.includes(page) ? page : returnTo.current) }
   async function logout() {
     try { await api('/logout', { method: 'POST' }) }
     catch (error) { if (error.code !== 'ACTION_CANCELLED') setConnectionError(error.message); return }
@@ -107,7 +109,7 @@ export default function App() {
   let content
   if (isPublicPage(page)) content = <LandingPage user={user} section={page} />
   else if (authPages.includes(page) || requiresAuth && !user) {
-    content = <AuthPage key={page} mode={authPages.includes(page) ? authMode(page) : 'login'} emailDelivery={config.emailDelivery} onSuccess={signedIn} onNavigate={navigate} />
+    content = <AuthPage key={page} sessionNotice={expirationNotice} onDismissNotice={() => setExpirationNotice('')} mode={authPages.includes(page) ? authMode(page) : 'login'} emailDelivery={config.emailDelivery} onSuccess={signedIn} onNavigate={navigate} />
   }
   else if (user && ['mechanic', 'manager'].includes(user.role) && (page.startsWith(`${user.role}-`) || clientPages.includes(page))) content = <StaffWorkspace page={page.startsWith(`${user.role}-`) ? page : `${user.role}-overview`} user={user} operations={workspace.operations} onRefresh={refresh} onNavigate={navigate} onLogout={logout} />
   else if (user?.role === 'agent' && (page.startsWith('agent-') || clientPages.includes(page))) content = <AgentPortal page={page.startsWith('agent-') ? page : 'agent-overview'} user={user} workspace={workspace} availability={availability} onRefresh={refresh} onNavigate={navigate} onLogout={logout} />

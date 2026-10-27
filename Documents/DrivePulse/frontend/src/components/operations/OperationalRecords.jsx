@@ -7,6 +7,7 @@ export function IssuedLink({ record, children }) {
 export function BookingRecords({ booking: b }) {
   return <div className="record-actions">
     <IssuedLink record={b.confirmation}>Booking confirmation</IssuedLink>
+    <IssuedLink record={b.cancellationStatement}>Cancellation statement</IssuedLink>
     <IssuedLink record={b.agreement}>Rental contract</IssuedLink>
     <IssuedLink record={b.releaseReceipt}>Release receipt</IssuedLink>
     <IssuedLink record={b.returnReceipt}>Return receipt</IssuedLink>

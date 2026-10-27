@@ -13,7 +13,7 @@ export function confirmationFor(path, { method = 'GET', body } = {}) {
   if (/^\/(?:auth\/|session\/activity$|notifications(?:\/|$)|saved(?:\/|$)|documents(?:\/|\?|$)|vehicle-images(?:\/|$))/.test(path)) return null
   if (['/bookings', '/bookings/agreement-preview', '/support'].includes(path) || /^\/support\/[^/]+\/messages$/.test(path)) return null
   if (/archive|deactivate/.test(path)) return { title: 'Archive this record?', message: 'Confirm that this record should be removed from active operations. Its history will remain in the archive.', confirmLabel: 'Confirm archive', destructive: true }
-  if (/cancel/.test(path)) return { title: 'Cancel this reservation?', message: 'Confirm cancellation before updating availability and any related refund obligations.', confirmLabel: 'Cancel reservation', destructive: true }
+  if (/cancel/.test(path)) return { title: 'Cancel this booking?', message: 'Cancellation deducts 20% of the verified rental/downpayment, returns the full verified security deposit, and releases the vehicle. Refunds remain pending until cash release is recorded.', confirmLabel: 'Cancel booking', destructive: true }
   if (/decommission/.test(path)) return { title: 'Decommission this vehicle?', message: 'Confirm removal of this vehicle from the active rental fleet.', confirmLabel: 'Confirm decommission', destructive: true }
   if (/payment|refund|deposit|approval/.test(path)) return { title: 'Confirm financial update', message: 'Confirm this change to the payment, deposit, or approval record before continuing.', confirmLabel: 'Confirm update' }
   const status = typeof body?.status === 'string' ? body.status.slice(0, 80) : ''

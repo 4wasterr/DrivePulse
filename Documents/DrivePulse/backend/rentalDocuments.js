@@ -14,7 +14,9 @@ const DEFAULT_TERMS = `1. AUTHORIZED OPERATION: The vehicle shall be operated so
 
 4. EXTENSIONS & LATE RETURN SURCHARGES: Rental charges are computed per started 24-hour period. Extensions must be confirmed with DrivePulse prior to scheduled return. Unscheduled late returns accrue hourly late fees as specified in the booking summary.
 
-5. ACCIDENTS & ROAD INCIDENTS: In the event of any collision, mechanical malfunction, or traffic incident, the renter must notify DrivePulse within two (2) hours and secure an official police report.`;
+5. ACCIDENTS & ROAD INCIDENTS: In the event of any collision, mechanical malfunction, or traffic incident, the renter must notify DrivePulse within two (2) hours and secure an official police report.
+
+6. PRE-DISPATCH CANCELLATION: Cancelling before vehicle dispatch incurs a fee equal to 20% of the verified rental/downpayment received. The remaining 80% and the full verified security deposit are refundable, subject to recorded approval and cash release. Pending, unverified payments are cancelled. No fee is charged against the security deposit.`;
 
 function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit }) {
   async function issue(b, kind, user, extra = {}) {
@@ -27,7 +29,7 @@ function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit
     const document = { id: `${kind.toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`, kind, bookingId: b.id, transactionReference: b.transactionReference || b.id, createdAt: stamp(), by: user.name, actorId: user.id, sample: !!b.sample,
       renter: structuredClone(b.renter), vehicle: { ...vehicleProfile, fleetCode: state.fleetCode || definition?.fleetCode || `CAR-${String(D.FLEET.findIndex(v => v.id === b.vehicleId) + 1).padStart(5, '0')}` },
       schedule: { start: b.start, startTime: b.startTime, end: b.end, endTime: b.endTime, pickup: b.pickup, dropoff: b.dropoff },
-      billing: { ...D.billing(b), rental: b.rental, deposit: b.deposit, lateFee: b.lateFee || 0, days: b.days, dailyRate: b.dailyRate || b.rental / b.days, total: b.rental + b.deposit + (b.lateFee || 0) }, ...extra };
+      billing: { ...D.billing(b), rental: b.rental, deposit: b.deposit, lateFee: b.lateFee || 0, days: b.days, dailyRate: b.dailyRate || b.rental / b.days, total: b.status === 'Cancelled' ? D.billing(b).fee : b.rental + b.deposit + (b.lateFee || 0) }, ...extra };
     document.digest = createHash('sha256').update(JSON.stringify(document)).digest('hex');
     await db.prepare('INSERT INTO rental_documents(id,booking_id,kind,created_at,payload) VALUES(?,?,?,?,?)').run(document.id, b.id, kind, document.createdAt, JSON.stringify(document));
     return { id: document.id, kind, createdAt: document.createdAt, by: user.name, digest: document.digest };
@@ -77,7 +79,8 @@ function render(d) {
     release: 'Vehicle Release & Handover Receipt',
     return: 'Vehicle Return & Post-Inspection Receipt',
     cash: 'Official Cash Payment Receipt',
-    disbursement: 'Security Deposit Release Receipt'
+    disbursement: 'Security Deposit Release Receipt',
+    cancellation: 'Booking Cancellation & Settlement Statement'
   }[d.kind] || 'DrivePulse Issued Document';
 
   const fields = [
@@ -91,6 +94,7 @@ function render(d) {
   ['Issuing Officer', d.by],
   ['Date & Time Issued', fmt(d.createdAt)]];
   if (d.bookingStatus) fields.push(['Reservation Status', d.bookingStatus]);
+  if (d.cancellation) fields.push(['Cancellation reason', d.cancellation.reason], ['Cancellation fee (20% of verified downpayment)', money(d.cancellation.fee)], ['Rental / downpayment refund', money(d.cancellation.rentalRefund)], ['Security deposit refund', money(d.cancellation.depositRefund)], ['Total refund pending cash release', money(d.cancellation.refundDue)], ['Cancellation fee balance', money(d.cancellation.balanceDue)]);
 
   if (d.eventAt) fields.push(['Actual Event Timestamp', fmt(d.eventAt)]);
   const i = d.inspection;
@@ -98,6 +102,7 @@ function render(d) {
     fields.push(
       ['Mechanic Sign-off', `${i.by} · ${fmt(i.at)} (${i.status})`],
       ['Odometer Reading', `${i.odometer?.toLocaleString() || 'N/A'} km`],
+      ...(i.mileageConsumption != null ? [['Dispatch Odometer', `${i.dispatchOdometer.toLocaleString()} km`], ['Total Mileage Consumption', `${i.mileageConsumption.toLocaleString()} km`]] : []),
       ['Fuel / Battery Charge', `${i.fuelLevel}%`],
       ['Interior Condition', i.cleanliness || 'Clean'],
       ['Exterior Condition', i.scratches || 'No visible damage'],

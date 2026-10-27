@@ -4,6 +4,7 @@ import { dateISO, prettyDate, vehicles, money, tripTime } from '../../data.js'
 import Icon from '../../components/ui/Icon.jsx'
 import Tag from '../../components/workspace/StaffTag.jsx'
 import { clampCalendarStart, bookingDatesForDay } from '../../utils/calendar.js'
+import { overlaps } from '../../../../shared/availability.mjs'
 
 const addDays = (date, amount) => new Date(Date.parse(`${date}T12:00:00Z`) + amount * 86400000).toISOString().slice(0, 10)
 
@@ -19,7 +20,7 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
 
   // Determine current live vehicle status
   const vehicleStatusMap = vehicles.reduce((acc, v) => {
-    const hold = availability.find(item => item.blocked && item.vehicleId === v.id)
+    const hold = availability.find(item => item.blocked && item.vehicleId === v.id && (!item.start || tripTime(item.start, item.startTime) <= now) && (!item.end || tripTime(item.end, item.endTime) > now))
     const active = bookings.find(b => b.vehicleId === v.id && b.status === 'On Rental')
     const isOverdue = active && (tripTime(active.end, active.endTime) < now)
 
@@ -117,7 +118,6 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
 
           {<PaginatedList>{displayedVehicles.map(vehicle => {
             const vInfo = vehicleStatusMap[vehicle.id]
-            const hold = availability.find(item => item.blocked && item.vehicleId === vehicle.id)
 
             return (
               <div className="calendar-vehicle-row" key={vehicle.id}>
@@ -148,7 +148,8 @@ export default function AvailabilityCalendar({ bookings, availability, onOpen, o
                   const isPast = !selectableDates
 
                   // If day is today and vehicle has an active hold
-                  const isDayOnHold = hold && (day === today || (hold.status === 'Maintenance' && day <= addDays(today, 2)))
+                  const hold = availability.find(item => item.blocked && item.vehicleId === vehicle.id && overlaps(item, { start: day, startTime: '00:00', end: addDays(day, 1), endTime: '00:00' }))
+                  const isDayOnHold = Boolean(hold)
 
                   return (
                     <div className={`calendar-cell ${day === today ? 'cell-today' : ''}`} key={day}>

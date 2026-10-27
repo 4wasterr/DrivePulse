@@ -1,4 +1,4 @@
-const profileColumns = ['first_name', 'middle_name', 'last_name', 'phone', 'address_street', 'address_city', 'address_postal'];
+const profileColumns = ['first_name', 'middle_name', 'last_name', 'phone', 'address_street', 'address_city', 'address_postal', 'address_geography'];
 const recoveryTables = `
 CREATE TABLE IF NOT EXISTS recovery_codes (
   challenge_id TEXT PRIMARY KEY, email TEXT NOT NULL,

@@ -7,6 +7,7 @@ import VehicleCard from '../../components/fleet/VehicleCard.jsx'
 import BrandMark from '../../components/ui/BrandMark.jsx'
 import Icon from '../../components/ui/Icon.jsx'
 import NotificationCenter from '../../components/ui/NotificationCenter.jsx'
+import SidebarFooter from '../../components/ui/SidebarFooter.jsx'
 import { vehicleFor } from '../../utils/vehicles.js'
 import ClientOverviewPage from './OverviewPage.jsx'
 import ClientFleetPage from './FleetPage.jsx'
@@ -102,7 +103,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
       <a className="brand" href="#home" onClick={() => navigate('home')} aria-label="DrivePulse home"><span className="brand-mark"><BrandMark /></span><span>drivepulse<span className="brand-period">.</span></span></a>
       <div className="workspace-label">YOUR OPEN ROAD</div>
       <nav className="primary-nav" aria-label="Main navigation">{navigation.map(item => <a key={item.id} href={`#${item.id}`} onClick={() => navigate(item.id)} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined}><Icon name={item.icon} size={19} /><span>{item.label}</span>{item.id === 'bookings' && upcoming.length > 0 && <span className="nav-count">{upcoming.length}</span>}</a>)}</nav>
-      <div className="sidebar-bottom"><button className="sidebar-auth-action" onClick={() => onLogout().catch(error => notify(error.message))}><Icon name="logout" size={18} />Log Out</button><button className="profile-button" onClick={() => setModal({ type: 'profile' })}><span className="avatar">{initials}</span><span><strong>{profile.name}</strong><small>Client account</small></span><Icon name="settings" size={18} /></button></div>
+      <SidebarFooter user={profile} role="Client account" onLogout={() => onLogout().catch(error => notify(error.message))} onProfile={() => setModal({ type: 'profile' })} />
     </aside>
 
     <main className="main-content">

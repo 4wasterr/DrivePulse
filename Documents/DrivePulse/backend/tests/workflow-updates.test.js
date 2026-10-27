@@ -37,7 +37,7 @@ for (const engine of ['sqlite', 'postgres']) test(`${engine}: idle expiry, dynam
   await db.prepare('INSERT INTO fleet_records(kind,id,payload) VALUES(?,?,?)').run('location', 'new-depot', JSON.stringify({ id: 'new-depot', name: 'New operational depot', active: true }));
   assert.ok((await request('/locations')).data.some(location => location.name === 'New operational depot'));
   const date = offset => new Date(Date.now() + offset * D.DAY).toISOString().slice(0, 10);
-  const body = { vehicleId: 'toyota-vios', start: date(2), end: date(5), startTime: '10:00', endTime: '10:00', pickup: 'New operational depot', dropoff: branches[0].name, renter: { name: 'Test renter', phone: '09171234567' }, transactionReference: 'MANUAL-REFERENCE' };
+  const body = { vehicleId: 'toyota-vios', start: date(2), end: date(5), startTime: '10:00', endTime: '10:00', pickup: 'New operational depot', dropoff: branches[0].name, renter: { name: 'Test renter', email: 'renter@example.com', phone: '09171234567' }, transactionReference: 'MANUAL-REFERENCE' };
   assert.equal((await request('/agent/bookings', cookie, body)).status, 400);
   const created = await request('/agent/bookings', cookie, { ...body, customerConfirmed: true });
   assert.equal(created.status, 201, JSON.stringify(created.data));

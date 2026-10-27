@@ -1,5 +1,7 @@
 const DAY = 86400000;
 const { inputError } = require('../shared/validation.mjs');
+const { overlaps } = require('../shared/availability.mjs');
+const { cancellationSettlement } = require('../shared/cancellation.mjs');
 const REQUIRED_DOCUMENTS = ['license', 'government-1', 'government-2'];
 const LOCATIONS = ['Makati City, Metro Manila', 'BGC, Taguig City', 'NAIA Terminal 3, Pasay', 'Quezon City, Metro Manila'];
 const fleetExpansion = require('../shared/fleetExpansion.json');
@@ -41,13 +43,17 @@ function quote(input, allowPast = false, customRate = null, definition = null, l
   return { days, rental: dailyRate * days, deposit: 5000, total: dailyRate * days + 5000 };
 }
 function available(bookings, input, exclude) {
-  return !bookings.some(b => !b.archivedAt && b.id !== exclude && b.vehicleId === input.vehicleId && !['Cancelled', 'Completed'].includes(b.status) && time(input.start, input.startTime) < time(b.end, b.endTime) && time(input.end, input.endTime) > time(b.start, b.startTime));
+  return !bookings.some(b => b.id !== exclude && b.vehicleId === input.vehicleId && overlaps(b, input));
 }
 function billing(booking) {
   const paid = type => (booking.payments || []).filter(p => p.type === type && p.status === 'confirmed').reduce((sum, p) => sum + Math.round(p.amount * 100), 0) / 100;
   const rentalDue = Math.round((booking.rental + (booking.lateFee || 0)) * 100) / 100;
   const depositPaid = paid('deposit');
   const rentalPaid = (booking.payments || []).filter(p => p.type !== 'deposit' && p.status === 'confirmed').reduce((sum, p) => sum + Math.round(p.amount * 100), 0) / 100;
+  if (booking.status === 'Cancelled') {
+    const settlement = cancellationSettlement(booking);
+    return { rentalDue: settlement.fee, rentalPaid, depositPaid, rentalBalance: settlement.balanceDue, depositBalance: 0, totalPaid: Math.round((rentalPaid + depositPaid) * 100) / 100, balance: settlement.balanceDue, ...settlement, invoiceStatus: 'Cancelled' };
+  }
   const rentalBalance = Math.max(0, Math.round((rentalDue - rentalPaid) * 100)) / 100, depositBalance = Math.max(0, Math.round((booking.deposit - depositPaid) * 100)) / 100;
   return { rentalDue, rentalPaid, depositPaid, rentalBalance, depositBalance, totalPaid: Math.round((rentalPaid + depositPaid) * 100) / 100, balance: Math.round((rentalBalance + depositBalance) * 100) / 100 };
 }
@@ -67,7 +73,7 @@ function dispatchBlocks(booking) {
 }
 function present(booking) {
   const bill = billing(booking);
-  return { ...booking, billing: bill, verificationStatus: verification(booking), dispatchBlocks: dispatchBlocks(booking), total: booking.rental + booking.deposit + (booking.lateFee || 0), paymentStatus: bill.balance === 0 ? 'Verified · paid' : (booking.payments || []).some(p => p.status === 'pending') ? 'Awaiting verification' : bill.totalPaid > 0 ? 'Partially paid' : 'Unpaid' };
+  return { ...booking, billing: bill, verificationStatus: verification(booking), dispatchBlocks: dispatchBlocks(booking), total: booking.status === 'Cancelled' ? bill.fee : booking.rental + booking.deposit + (booking.lateFee || 0), paymentStatus: booking.status === 'Cancelled' ? bill.balance > 0 ? 'Cancelled · fee due' : 'Cancelled' : bill.balance === 0 ? 'Verified · paid' : (booking.payments || []).some(p => p.status === 'pending') ? 'Awaiting verification' : bill.totalPaid > 0 ? 'Partially paid' : 'Unpaid' };
 }
 function invalidatePass(booking) {
   if (booking.dispatchPass) booking.dispatchPass = { ...booking.dispatchPass, revokedAt: new Date().toISOString() };

@@ -1,0 +1,28 @@
+/* All roles share an identical bottom account and logout area. Only the
+   navigation scrolls; the logout action stays in view on short screens. */
+.sidebar,.agent-sidebar { display:flex; flex-direction:column; height:100dvh; overflow:hidden; padding:30px 20px 20px; }
+.sidebar > :not(nav),.agent-sidebar > :not(nav) { flex-shrink:0; }
+.sidebar > nav,.agent-sidebar > nav { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding-bottom:16px; }
+.sidebar-account-footer { margin-top:auto; flex-shrink:0; border-top:1px solid #e1e5dc; padding-top:12px; background:inherit; }
+.sidebar-account { display:flex; align-items:center; gap:10px; width:100%; min-height:58px; padding:6px 0 12px; background:none; text-align:left; color:inherit; }
+.sidebar-account > span:nth-child(2) { min-width:0; flex:1; }
+.sidebar-account strong,.sidebar-account small { display:block; overflow-wrap:anywhere; }
+.sidebar-account strong { font-size:13px; }
+.sidebar-account small { margin-top:3px; font-size:11px; color:#73796c; }
+.sidebar-account .avatar { flex-shrink:0; }
+.sidebar-logout { display:flex; align-items:center; gap:11px; width:100%; height:44px; padding:10px 12px; border:1px solid #e1e5dc; border-radius:8px; background:#fff; color:#46513a; text-align:left; font-size:13px; }
+.sidebar-logout:hover { background:#f0f3e9; }
+.sidebar-logout:focus-visible { outline:2px solid #63764a; outline-offset:2px; }
+.address-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.address-fields .form-field { min-width:0; }
+.address-fields select { width:100%; min-width:0; text-overflow:ellipsis; }
+.cancellation-breakdown { margin:18px 0; }
+.cancellation-breakdown > div { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid #e1e5dc; }
+.cancellation-breakdown dd { margin:0; font-weight:600; }
+.document-sample img { display:block; max-width:100%; height:auto; margin-top:16px; }
+.mileage-summary { margin:16px 0; padding:18px; border:1px solid #cdd7c3; border-radius:8px; background:#f3f6ef; }
+.mileage-summary strong { display:block; font-size:19px; color:#34452f; }
+.id-popup-iframe { width:100%; min-height:420px; border:0; }
+.id-popup-image { display:block; max-width:100%; max-height:65dvh; object-fit:contain; margin:auto; }
+@media(max-width:600px) { .address-fields { grid-template-columns:1fr; } .id-popup-iframe { min-height:300px; } }
+@media(max-height:500px) { .sidebar,.agent-sidebar { padding-top:12px; } .sidebar .workspace-label,.agent-sidebar .agent-workspace-label { margin-block:8px; } }

@@ -28,7 +28,7 @@ export default function SearchBar({ dates, onChange, onSearch }) {
       }}
     >
       <label className="search-field location-field">
-        <span className="search-label"><Icon name="pin" size={17} />Pick-up location</span>
+        <span className="search-label"><Icon name="pin" size={17} />Pick-up branch</span>
         <LocationField
           name="pickup"
           required

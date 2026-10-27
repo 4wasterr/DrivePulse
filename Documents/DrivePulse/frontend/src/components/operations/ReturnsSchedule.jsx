@@ -26,7 +26,7 @@ export default function ReturnsSchedule({ bookings, onRecordReturn }) {
         <div><dt>Scheduled return time</dt><dd>{prettyDate(selected.end, { year: 'numeric' })} · {selected.endTime} PHT</dd></div>
         <div><dt>Vehicle ID / Model</dt><dd>{vehicleFor(selected).fleetCode || selected.vehicleId}<small>{vehicleFor(selected).name} · {vehicleFor(selected).plate}</small></dd></div>
         <div><dt>Client name</dt><dd>{selected.renter.name}</dd></div>
-        <div><dt>Drop-off location</dt><dd>{selected.dropoff}</dd></div>
+        <div><dt>Return branch</dt><dd>{selected.dropoff}</dd></div>
         <div><dt>Drop-off status</dt><dd>{dropoffStatus(selected)}{selected.returnedAt && <small>{stamp(selected.returnedAt)}</small>}</dd></div>
         <div><dt>Condition sign-off</dt><dd>{conditionSignoff(selected)}{selected.returnInspection && <small>{selected.returnInspection.by} · {stamp(selected.returnInspection.at)}</small>}</dd></div>
       </dl>

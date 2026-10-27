@@ -29,7 +29,7 @@ export default function ValidatedField({ as: Control = 'input', feedback = true,
   const password = props.type === 'password' || props['data-sensitive'] === 'password'
   const protectClipboard = event => event.preventDefault()
   return <>
-    <Control {...props} {...defaults} onChange={persist} placeholder={props.placeholder || (password ? 'Enter your password' : undefined)} onCopy={password ? protectClipboard : props.onCopy} onCut={password ? protectClipboard : props.onCut} onPaste={password ? protectClipboard : props.onPaste} id={id} aria-label={props['aria-label'] || error?.label} aria-invalid={error ? true : props['aria-invalid']} aria-describedby={describedBy || undefined} data-validation-error={error ? 'true' : undefined}>{children}</Control>
+    <Control {...props} {...defaults} onChange={persist} placeholder={props.type === 'tel' ? '+63 9XX XXX XXXX' : props.placeholder || (password ? 'Enter your password' : undefined)} onCopy={password ? protectClipboard : props.onCopy} onCut={password ? protectClipboard : props.onCut} onPaste={password ? protectClipboard : props.onPaste} id={id} aria-label={props['aria-label'] || error?.label} aria-invalid={error ? true : props['aria-invalid']} aria-describedby={describedBy || undefined} data-validation-error={error ? 'true' : undefined}>{children}</Control>
     {feedback && <FieldError fieldId={id} compact={compact} />}
   </>
 }

@@ -25,7 +25,7 @@ export default function WalkInReservation({ values = {}, availability, onClose, 
   const conflict = vehicle ? getAvailabilityReason(vehicle.id, dates, availability) : 'No active vehicle selected.'
   const incompleteOrInvalid = Boolean(
     inputError(customer.name, { kind: 'name', required: true, maxLength: 70 }) ||
-    inputError(customer.email, { kind: 'email', required: false, maxLength: 160 }) ||
+    inputError(customer.email, { kind: 'email', required: true, maxLength: 160 }) ||
     inputError(customer.phone, { kind: 'phone', required: true, maxLength: 40 }) ||
     !dates.vehicleId || !locations.includes(dates.pickup) || !locations.includes(dates.dropoff) || locationsLoading || locationsError || !customerConfirmed ||
     periodProblem || conflict
@@ -46,10 +46,9 @@ export default function WalkInReservation({ values = {}, availability, onClose, 
         <h3>Customer details</h3><label className="form-field">Transaction reference<ValidatedField readOnly value="Generated automatically on creation" /></label>
         <div className="form-grid customer-details-grid">
           <label className="form-field span-2"><span className="field-label">Full name</span><ValidatedField name="name" required maxLength={70} autoComplete="name" value={customer.name} onChange={e => updateCustomer('name', e.target.value)} /></label>
-          <label className="form-field"><span className="field-label">Email address <span className="field-optional">Optional</span></span><ValidatedField name="email" type="email" maxLength={160} autoComplete="email" value={customer.email} onChange={e => updateCustomer('email', e.target.value)} /></label>
-          <label className="form-field"><span className="field-label">Contact number</span><ValidatedField name="phone" required maxLength={40} type="tel" inputMode="tel" autoComplete="tel" placeholder="09XX XXX XXXX or +63…" value={customer.phone} onChange={e => updateCustomer('phone', e.target.value)} /></label>
+          <label className="form-field"><span className="field-label">Email address</span><ValidatedField name="email" type="email" required maxLength={160} autoComplete="email" value={customer.email} onChange={e => updateCustomer('email', e.target.value)} /></label>
+          <label className="form-field"><span className="field-label">Contact number</span><ValidatedField name="phone" required maxLength={40} type="tel" inputMode="tel" autoComplete="tel" placeholder="+63 9XX XXX XXXX" value={customer.phone} onChange={e => updateCustomer('phone', e.target.value)} /></label>
         </div>
-        <p className="small muted">An email matching an existing client account links this reservation to their portal.</p>
         <h3 className="walkin-trip-heading">Trip details</h3>
         <div className="form-grid customer-details-grid">
           <label className="form-field span-2"><span className="field-label">Vehicle</span><ValidatedField as="select" name="vehicleId" required value={dates.vehicleId} onChange={e => update('vehicleId', e.target.value)}>{fleet.map(v => <option key={v.id} value={v.id}>{v.name} · {v.fleetCode || v.id} · {v.plate} · {money(v.rate)} / day</option>)}</ValidatedField></label>
@@ -57,8 +56,8 @@ export default function WalkInReservation({ values = {}, availability, onClose, 
           <label className="form-field"><span className="field-label">Pick-up time</span><ValidatedField name="startTime" type="time" required value={dates.startTime} onChange={e => update('startTime', e.target.value)} /></label>
           <label className="form-field"><span className="field-label">Return date</span><ValidatedField name="end" type="date" required min={dates.start > dateISO() ? dates.start : dateISO()} value={dates.end} onChange={e => update('end', e.target.value)} /></label>
           <label className="form-field"><span className="field-label">Return time</span><ValidatedField name="endTime" type="time" required value={dates.endTime} onChange={e => update('endTime', e.target.value)} /></label>
-          <label className="form-field span-2"><span className="field-label">Pick-up location</span><LocationField name="pickup" required value={dates.pickup} onChange={e => update('pickup', e.target.value)} /></label>
-          <label className="form-field span-2"><span className="field-label">Return location</span><LocationField name="dropoff" required value={dates.dropoff} onChange={e => update('dropoff', e.target.value)} /></label>
+          <label className="form-field span-2"><span className="field-label">Pick-up branch</span><LocationField name="pickup" required value={dates.pickup} onChange={e => update('pickup', e.target.value)} /></label>
+          <label className="form-field span-2"><span className="field-label">Return branch</span><LocationField name="dropoff" required value={dates.dropoff} onChange={e => update('dropoff', e.target.value)} /></label>
           <label className="form-field span-2"><span className="field-label">Reservation note</span><ValidatedField as="textarea" name="note" maxLength={1000} rows={3} /></label>
         </div>
       </div><aside className="walkin-quote"><img src={vehicle.image} alt={vehicle.name} /><div><p className="workspace-kicker">RESERVATION SUMMARY</p><h3>{vehicle.name}</h3><p>{vehicle.fleetCode || vehicle.id} · {vehicle.plate || 'Plate not recorded'}</p><dl><div><dt>Daily rate</dt><dd>{money(vehicle.rate)}</dd></div><div><dt>Rental days</dt><dd>{Number.isFinite(days) ? days : 0}</dd></div><div><dt>Rental</dt><dd>{money(Number.isFinite(days) ? days * vehicle.rate : 0)}</dd></div><div><dt>Security Deposit</dt><dd>{money(5000)}</dd></div><div className="quote-total"><dt>Total quotation</dt><dd>{money((Number.isFinite(days) ? days * vehicle.rate : 0) + 5000)}</dd></div></dl><p className="small muted">The confirmation and complete rental terms open after scheduling. Documents, cash payment and a mechanic inspection must be verified before release.</p>{conflict && <p className="error-banner">{conflict}</p>}</div></aside></div>

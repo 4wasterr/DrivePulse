@@ -1,3 +1,4 @@
+import SidebarFooter from '../../components/ui/SidebarFooter.jsx'
 import SecurityDepositDialog from '../../components/operations/SecurityDepositDialog.jsx'
 import ReturnsSchedule from '../../components/operations/ReturnsSchedule.jsx'
 import { useState } from 'react'
@@ -84,11 +85,7 @@ export default function AgentPortal({ page, user, workspace, availability, onRef
           {id === 'agent-reservations' && pending.length > 0 && <small>{pending.length}</small>}
         </a>)}
       </nav>
-      <div className="agent-sidebar-bottom">
-        <div className="agent-sidebar-note"><Icon name="road" size={28} /><strong>A great journey starts<br />with the details.</strong><span>One desk. Every step.</span></div>
-        <button className="agent-signout" onClick={signout}><Icon name="logout" size={18} />Log Out</button>
-        <div className="agent-user"><span className="avatar">{user.name.split(' ').map(n => n[0]).slice(0, 2).join('')}</span><div><strong>{user.name}</strong><span>Booking agent</span></div></div>
-      </div>
+      <SidebarFooter user={user} role="Booking Agent" onLogout={signout} />
     </aside>
     <main className="agent-main">
       <header className="agent-topbar">

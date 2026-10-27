@@ -81,8 +81,8 @@ class PostgresDatabase {
     // Additive, idempotent upgrade for email verification and password recovery.
     const ready = await this.query("SELECT (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users' AND column_name='email_verified_at') AS columns, (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name='auth_tokens') AS tables");
     if (!Number(ready.rows[0].columns) || !Number(ready.rows[0].tables)) await this.transaction(() => this.query(emailUpgrade));
-    const profile = await this.query("SELECT (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users' AND column_name IN ('first_name','middle_name','last_name','phone','address_street','address_city','address_postal')) AS columns, (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('recovery_codes','login_locks')) AS tables");
-    if (Number(profile.rows[0].columns) !== 7 || Number(profile.rows[0].tables) !== 2) await this.transaction(() => this.query(profileUpgrade));
+    const profile = await this.query(`SELECT (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='users' AND column_name IN (${profileColumns.map(column => `'${column}'`).join(',')})) AS columns, (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('recovery_codes','login_locks')) AS tables`);
+    if (Number(profile.rows[0].columns) !== profileColumns.length || Number(profile.rows[0].tables) !== 2) await this.transaction(() => this.query(profileUpgrade));
   }
   exec(sql) { return this.query(sql); }
   prepare(sql) {
