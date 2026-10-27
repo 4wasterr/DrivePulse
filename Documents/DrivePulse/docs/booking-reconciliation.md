@@ -12,6 +12,8 @@ An immutable cancellation statement records the reason and settlement. The origi
 
 Dispatch captures the mechanic's pre-dispatch odometer. The post-return form shows the starting reading, entered return reading, and total distance used. A dispatch reading of 1,500 km and return reading of 2,500 km records **1,000 km**. Missing baselines and decreasing readings are rejected; safety clearance cannot bypass a pending post-return inspection. The calculation persists with the booking, mechanic inspection, audit record and return receipt.
 
+Mechanic inspections follow four required stages: **Vehicle details → Vehicle condition → Damage status → Dispatch decision**. Vehicle details include driver verification and measured readings. The mechanic individually assigns each checkpoint a rating: **1 – Good, 2 – Fair, 3 – Damaged, 4 – Needs Repair**. Damage status and fresh photos follow the ratings. The last stage reviews the complete inspection and requires an explicit readiness / dispatch decision; it has no default approval. Ratings 3–4 prevent dispatch approval until repaired. The server records the signed-in mechanic's identity and numeric ratings in the report and audit; issued release/return receipts include the ratings. Earlier text/checkbox inspection records remain readable. Mechanic approval does not dispatch a booking; Booking Agent release checks remain mandatory.
+
 ## Availability and branches
 
 Reservations use half-open intervals in Philippine time: an exact timed handover is allowed. New reservations, date pickers and the fleet calendar check the same overlap function. Maintenance requests can carry a complete start/end window; bookings and extensions cannot overlap that window. Completed/archived maintenance and cancelled/completed bookings release their intervals.
@@ -36,7 +38,9 @@ When a download is unavailable, the viewer shows a clearly marked local sample I
 
 `/api/sync` supplies session, workspace, fleet, availability, operations and notifications in one transaction. All viewport sizes consume that response, and API reads bypass browser caches. Successful mutations, reconnects, window focus and visibility restoration refresh data; background polling remains at 30 seconds and does not renew inactivity.
 
-The login expiration notice lives in memory and clears on form interaction or successful sign-in; legacy session-storage notices are removed. All phone fields use `+63 9XX XXX XXXX`. Every role uses the same sidebar account/footer component, with only navigation scrolling and Log Out fixed at the bottom.
+The login expiration notice clears on route/form mount, keyboard, touch, input, submit and successful sign-in; it is never restored from storage and has an eight-second maximum lifetime. Session revisions prevent old API/document responses and idle callbacks from expiring a new login. Anonymous login refreshes cannot trigger expiry, and a new sign-in waits for an outstanding timeout logout response before creating its cookie. The expired-cookie `/api/sync` response is an anonymous snapshot, while protected API actions still reject expired sessions.
+
+All phone fields use `+63 9XX XXX XXXX`. Every role uses `WorkspaceSidebar` and the same account/footer component. Desktop widths, the 1,000px mobile breakpoint and mobile drawer widths are identical. The logout button is 44px high, inset 20px horizontally and 20px above the viewport bottom plus mobile safe-area spacing. The footer is anchored outside the scrolling navigation; different module lengths and long account names cannot move it. React DOM regression checks mount client, agent, mechanic and manager/admin modules and compare the shared positioning styles.
 
 ## Verification
 

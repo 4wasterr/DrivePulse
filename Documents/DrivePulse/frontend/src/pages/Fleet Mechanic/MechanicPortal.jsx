@@ -34,7 +34,7 @@ export default function MechanicPortal({ page, user, operations, onRefresh, onLo
   async function done(message) { await onRefresh(); setDialog(null); setNotice(message); setError('') }
   const dialogs = <>
     <StaffDialogs dialog={dialog} setDialog={setDialog} inspections={inspections} maintenance={maintenance} mechanic={true} done={done} />
-    {dialog?.kind === 'inspection' && <InspectionForm operations={operations} initial={dialog} onClose={() => setDialog(null)} onDone={done} />}
+    {dialog?.kind === 'inspection' && <InspectionForm operations={operations} initial={dialog} mechanic={user} onClose={() => setDialog(null)} onDone={done} />}
     {dialog?.kind === 'maintenance' && <MaintenanceForm fleet={fleet} onClose={() => setDialog(null)} onDone={done} />}
     {dialog?.kind === 'service-update' && <ServiceUpdate record={dialog.record} onClose={() => setDialog(null)} onDone={done} />}
     {dialog?.kind === 'status' && <StatusForm vehicle={dialog.vehicle} onClose={() => setDialog(null)} onDone={done} />}

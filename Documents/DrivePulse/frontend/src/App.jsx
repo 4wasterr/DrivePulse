@@ -12,6 +12,7 @@ import { NotificationContext } from './components/ui/notificationContext.js'
 import { readNavigationTrail, routeFromHash } from './utils/navigation.js'
 import { DraftOwnerContext, clearDrafts } from './utils/drafts.js'
 import { watchInactivity, EXPIRATION_MESSAGE } from './utils/inactivity.js'
+import { sessionState } from './utils/session.js'
 
 const clientPages = ['overview', 'fleet', 'bookings', 'documents', 'payments']
 
@@ -32,49 +33,66 @@ export default function App() {
   const [connectionError, setConnectionError] = useState('')
   const [expirationNotice, setExpirationNotice] = useState('')
   const refreshRequest = useRef(null)
+  const expirationLogout = useRef(Promise.resolve())
   const sequence = useRef(0)
   const returnTo = useRef('overview')
-  const expireSession = useCallback(() => {
+  const dismissExpiration = useCallback(() => {
+    setExpirationNotice('')
+    try { sessionStorage.removeItem('drivepulse:session-expired') } catch { /* The notice is never persisted. */ }
+  }, [])
+  const expireSession = useCallback(expected => {
+    const revision = typeof expected === 'number' ? expected : expected?.detail?.revision ?? sessionState.revision
+    if (!sessionState.expire(revision)) return
     sequence.current += 1
     refreshRequest.current?.abort()
     returnTo.current = 'overview'
     navigationTrail.current = []
     clearDrafts()
     setWorkspace(null); setNotifications([]); setConnectionError(''); setLoading(false)
-    setExpirationNotice(EXPIRATION_MESSAGE)
-    window.location.replace('#login'); setPage('login')
-    api('/logout', { method: 'POST', automatic: true }).catch(() => {})
+    const alreadyAuthenticating = authPages.includes(routeFromHash())
+    setExpirationNotice(alreadyAuthenticating ? '' : EXPIRATION_MESSAGE)
+    if (!alreadyAuthenticating) { window.location.replace('#login'); setPage('login') }
+    expirationLogout.current = api('/logout', { method: 'POST', automatic: true }).catch(() => {})
   }, [])
+  useEffect(() => {
+    if (!expirationNotice) return
+    const timer = setTimeout(dismissExpiration, 8000)
+    return () => clearTimeout(timer)
+  }, [expirationNotice, dismissExpiration])
   useEffect(() => {
     window.addEventListener('drivepulse:session-expired', expireSession)
     return () => window.removeEventListener('drivepulse:session-expired', expireSession)
   }, [expireSession])
   const userId = workspace?.user?.id
   useEffect(() => {
-    if (!userId) return
-    return watchInactivity({ userId, lastActivity: config.lastActivity, onExpire: expireSession, onActivity: () => api('/session/activity', { method: 'POST' }).catch(() => {}) })
-  }, [userId, config.lastActivity, expireSession])
+    if (!userId || authPages.includes(page)) return
+    const revision = sessionState.revision
+    return watchInactivity({ userId, lastActivity: config.lastActivity, onExpire: () => expireSession(revision), onActivity: () => api('/session/activity', { method: 'POST' }).catch(() => {}) })
+  }, [userId, page, config.lastActivity, expireSession])
   const refresh = useCallback(() => {
+    if (sessionState.authenticating) return Promise.resolve()
     const current = ++sequence.current
+    const revision = sessionState.revision
     refreshRequest.current?.abort()
     const controller = new AbortController()
     refreshRequest.current = controller
     return api('/sync', { signal: controller.signal })
       .then(({ session, availability: schedule, vehicles: fleet, workspace, operations, notifications: notices }) => {
-        if (current !== sequence.current) return
-        if (session.sessionExpired) { expireSession(); return }
+        if (current !== sequence.current || !sessionState.isCurrent(revision)) return
+        if (!session.user && sessionState.userId) { expireSession(revision); return }
+        sessionState.restore(session.user?.id || null)
         const data = workspace ? { ...workspace, operations } : null
         syncVehicles(fleet)
         setNotifications(notices)
         setConfig(session); setWorkspace(data); setAvailability(schedule); setConnectionError('')
       })
-      .catch(error => { if (!controller.signal.aborted && current === sequence.current) { setConnectionError(error.message); if (error.status === 401) setWorkspace(null) } })
+      .catch(error => { if (!controller.signal.aborted && current === sequence.current && sessionState.isCurrent(revision)) { if (error.code === 'SESSION_EXPIRED' && !sessionState.userId) { setWorkspace(null); setConnectionError('') } else { setConnectionError(error.message); if (error.status === 401) setWorkspace(null) } } })
       .finally(() => { if (current === sequence.current) setLoading(false) })
   }, [expireSession])
   useEffect(() => {
     const change = () => {
       const next = routeFromHash()
-      if (next !== 'login') setExpirationNotice('')
+      dismissExpiration()
       navigationTrail.current = readNavigationTrail(next, window.history.state, navigationTrail.current)
       window.history.replaceState({ ...window.history.state, drivepulseNavigation: navigationTrail.current }, '')
       setPage(next)
@@ -84,18 +102,27 @@ export default function App() {
     const focus = () => refresh()
     const visible = () => { if (document.visibilityState === 'visible') refresh() }
     window.addEventListener('hashchange', change); window.addEventListener('focus', focus); window.addEventListener('online', focus); window.addEventListener('drivepulse:mutation-succeeded', focus); document.addEventListener('visibilitychange', visible)
-    sessionStorage.removeItem('drivepulse:session-expired')
+    try { sessionStorage.removeItem('drivepulse:session-expired') } catch { /* The notice is never persisted. */ }
     refresh()
     const interval = setInterval(refresh, 30000)
     return () => { sequence.current += 1; refreshRequest.current?.abort(); clearInterval(interval); window.removeEventListener('hashchange', change); window.removeEventListener('focus', focus); window.removeEventListener('online', focus); window.removeEventListener('drivepulse:mutation-succeeded', focus); document.removeEventListener('visibilitychange', visible) }
-  }, [refresh])
+  }, [refresh, dismissExpiration])
   const navigate = to => { window.location.assign(`#${to}`); setPage(to) }
   const authenticate = (to = 'overview') => { returnTo.current = to; navigate('login') }
-  async function signedIn(user) { setExpirationNotice(''); sessionStorage.removeItem('drivepulse:session-expired'); await refresh(); navigate(user.role !== 'client' ? workspaceHome(user.role) : clientPages.includes(page) ? page : returnTo.current) }
+  async function beforeAuthenticate() {
+    dismissExpiration()
+    sequence.current += 1; refreshRequest.current?.abort()
+    sessionState.beginAuthentication()
+    setWorkspace(null); setNotifications([]); setConnectionError('')
+    // Wait for the old session's cookie-clear response before creating a new
+    // cookie, otherwise that delayed logout can erase a successful sign-in.
+    await expirationLogout.current
+  }
+  async function signedIn(user) { dismissExpiration(); await refresh(); navigate(user.role !== 'client' ? workspaceHome(user.role) : clientPages.includes(page) ? page : returnTo.current) }
   async function logout() {
     try { await api('/logout', { method: 'POST' }) }
     catch (error) { if (error.code !== 'ACTION_CANCELLED') setConnectionError(error.message); return }
-    clearDrafts(); localStorage.setItem(`drivepulse:logout:${workspace?.user?.id}`, String(Date.now())); sequence.current += 1; returnTo.current = 'overview'; navigationTrail.current = []; setWorkspace(null); navigate('home')
+    sessionState.clear(); dismissExpiration(); clearDrafts(); localStorage.setItem(`drivepulse:logout:${workspace?.user?.id}`, String(Date.now())); sequence.current += 1; returnTo.current = 'overview'; navigationTrail.current = []; setWorkspace(null); navigate('home')
   }
   useEffect(() => {
     if (!authPages.includes(page) && clientPages.includes(page)) {
@@ -109,7 +136,7 @@ export default function App() {
   let content
   if (isPublicPage(page)) content = <LandingPage user={user} section={page} />
   else if (authPages.includes(page) || requiresAuth && !user) {
-    content = <AuthPage key={page} sessionNotice={expirationNotice} onDismissNotice={() => setExpirationNotice('')} mode={authPages.includes(page) ? authMode(page) : 'login'} emailDelivery={config.emailDelivery} onSuccess={signedIn} onNavigate={navigate} />
+    content = <AuthPage key={page} sessionNotice={expirationNotice} onDismissNotice={dismissExpiration} onBeforeAuthenticate={beforeAuthenticate} onAuthenticationFinished={() => sessionState.finishAuthentication()} mode={authPages.includes(page) ? authMode(page) : 'login'} emailDelivery={config.emailDelivery} onSuccess={signedIn} onNavigate={navigate} />
   }
   else if (user && ['mechanic', 'manager'].includes(user.role) && (page.startsWith(`${user.role}-`) || clientPages.includes(page))) content = <StaffWorkspace page={page.startsWith(`${user.role}-`) ? page : `${user.role}-overview`} user={user} operations={workspace.operations} onRefresh={refresh} onNavigate={navigate} onLogout={logout} />
   else if (user?.role === 'agent' && (page.startsWith('agent-') || clientPages.includes(page))) content = <AgentPortal page={page.startsWith('agent-') ? page : 'agent-overview'} user={user} workspace={workspace} availability={availability} onRefresh={refresh} onNavigate={navigate} onLogout={logout} />

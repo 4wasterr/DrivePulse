@@ -367,6 +367,9 @@ test('post-return inspection calculates mileage before re-acceptance and retains
   const report = (await f.operations(f.agent.cookie)).bookings.find(booking => booking.id === b.id);
   const receipt = await f.request('/rental-documents/' + report.returnReceipt.id, { cookie: f.agent.cookie });
   assert.match(receipt.data.toString(), /Total Mileage Consumption/);
+  assert.match(receipt.data.toString(), /Condition rating:/);
+  assert.match(receipt.data.toString(), /1 – Good/);
+  assert.match(receipt.data.toString(), /Mechanic dispatch decision/);
 });
 
 test('disputed/withheld deposits and cancelled booking refunds require manager exception approval', async t => {
@@ -742,6 +745,38 @@ test('dropdown inspection statuses persist in vehicle history and unsafe checkpo
   const unsafe = await f.inspect(current, 'pre-dispatch', { checks: { ...checks, controls: 'Needs Repair' }, driverVerification: 'matched', outcome: 'unsafe', note: 'Brake service required' });
   assert.equal(unsafe.status, 201, JSON.stringify(unsafe.data)); assert.equal(unsafe.data.damageFlag, true);
   assert.equal((await f.operations()).fleet.find(v => v.id === b.vehicleId).status, 'Out of Service');
+});
+
+test('mechanics assign 1–4 ratings and an explicit dispatch decision without losing attribution or return mileage', async t => {
+  const f = await fixture(t), b = await f.book();
+  const ratings = { tyres: 1, controls: 2, exterior: 1, interior: 2, fuel: 1 };
+  for (const invalid of [0, 5, 1.5, null, '1']) {
+    const response = await f.inspect(b, 'pre-dispatch', { conditionRatings: { ...ratings, tyres: invalid } });
+    assert.equal(response.status, 400, JSON.stringify(response.data));
+  }
+  assert.equal((await f.inspect(b, 'pre-dispatch', { conditionRatings: { tyres: 1 } })).status, 400);
+  assert.equal((await f.inspect(b, 'pre-dispatch', { conditionRatings: ratings, checks: undefined, outcome: '' })).status, 400, 'dispatch decision must be explicit');
+  const damaged = { ...ratings, exterior: 3, interior: 4 };
+  assert.equal((await f.inspect(b, 'pre-dispatch', { conditionRatings: damaged, checks: undefined, outcome: 'approved' })).status, 400, 'unsafe ratings cannot approve dispatch');
+  const saved = await f.inspect(b, 'pre-dispatch', { conditionRatings: ratings, checks: undefined, mechanicId: f.agent.data.user.id, by: 'Forged mechanic' });
+  assert.equal(saved.status, 201, JSON.stringify(saved.data));
+  assert.deepEqual(saved.data.conditionRatings, ratings);
+  assert.equal(saved.data.mechanicId, f.mechanic.data.user.id);
+  assert.equal(saved.data.by, f.mechanic.data.user.name);
+  assert.equal(saved.data.dispatchDecision, 'Approved by mechanic');
+  assert.equal(saved.data.checks.controls, 'Fair');
+  let operations = await f.operations(f.agent.cookie);
+  const current = operations.bookings.find(booking => booking.id === b.id);
+  assert.equal(current.status, 'Pending Approval', 'mechanic approval must not automatically dispatch');
+  assert.deepEqual(current.inspection.conditionRatings, ratings);
+  const unsafe = await f.inspect(current, 'pre-dispatch', { conditionRatings: damaged, checks: undefined, damageFlag: true, outcome: 'unsafe', note: 'Body damage and cabin repair required.' });
+  assert.equal(unsafe.status, 201, JSON.stringify(unsafe.data));
+  assert.equal(unsafe.data.dispatchDecision, 'Do not dispatch');
+  operations = await f.operations();
+  assert.equal(operations.fleet.find(vehicle => vehicle.id === b.vehicleId).status, 'Out of Service');
+  assert.deepEqual(operations.inspections.find(report => report.id === unsafe.data.id).conditionRatings, damaged);
+  const denied = await f.request('/mechanic/inspections', { method: 'POST', cookie: f.agent.cookie, body: { vehicleId: b.vehicleId, conditionRatings: ratings } });
+  assert.equal(denied.status, 403, 'only a Fleet Mechanic can assign inspection ratings');
 });
 
 test('manager can edit complete vehicle specifications and apply holds without bypassing mechanic clearance', async t => {

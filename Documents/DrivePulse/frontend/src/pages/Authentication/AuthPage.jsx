@@ -29,7 +29,7 @@ function StatusPanel({ icon, title, children }) {
 function ResendButton({ email, busy, seconds, onResend }) {
   return <button type="button" className="button button-outline" disabled={busy || seconds > 0} onClick={() => onResend(email)}>{seconds ? `Resend available in ${seconds}s` : 'Resend Verification Email'}<Icon name="mail" /></button>
 }
-export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavigate, sessionNotice = '', onDismissNotice }) {
+export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavigate, sessionNotice = '', onDismissNotice, onBeforeAuthenticate, onAuthenticationFinished }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -47,6 +47,7 @@ export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavi
   const resendSeconds = Math.max(0, Math.ceil((resendUntil - clock) / 1000))
   const lockSeconds = Math.max(0, Math.ceil((lockedUntil - clock) / 1000))
   const go = to => onNavigate ? onNavigate(to) : window.location.assign(`#${to}`)
+  useEffect(() => { onDismissNotice?.() }, [mode, onDismissNotice])
   function cooldown(seconds = 60) {
     const until = Date.now() + seconds * 1000
     setResendUntil(until); setClock(Date.now()); sessionStorage.setItem('drivepulse-resend-until', String(until))
@@ -84,6 +85,7 @@ export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavi
   }
   function submit(event) {
     event.preventDefault()
+    onDismissNotice?.()
     const data = new FormData(event.currentTarget)
     setPendingEmail('')
     return run(async () => {
@@ -96,7 +98,11 @@ export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavi
       if (mode === 'forgot-password') { await requestRecovery(data.get('email')); return }
       const body = { [signup ? 'email' : 'username']: data.get(signup ? 'email' : 'username'), password: data.get('password') }
       if (signup) Object.assign(body, Object.fromEntries(['firstName', 'middleName', 'lastName', 'phone', 'street', 'city', 'postalCode', 'regionCode', 'cityCode', 'barangayCode'].map(key => [key, data.get(key)])), { role: 'client' })
-      const result = await api(`/auth/${mode}`, { method: 'POST', body })
+      let result
+      try {
+        await onBeforeAuthenticate?.()
+        result = await api(`/auth/${mode}`, { method: 'POST', body })
+      } finally { onAuthenticationFinished?.() }
       if (result.verificationRequired) { setSentTo(result.email); cooldown(result.retryAfterSeconds); return }
       sessionStorage.removeItem('drivepulse-login-until'); await onSuccess(result.user)
     })
@@ -130,5 +136,5 @@ export default function AuthPage({ mode, emailDelivery = null, onSuccess, onNavi
     </>
   }
   const text = codeStage ? copy['reset-password'] : copy[mode] || copy.login
-  return <div className={`auth-page ${recovery || mode === 'verify-email' || signup && sentTo ? 'auth-account-flow' : ''}`}><aside className="auth-story"><div className="auth-story-image" /><a className="auth-brand" href="#home"><BrandMark /><span>drivepulse.</span></a><div className="auth-story-copy"><p className="landing-eyebrow">FLEET & RENTAL OPERATIONS</p><h2>Reliable fleets.<br />Coordinated operations.</h2><p>Manage bookings, dispatch, vehicle readiness, and operational records through DrivePulse.</p><div><Icon name="road" />One platform for rental operations and fleet management.</div></div><a className="auth-back" href="#home"><Icon name="arrow" />Back to DrivePulse</a></aside><main className="auth-main" onFocusCapture={onDismissNotice} onInputCapture={onDismissNotice} onPointerDownCapture={onDismissNotice}><div className="auth-form-wrap"><a className="auth-mobile-brand" href="#home"><BrandMark /><span>drivepulse.</span></a><p className="landing-eyebrow">{text.eyebrow}</p><h1>{text.title}</h1><p className="auth-description">{text.description}</p>{login && sessionNotice && <p className="auth-notice" role="alert">{sessionNotice}</p>}{body}<div className="auth-footnote"><Icon name="shield" size={17} />{recovery ? 'Recovery codes expire after 10 minutes and can only be used once.' : 'Access is limited to your assigned workspace.'}</div></div></main></div>
+  return <div className={`auth-page ${recovery || mode === 'verify-email' || signup && sentTo ? 'auth-account-flow' : ''}`}><aside className="auth-story"><div className="auth-story-image" /><a className="auth-brand" href="#home"><BrandMark /><span>drivepulse.</span></a><div className="auth-story-copy"><p className="landing-eyebrow">FLEET & RENTAL OPERATIONS</p><h2>Reliable fleets.<br />Coordinated operations.</h2><p>Manage bookings, dispatch, vehicle readiness, and operational records through DrivePulse.</p><div><Icon name="road" />One platform for rental operations and fleet management.</div></div><a className="auth-back" href="#home"><Icon name="arrow" />Back to DrivePulse</a></aside><main className="auth-main" onFocusCapture={onDismissNotice} onInputCapture={onDismissNotice} onChangeCapture={onDismissNotice} onKeyDownCapture={onDismissNotice} onSubmitCapture={onDismissNotice} onPointerDownCapture={onDismissNotice}><div className="auth-form-wrap"><a className="auth-mobile-brand" href="#home"><BrandMark /><span>drivepulse.</span></a><p className="landing-eyebrow">{text.eyebrow}</p><h1>{text.title}</h1><p className="auth-description">{text.description}</p>{login && sessionNotice && <div className="auth-notice" role="status"><span>{sessionNotice}</span><button type="button" className="icon-button" aria-label="Dismiss session timeout notice" onClick={onDismissNotice}><Icon name="close" size={16} /></button></div>}{body}<div className="auth-footnote"><Icon name="shield" size={17} />{recovery ? 'Recovery codes expire after 10 minutes and can only be used once.' : 'Access is limited to your assigned workspace.'}</div></div></main></div>
 }

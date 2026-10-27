@@ -2,7 +2,7 @@ const { asyncMap } = require('./asyncCollections');
 const { randomUUID } = require('node:crypto');
 const D = require('./domain');
 const inspectionChecklist = require('../shared/inspectionChecklist.json');
-const { normalizeConditions, conditionProblem } = require('../shared/inspection.mjs');
+const { normalizeConditions, normalizeRatings, conditionProblem } = require('../shared/inspection.mjs');
 const { renewalNotices } = require('./vehicleProfile');
 const { mileageConsumption } = require('../shared/mileage.mjs');
 
@@ -219,7 +219,9 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
         if (typeof pressure !== 'number' || !Number.isFinite(pressure) || pressure < 0 || pressure > 100) D.fail('Record each tire pressure from 0 to 100 PSI.');
         tirePressure[corner] = pressure;
       }
-      const checks = normalizeConditions(input.checks, inspectionChecklist);
+      if (input.conditionRatings !== undefined && !inspectionChecklist.every(({ key }) => Number.isInteger(input.conditionRatings?.[key]) && input.conditionRatings[key] >= 1 && input.conditionRatings[key] <= 4)) D.fail('Rate every mandatory condition checkpoint from 1 to 4.');
+      const checks = normalizeConditions(input.conditionRatings ?? input.checks, inspectionChecklist);
+      if (input.conditionRatings && input.checks && inspectionChecklist.some(({ key }) => normalizeConditions(input.checks, inspectionChecklist)[key] !== checks[key])) D.fail('Condition ratings and condition statuses do not match.');
       const conditionError = conditionProblem(checks, inspectionChecklist, input.outcome);
       if (conditionError) D.fail(conditionError);
       if (input.driverVerification !== (input.type === 'clearance' ? 'not-applicable' : 'matched')) D.fail('Complete individual / driver verification before the condition record.');
@@ -238,6 +240,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       const cleanReturn = input.type === 'post-return' && input.outcome === 'approved' && input.cleanliness === 'Clean' && !damageFlag && fuelLevel >= 100;
       const inspectedVehicle = (await fleet()).find(v => v.id === s.id);
       const report = { id: randomUUID(), vehicle: { id: s.id, name: inspectedVehicle.name, fleetCode: inspectedVehicle.fleetCode, plate: inspectedVehicle.plate || '' }, vehicleId: s.id, bookingId: b?.id || null, type: input.type, status: input.outcome, role: 'mechanic', odometer, fuelLevel, tirePressure, cleanliness: input.cleanliness, damageFlag, cleanReturn, scratches: D.text(input.scratches, 'Exterior condition / scratches', 1500), note: D.text(input.note, 'Inspection notes', 1500, input.outcome === 'unsafe'), checks, driverVerification: input.driverVerification || null, driverName: b?.renter?.name || null, photos, by: req.user.name, at: stamp() };
+      Object.assign(report, { conditionRatings: normalizeRatings(checks, inspectionChecklist), mechanicId: req.user.id, dispatchDecision: input.outcome === 'approved' ? 'Approved by mechanic' : 'Do not dispatch' });
       if (tripMileage !== null) Object.assign(report, { dispatchOdometer, mileageConsumption: tripMileage });
       if (b) {
         if (input.type === 'pre-dispatch') {b.inspection = report;D.invalidatePass(b);} else
@@ -278,7 +281,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       await save('inspection', report);
       await changeState(s, req.user, `${input.type} inspection ${input.outcome}`, report.note, {
         oldValue: { status: prevStatus, odometer: prevOdometer, fuelLevel: prevFuel },
-        newValue: { status: s.status, odometer, fuelLevel, cleanReturn, ...(tripMileage !== null ? { dispatchOdometer, mileageConsumption: tripMileage } : {}) }
+        newValue: { status: s.status, odometer, fuelLevel, cleanReturn, conditionRatings: report.conditionRatings, mechanicId: req.user.id, dispatchDecision: report.dispatchDecision, ...(tripMileage !== null ? { dispatchOdometer, mileageConsumption: tripMileage } : {}) }
       });
       if (input.outcome === 'unsafe') await invalidateVehiclePasses(s.id, req.user, 'Unsafe inspection: vehicle out of service.');
       return report;

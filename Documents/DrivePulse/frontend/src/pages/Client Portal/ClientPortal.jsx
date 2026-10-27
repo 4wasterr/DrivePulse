@@ -8,6 +8,7 @@ import BrandMark from '../../components/ui/BrandMark.jsx'
 import Icon from '../../components/ui/Icon.jsx'
 import NotificationCenter from '../../components/ui/NotificationCenter.jsx'
 import SidebarFooter from '../../components/ui/SidebarFooter.jsx'
+import WorkspaceSidebar from '../../components/ui/WorkspaceSidebar.jsx'
 import { vehicleFor } from '../../utils/vehicles.js'
 import ClientOverviewPage from './OverviewPage.jsx'
 import ClientFleetPage from './FleetPage.jsx'
@@ -98,13 +99,12 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
   }
 
   return <div className="app-shell">
-    {menuOpen && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
-    <aside className={`sidebar ${menuOpen ? 'mobile-open' : ''}`}>
+    <WorkspaceSidebar className="sidebar" open={menuOpen} onClose={() => setMenuOpen(false)}>
       <a className="brand" href="#home" onClick={() => navigate('home')} aria-label="DrivePulse home"><span className="brand-mark"><BrandMark /></span><span>drivepulse<span className="brand-period">.</span></span></a>
       <div className="workspace-label">YOUR OPEN ROAD</div>
       <nav className="primary-nav" aria-label="Main navigation">{navigation.map(item => <a key={item.id} href={`#${item.id}`} onClick={() => navigate(item.id)} className={page === item.id ? 'active' : ''} aria-current={page === item.id ? 'page' : undefined}><Icon name={item.icon} size={19} /><span>{item.label}</span>{item.id === 'bookings' && upcoming.length > 0 && <span className="nav-count">{upcoming.length}</span>}</a>)}</nav>
       <SidebarFooter user={profile} role="Client account" onLogout={() => onLogout().catch(error => notify(error.message))} onProfile={() => setModal({ type: 'profile' })} />
-    </aside>
+    </WorkspaceSidebar>
 
     <main className="main-content">
       <header className="topbar"><div className="breadcrumb"><button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><span>Client portal</span><Icon name="chevron" size={12} /><strong>{navigation.find(n => n.id === page)?.label}</strong></div><div className="topbar-actions"><span className="topbar-location"><Icon name="pin" size={15} />Metro Manila, PH</span><span className="topbar-separator" /><button className="icon-button" aria-label="Search vehicles" onClick={() => { navigate('fleet'); setTimeout(() => document.getElementById('fleet-search')?.focus(), 50) }}><Icon name="search" size={19} /></button><NotificationCenter /><button className="avatar topbar-avatar" onClick={() => user ? setModal({ type: 'profile' }) : onAuthenticate('overview')} aria-label="View profile">{initials}</button></div></header>

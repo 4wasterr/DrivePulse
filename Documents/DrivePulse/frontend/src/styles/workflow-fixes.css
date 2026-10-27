@@ -1,18 +1,29 @@
-/* All roles share an identical bottom account and logout area. Only the
-   navigation scrolls; the logout action stays in view on short screens. */
-.sidebar,.agent-sidebar { display:flex; flex-direction:column; height:100dvh; overflow:hidden; padding:30px 20px 20px; }
-.sidebar > :not(nav),.agent-sidebar > :not(nav) { flex-shrink:0; }
-.sidebar > nav,.agent-sidebar > nav { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding-bottom:16px; }
-.sidebar-account-footer { margin-top:auto; flex-shrink:0; border-top:1px solid #e1e5dc; padding-top:12px; background:inherit; }
-.sidebar-account { display:flex; align-items:center; gap:10px; width:100%; min-height:58px; padding:6px 0 12px; background:none; text-align:left; color:inherit; }
+/* One sidebar geometry and viewport breakpoint for every role and module.
+   The account area is anchored outside the scrolling navigation. */
+:root { --workspace-sidebar-width:278px; --workspace-sidebar-padding:20px; --workspace-sidebar-footer:138px; }
+.workspace-sidebar:is(.sidebar,.agent-sidebar) { position:fixed; inset:0 auto 0 0; z-index:65; display:flex; flex-direction:column; width:var(--workspace-sidebar-width); height:100vh; height:100dvh; box-sizing:border-box; overflow:hidden; padding:30px var(--workspace-sidebar-padding) calc(var(--workspace-sidebar-footer) + env(safe-area-inset-bottom,0px)); transform:none; }
+.workspace-sidebar > :not(nav) { flex-shrink:0; }
+.workspace-sidebar > nav { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding-bottom:16px; }
+.workspace-sidebar > .sidebar-account-footer { position:absolute; inset:auto 0 0; display:flex; flex-direction:column; gap:4px; margin:0; padding:12px var(--workspace-sidebar-padding) calc(20px + env(safe-area-inset-bottom,0px)); border-top:1px solid #e1e5dc; background:inherit; }
+.sidebar-account { display:flex; align-items:center; gap:10px; width:100%; height:58px; min-height:58px; max-height:58px; flex:0 0 58px; margin:0; padding:6px 0 12px; overflow:hidden; background:none; text-align:left; color:inherit; box-sizing:border-box; }
 .sidebar-account > span:nth-child(2) { min-width:0; flex:1; }
-.sidebar-account strong,.sidebar-account small { display:block; overflow-wrap:anywhere; }
+.sidebar-account strong,.sidebar-account small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .sidebar-account strong { font-size:13px; }
 .sidebar-account small { margin-top:3px; font-size:11px; color:#73796c; }
 .sidebar-account .avatar { flex-shrink:0; }
-.sidebar-logout { display:flex; align-items:center; gap:11px; width:100%; height:44px; padding:10px 12px; border:1px solid #e1e5dc; border-radius:8px; background:#fff; color:#46513a; text-align:left; font-size:13px; }
+.sidebar-logout { display:flex; align-items:center; gap:11px; width:100%; height:44px; min-height:44px; max-height:44px; flex:0 0 44px; box-sizing:border-box; margin:0; padding:10px 12px; border:1px solid #e1e5dc; border-radius:8px; background:#fff; color:#46513a; text-align:left; font-size:13px; line-height:22px; }
 .sidebar-logout:hover { background:#f0f3e9; }
 .sidebar-logout:focus-visible { outline:2px solid #63764a; outline-offset:2px; }
+.main-content,.agent-main { margin-left:var(--workspace-sidebar-width); }
+.workspace-navigation-scrim { position:fixed; inset:0; z-index:64; width:100%; height:100dvh; border:0; background:#0006; }
+@media(min-width:1001px) { .mobile-menu,.agent-mobile-menu,.workspace-navigation-scrim { display:none; } }
+@media(max-width:1000px) {
+  .workspace-sidebar:is(.sidebar,.agent-sidebar) { width:min(292px,calc(100% - 36px)); transform:translateX(-100%); transition:transform .25s; }
+  .workspace-sidebar:is(.sidebar,.agent-sidebar).is-open { transform:translateX(0); box-shadow:10px 0 50px #00000022; }
+  .main-content,.agent-main { margin-left:0; }
+  .mobile-menu,.agent-mobile-menu { display:inline-flex; }
+}
+@media(prefers-reduced-motion:reduce) { .workspace-sidebar { transition:none !important; } }
 .address-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
 .address-fields .form-field { min-width:0; }
 .address-fields select { width:100%; min-width:0; text-overflow:ellipsis; }
@@ -22,7 +33,17 @@
 .document-sample img { display:block; max-width:100%; height:auto; margin-top:16px; }
 .mileage-summary { margin:16px 0; padding:18px; border:1px solid #cdd7c3; border-radius:8px; background:#f3f6ef; }
 .mileage-summary strong { display:block; font-size:19px; color:#34452f; }
+.inspection-stages { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; padding:0; margin:0 0 18px; list-style:none; }
+.inspection-stages li { padding:10px; border:1px solid #dde2d6; border-radius:8px; color:#707568; font-size:12px; overflow-wrap:anywhere; }
+.inspection-stages li span { display:block; margin-bottom:4px; font-weight:700; }
+.inspection-stages li[aria-current=step] { background:#34452f; color:#fff; border-color:#34452f; }
+.inspection-mechanic { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0 0 20px; font-size:14px; }
+.inspection-review { margin:16px 0; }
+.inspection-review > div { display:flex; justify-content:space-between; gap:20px; padding:10px 0; border-bottom:1px solid #e1e5dc; }
+.inspection-review dt { flex:1; }
+.inspection-review dd { margin:0; max-width:55%; text-align:right; overflow-wrap:anywhere; font-weight:600; }
+@media(max-width:480px) { .inspection-stages { grid-template-columns:repeat(2,minmax(0,1fr)); } .inspection-review > div { flex-direction:column; gap:4px; } .inspection-review dd { max-width:100%; text-align:left; } }
 .id-popup-iframe { width:100%; min-height:420px; border:0; }
 .id-popup-image { display:block; max-width:100%; max-height:65dvh; object-fit:contain; margin:auto; }
 @media(max-width:600px) { .address-fields { grid-template-columns:1fr; } .id-popup-iframe { min-height:300px; } }
-@media(max-height:500px) { .sidebar,.agent-sidebar { padding-top:12px; } .sidebar .workspace-label,.agent-sidebar .agent-workspace-label { margin-block:8px; } }
+@media(max-height:500px) { .workspace-sidebar:is(.sidebar,.agent-sidebar) { padding-top:12px; } .workspace-sidebar .workspace-label,.workspace-sidebar .agent-workspace-label { margin-block:8px; } }

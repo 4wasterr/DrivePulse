@@ -1,4 +1,5 @@
 import SidebarFooter from '../../components/ui/SidebarFooter.jsx'
+import WorkspaceSidebar from '../../components/ui/WorkspaceSidebar.jsx'
 import SecurityDepositDialog from '../../components/operations/SecurityDepositDialog.jsx'
 import ReturnsSchedule from '../../components/operations/ReturnsSchedule.jsx'
 import { useState } from 'react'
@@ -75,8 +76,7 @@ export default function AgentPortal({ page, user, workspace, availability, onRef
   const actions = <div className="staff-card-actions"><button className="button button-outline" onClick={() => setDialog({ kind: 'security-deposit' })}>Security Deposit</button><button className="button button-outline" onClick={() => setDialog({ kind: 'financial-request' })}>Security Deposit exception</button><button className="button button-dark" onClick={() => setDialog({ kind: 'walkin' })}><span aria-hidden="true">＋</span>New walk-in</button></div>
 
   return <div className="agent-shell">
-    {menuOpen && <button className="agent-scrim" aria-label="Close navigation" onClick={() => setMenuOpen(false)} />}
-    <aside className={`agent-sidebar ${menuOpen ? 'is-open' : ''}`}>
+    <WorkspaceSidebar className="agent-sidebar" open={menuOpen} onClose={() => setMenuOpen(false)}>
       <a className="agent-brand" href="#home"><BrandMark /><span>drivepulse.</span></a>
       <div className="agent-workspace-label"><span>STAFF WORKSPACE</span><strong>Booking Agent / Front Desk</strong></div>
       <nav aria-label="Front-desk navigation">
@@ -86,7 +86,7 @@ export default function AgentPortal({ page, user, workspace, availability, onRef
         </a>)}
       </nav>
       <SidebarFooter user={user} role="Booking Agent" onLogout={signout} />
-    </aside>
+    </WorkspaceSidebar>
     <main className="agent-main">
       <header className="agent-topbar">
         <div><button className="icon-button agent-mobile-menu" aria-label="Open navigation" onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><span>Staff workspace</span><Icon name="chevron" size={13} /><strong>{navigation.find(([id]) => id === activePage)?.[2] || 'Overview'}</strong></div>

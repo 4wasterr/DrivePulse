@@ -152,9 +152,11 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
       if (record && Number(record.expires) > Date.now() && Date.now() - Number(record.last_activity) < SESSION_IDLE_MS) { req.user = record; req.sessionToken = token; }
       else {
         await db.prepare('DELETE FROM sessions WHERE token=?').run(token);
-        res.clearCookie('drivepulse_session', sessionCookieOptions);
+        // A successful sign-in replaces the expired cookie below. Emitting an
+        // empty cookie first creates conflicting Set-Cookie headers on login.
+        if (!req.path.startsWith('/auth/')) res.clearCookie('drivepulse_session', sessionCookieOptions);
         req.sessionExpired = true;
-        if (!['/session', '/logout'].includes(req.path) && !req.path.startsWith('/auth/')) return res.status(401).json({ error: 'Your session expired after 15 minutes of inactivity. Please sign in again.', code: 'SESSION_EXPIRED' });
+        if (!['/session', '/sync', '/logout'].includes(req.path) && !req.path.startsWith('/auth/')) return res.status(401).json({ error: 'Your session expired after 15 minutes of inactivity. Please sign in again.', code: 'SESSION_EXPIRED' });
       }
     }
     next();

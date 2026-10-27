@@ -1,5 +1,7 @@
 const { randomUUID, createHash } = require('node:crypto');
 const D = require('./domain');
+const { conditionLabel } = require('../shared/inspection.mjs');
+const inspectionChecklist = require('../shared/inspectionChecklist.json');
 const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 const stamp = () => new Date().toISOString();
 const money = (n) => `PHP ${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
@@ -108,6 +110,7 @@ function render(d) {
       ['Exterior Condition', i.scratches || 'No visible damage'],
       ['Tire Pressure (PSI)', Object.entries(i.tirePressure || {}).map(([k, v]) => `${k}: ${v}`).join(' · ') || 'Verified']
     );
+    fields.push(...inspectionChecklist.map(({ key, label }) => [`Condition rating: ${label}`, conditionLabel(i.conditionRatings?.[key] ?? i.checks?.[key])]), ['Damage status', i.damageFlag ? 'Damage / repair required' : 'No damage observed'], ['Mechanic dispatch decision', i.dispatchDecision || (i.status === 'approved' ? 'Approved by mechanic' : 'Do not dispatch')]);
   }
   if (d.payment) {
     fields.push(

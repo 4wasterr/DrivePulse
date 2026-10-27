@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { isBookedDate } from '../src/utils/bookingCalendar.js'
-import { conditionProblem, normalizeConditions } from '../../shared/inspection.mjs'
+import { conditionProblem, normalizeConditions, normalizeRatings, conditionLabel } from '../../shared/inspection.mjs'
 import checklist from '../../shared/inspectionChecklist.json' with { type: 'json' }
 
 test('calendar locks booked dates and intervals while permitting exact timed handovers', () => {
@@ -28,4 +28,19 @@ test('condition statuses reject missing assessments and prevent unsafe approval'
   assert.equal(conditionProblem({ ...good, exterior: 'Damaged' }, checklist, 'unsafe'), '')
   assert.equal(conditionProblem({ ...good, exterior: 'N/A', interior: 'Fair' }, checklist, 'approved'), '')
   assert.deepEqual(normalizeConditions(Object.fromEntries(checklist.map(({ key }) => [key, true])), checklist), good)
+})
+
+test('mechanic ratings preserve the 1–4 scale and enforce dispatch safety', () => {
+  const ratings = { tyres: 1, controls: 2, exterior: 3, interior: 4, fuel: 1 }
+  assert.deepEqual(normalizeConditions(ratings, checklist), { tyres: 'Good', controls: 'Fair', exterior: 'Damaged', interior: 'Needs Repair', fuel: 'Good' })
+  assert.deepEqual(normalizeRatings(normalizeConditions(ratings, checklist), checklist), ratings)
+  assert.equal(conditionLabel(1), '1 – Good')
+  assert.equal(conditionLabel(4), '4 – Needs Repair')
+  assert.equal(conditionLabel('Fair'), '2 – Fair')
+  assert.equal(conditionLabel('N/A'), 'N/A (earlier inspection)')
+  assert.equal(conditionLabel(null), 'Not recorded')
+  assert.match(conditionProblem(ratings, checklist, 'approved'), /Repair/)
+  assert.equal(conditionProblem(ratings, checklist, 'unsafe'), '')
+  assert.equal(conditionProblem({ ...ratings, exterior: 1, interior: 2 }, checklist, 'approved'), '')
+  for (const invalid of [0, 5, 1.5, null, false, '', 'unknown']) assert.ok(conditionProblem({ ...ratings, tyres: invalid }, checklist, 'unsafe'))
 })

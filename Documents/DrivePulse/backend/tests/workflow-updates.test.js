@@ -93,4 +93,16 @@ for (const engine of ['sqlite', 'postgres']) test(`${engine}: idle expiry, dynam
   assert.match(expired.headers.get('set-cookie'), /drivepulse_session=;/);
   assert.equal(await db.prepare('SELECT token FROM sessions WHERE user_id=?').get(id), undefined);
   assert.equal((await request('/session/activity', cookie, {})).status, 401);
+  const anonymousSync = await request('/sync', cookie);
+  assert.equal(anonymousSync.status, 200, 'an expired cookie must still allow an anonymous login-page refresh');
+  assert.equal(anonymousSync.data.session.user, null);
+  assert.equal(anonymousSync.data.session.sessionExpired, true);
+  assert.equal(anonymousSync.data.workspace, null);
+  const signedInAgain = await request('/auth/login', cookie, { username: 'bkagent', password: 'bkagent' });
+  assert.equal(signedInAgain.status, 200);
+  assert.equal(signedInAgain.headers.getSetCookie().length, 1, 'successful re-login must replace the old cookie without also emitting an empty session cookie');
+  const freshSync = await request('/sync', signedInAgain.cookie);
+  assert.equal(freshSync.status, 200);
+  assert.equal(freshSync.data.session.user.id, id);
+  assert.equal(freshSync.data.session.sessionExpired, false);
 });
