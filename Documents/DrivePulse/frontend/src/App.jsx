@@ -33,6 +33,7 @@ export default function App() {
   const [connectionError, setConnectionError] = useState('')
   const [expirationNotice, setExpirationNotice] = useState('')
   const refreshRequest = useRef(null)
+  const refreshPending = useRef(null)
   const expirationLogout = useRef(Promise.resolve())
   const sequence = useRef(0)
   const returnTo = useRef('overview')
@@ -69,14 +70,17 @@ export default function App() {
     const revision = sessionState.revision
     return watchInactivity({ userId, lastActivity: config.lastActivity, onExpire: () => expireSession(revision), onActivity: () => api('/session/activity', { method: 'POST' }).catch(() => {}) })
   }, [userId, page, config.lastActivity, expireSession])
-  const refresh = useCallback(() => {
+  const refresh = useCallback((invalidate = false) => {
     if (sessionState.authenticating) return Promise.resolve()
+    // Focus, visibility and polling often fire together. Aborting fetch does not
+    // cancel a database query already running on Vercel, so share that request.
+    if (invalidate !== true && refreshPending.current && !refreshRequest.current?.signal.aborted) return refreshPending.current
     const current = ++sequence.current
     const revision = sessionState.revision
     refreshRequest.current?.abort()
     const controller = new AbortController()
     refreshRequest.current = controller
-    return api('/sync', { signal: controller.signal })
+    const pending = api('/sync', { signal: controller.signal })
       .then(({ session, availability: schedule, vehicles: fleet, workspace, operations, notifications: notices }) => {
         if (current !== sequence.current || !sessionState.isCurrent(revision)) return
         if (!session.user && sessionState.userId) { expireSession(revision); return }
@@ -87,7 +91,9 @@ export default function App() {
         setConfig(session); setWorkspace(data); setAvailability(schedule); setConnectionError('')
       })
       .catch(error => { if (!controller.signal.aborted && current === sequence.current && sessionState.isCurrent(revision)) { if (error.code === 'SESSION_EXPIRED' && !sessionState.userId) { setWorkspace(null); setConnectionError('') } else { setConnectionError(error.message); if (error.status === 401) setWorkspace(null) } } })
-      .finally(() => { if (current === sequence.current) setLoading(false) })
+      .finally(() => { if (refreshPending.current === pending) refreshPending.current = null; if (current === sequence.current) setLoading(false) })
+    refreshPending.current = pending
+    return pending
   }, [expireSession])
   useEffect(() => {
     const change = () => {
@@ -100,12 +106,13 @@ export default function App() {
     }
     window.history.replaceState({ ...window.history.state, drivepulseNavigation: navigationTrail.current }, '')
     const focus = () => refresh()
+    const mutation = () => refresh(true)
     const visible = () => { if (document.visibilityState === 'visible') refresh() }
-    window.addEventListener('hashchange', change); window.addEventListener('focus', focus); window.addEventListener('online', focus); window.addEventListener('drivepulse:mutation-succeeded', focus); document.addEventListener('visibilitychange', visible)
+    window.addEventListener('hashchange', change); window.addEventListener('focus', focus); window.addEventListener('online', focus); window.addEventListener('drivepulse:mutation-succeeded', mutation); document.addEventListener('visibilitychange', visible)
     try { sessionStorage.removeItem('drivepulse:session-expired') } catch { /* The notice is never persisted. */ }
     refresh()
     const interval = setInterval(refresh, 30000)
-    return () => { sequence.current += 1; refreshRequest.current?.abort(); clearInterval(interval); window.removeEventListener('hashchange', change); window.removeEventListener('focus', focus); window.removeEventListener('online', focus); window.removeEventListener('drivepulse:mutation-succeeded', focus); document.removeEventListener('visibilitychange', visible) }
+    return () => { sequence.current += 1; refreshRequest.current?.abort(); clearInterval(interval); window.removeEventListener('hashchange', change); window.removeEventListener('focus', focus); window.removeEventListener('online', focus); window.removeEventListener('drivepulse:mutation-succeeded', mutation); document.removeEventListener('visibilitychange', visible) }
   }, [refresh, dismissExpiration])
   const navigate = to => { window.location.assign(`#${to}`); setPage(to) }
   const authenticate = (to = 'overview') => { returnTo.current = to; navigate('login') }

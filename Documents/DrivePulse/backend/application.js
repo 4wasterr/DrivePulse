@@ -16,6 +16,7 @@ const { clientProfile } = require('../shared/clientProfile.mjs');
 const { createAccountSecurity } = require('./account-security');
 const { cancellationSettlement } = require('../shared/cancellation.mjs');
 const { geographicAddress, registerGeography } = require('./geography');
+const { databaseDiagnostic, transientDatabaseFailure } = require('./database-errors');
 
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const now = () => new Date().toISOString();
@@ -522,9 +523,9 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
     return notices.map(n => ({ ...n, read: ids.has(n.id) })).sort((a, b) => Number(a.read) - Number(b.read) || priority[a.severity] - priority[b.severity] || (a.days ?? Infinity) - (b.days ?? Infinity) || (b.at || '').localeCompare(a.at || ''));
   };
   app.get('/api/notifications', requireUser, async (req, res) => res.json(await notificationsFor(req.user)));
-  // One transaction supplies every viewport with the same fleet, booking and
-  // billing revision. Mutation transactions use this same database lock.
-  app.get('/api/sync', async (req, res) => res.json(await transaction(async () => ({
+  // Every viewport gets one consistent fleet, booking and billing snapshot.
+  // Read-only syncs do not compete for the global booking mutation lock.
+  app.get('/api/sync', async (req, res) => res.json(await db.readSnapshot(async () => ({
     session: await sessionFor(req), vehicles: await fleet.fleet(), availability: await fleet.availability(),
     workspace: req.user ? await workspaceFor(req.user) : null,
     operations: req.user && req.user.role !== 'client' ? await fleet.operations(req.user) : null,
@@ -1068,6 +1069,10 @@ async function createApp({ app = express(), database = null, dbPath, mailer = cr
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
+    if (transientDatabaseFailure(error)) {
+      console.error('DrivePulse database request unavailable:', databaseDiagnostic(error));
+      return res.status(503).set('Cache-Control', 'no-store').set('Retry-After', '1').json({ error: 'DrivePulse is temporarily unavailable. Please try again shortly.', code: 'SERVICE_UNAVAILABLE' });
+    }
     const duplicate = error.code === '23505' || error.code === 'ERR_SQLITE_ERROR' && /UNIQUE constraint failed/.test(error.message);
     const status = error.type === 'entity.too.large' ? 413 : duplicate ? 409 : error.status || 500;
     if (status >= 500 && !error.expose) console.error('DrivePulse request failed:', error.message);

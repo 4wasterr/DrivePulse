@@ -47,6 +47,7 @@ class SQLiteDatabase {
       catch (error) { this.exec('ROLLBACK'); throw error; }
     });
   }
+  readSnapshot(callback) { return this.transaction(callback); }
   async health() { this.prepare('SELECT 1').get(); }
   close() { this.connection.close(); }
 }
@@ -97,14 +98,17 @@ class PostgresDatabase {
   exclusive(callback) {
     return this.context.run({ client: null, cache: new Map() }, callback);
   }
-  async transaction(callback) {
+  readSnapshot(callback) { return this.transaction(callback, { readOnly: true }); }
+  async transaction(callback, { readOnly = false } = {}) {
     const parent = this.context.getStore();
     if (parent?.client) return callback();
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query(readOnly ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN');
       // Serialize check-then-write operations across every serverless instance.
-      await client.query('SELECT pg_advisory_xact_lock(74201926)');
+      // Dashboard reads keep a consistent snapshot without waiting for this lock
+      // or preventing a booking update from acquiring it.
+      if (!readOnly) await client.query('SELECT pg_advisory_xact_lock(74201926)');
       const result = await this.context.run({ client, cache: new Map() }, callback);
       await client.query('COMMIT');
       return result;

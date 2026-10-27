@@ -58,13 +58,17 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
     const s = await state(b.vehicleId);
     if (s.status === 'Available') {s.status = 'Under Inspection';await changeState(s, user, 'Return awaiting inspection', b.id);}
   };
-  const fleet = async (includeArchived = false) => (await asyncMap(await allFleetDef(), async (v) => {
-    const s = await state(v.id),bookings = (await allBookings()).filter((b) => b.vehicleId === v.id);
-    const active = bookings.find((b) => b.status === 'On Rental');
-    const pendingReturn = bookings.find((b) => b.status === 'Completed' && b.returnedAt && !b.returnInspection);
-    const status = s.archivedAt ? 'Decommissioned' : s.status !== 'Available' ? s.status : active ? D.time(active.end, active.endTime) < Date.now() ? 'Overdue' : 'Rented' : pendingReturn ? 'Under Inspection' : 'Available';
-    return { ...v, fleetCode: v.fleetCode || `CAR-${String(D.FLEET.findIndex(x => x.id === v.id) + 1).padStart(5, '0')}`, ...s, image: s.imageId || v.imageId ? `/api/vehicle-images/${s.imageId || v.imageId}` : v.image, rate: s.rate || v.rate, baseRate: v.rate, status, holdStatus: s.status, bookingId: active?.id || pendingReturn?.id, reservations: bookings.filter((b) => !['Completed', 'Cancelled'].includes(b.status)).length };
-  })).filter((v) => includeArchived || !v.archivedAt);
+  const fleet = async (includeArchived = false) => {
+    const definitions = await allFleetDef(), saved = new Map((await records('vehicle')).map(value => [value.id, value])), all = await allBookings();
+    return definitions.map(v => {
+      const s = saved.has(v.id) ? { rate: v.rate, ...saved.get(v.id) } : { id: v.id, status: 'Available', version: 1, rate: v.rate, odometer: v.mileage ?? null, fuelLevel: null, activity: [] };
+      const bookings = all.filter(b => b.vehicleId === v.id);
+      const active = bookings.find((b) => b.status === 'On Rental');
+      const pendingReturn = bookings.find((b) => b.status === 'Completed' && b.returnedAt && !b.returnInspection);
+      const status = s.archivedAt ? 'Decommissioned' : s.status !== 'Available' ? s.status : active ? D.time(active.end, active.endTime) < Date.now() ? 'Overdue' : 'Rented' : pendingReturn ? 'Under Inspection' : 'Available';
+      return { ...v, fleetCode: v.fleetCode || `CAR-${String(D.FLEET.findIndex(x => x.id === v.id) + 1).padStart(5, '0')}`, ...s, image: s.imageId || v.imageId ? `/api/vehicle-images/${s.imageId || v.imageId}` : v.image, rate: s.rate || v.rate, baseRate: v.rate, status, holdStatus: s.status, bookingId: active?.id || pendingReturn?.id, reservations: bookings.filter((b) => !['Completed', 'Cancelled'].includes(b.status)).length };
+    }).filter(v => includeArchived || !v.archivedAt);
+  };
 
   const availability = async () => {
     const bookings = await allBookings(), vehicles = await fleet(true);

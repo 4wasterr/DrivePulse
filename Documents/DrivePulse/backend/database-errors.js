@@ -26,7 +26,7 @@ const diagnostics = new Map([
 ]);
 
 function databaseDiagnostic(error) {
-  if (/connection (?:terminated due to connection timeout|terminated unexpectedly)|connection timeout/i.test(error?.message || '')) return 'Database connection timed out or closed during startup. Retry the request and check the Supabase pooler connection.';
+  if (/connection (?:terminated due to connection timeout|terminated unexpectedly)|connection timeout|timeout exceeded when trying to connect/i.test(error?.message || '')) return 'Database connection timed out or closed. Retry the request and check the Supabase pooler connection.';
   if (error?.cause) {
     const cause = databaseDiagnostic(error.cause);
     if (cause !== fallback) return cause;
@@ -41,6 +41,13 @@ function databaseDiagnostic(error) {
   // Driver codes identify failures without exposing connection strings or raw messages.
   const code = typeof error?.code === 'string' && /^(?:ERR_[A-Z0-9_]{2,60}|[0-9A-Z]{5})$/.test(error.code) ? error.code : '';
   return code ? `${fallback} Diagnostic code: ${code}.` : fallback;
+}
+
+function transientDatabaseFailure(error) {
+  if (!error) return false;
+  if (['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', '53300', '57P01', '57P02', '57P03', '08000', '08001', '08003', '08006'].includes(error.code)) return true;
+  if (/timeout exceeded when trying to connect|connection (?:terminated due to connection timeout|terminated unexpectedly|ended unexpectedly)/i.test(error.message || '')) return true;
+  return Boolean(error.cause && transientDatabaseFailure(error.cause) || error instanceof AggregateError && error.errors.some(transientDatabaseFailure));
 }
 
 // Private startup logs need enough context to diagnose unclassified driver
@@ -62,4 +69,4 @@ function databaseFailureDetails(error, env = process.env) {
   return { error: describe(error), configuration: { databaseHostType, caCertificateConfigured: Boolean(env.DATABASE_CA_CERT), caFileConfigured: Boolean(env.DATABASE_CA_PATH), productionMode: env.NODE_ENV === 'production' } };
 }
 
-module.exports = { databaseDiagnostic, databaseFailureDetails };
+module.exports = { databaseDiagnostic, databaseFailureDetails, transientDatabaseFailure };

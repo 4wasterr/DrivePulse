@@ -8,7 +8,7 @@ import { createElement, act, useCallback, useState } from 'react'
 
 // Exercise real React forms and app effects in a DOM, without a browser or a
 // production account. Every API response is controlled by the regression test.
-let dom, vite, createRoot, App, AuthPage, InspectionForm, registerConfirmationHandler, sessionState, root, container
+let dom, vite, createRoot, App, AuthPage, InspectionForm, WalkInReservation, AddVehicleModal, fleetData, registerConfirmationHandler, sessionState, root, container
 const savedGlobals = new Map()
 const user = { id: 'client-one', name: 'Test Client', email: 'client@example.com', role: 'client' }
 const snapshot = (account = null) => ({
@@ -38,6 +38,9 @@ before(async () => {
   App = (await vite.ssrLoadModule('/src/App.jsx')).default
   AuthPage = (await vite.ssrLoadModule('/src/pages/Authentication/AuthPage.jsx')).default
   InspectionForm = (await vite.ssrLoadModule('/src/pages/Fleet Mechanic/components/InspectionForm.jsx')).default
+  WalkInReservation = (await vite.ssrLoadModule('/src/pages/Booking Agent/components/WalkInReservation.jsx')).default
+  AddVehicleModal = (await vite.ssrLoadModule('/src/pages/Operations Manager/components/AddVehicleModal.jsx')).default
+  fleetData = await vite.ssrLoadModule('/src/data.js')
   ;({ registerConfirmationHandler } = await vite.ssrLoadModule('/src/utils/confirmations.js'))
   ;({ sessionState } = await vite.ssrLoadModule('/src/utils/session.js'))
   const style = dom.window.document.createElement('style')
@@ -172,6 +175,42 @@ test('all roles and modules mount the same anchored sidebar logout area', async 
   assert.ok(geometry.every(item => JSON.stringify(item) === JSON.stringify(geometry[0])), 'all roles share the same sidebar width, bottom anchor and logout height')
 })
 
+test('focus and visibility bursts share one sync while a saved change requests fresh data', async t => {
+  const pending = [];
+  let hold = false, syncs = 0;
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    if (path === '/api/locations') return Response.json([])
+    assert.equal(path, '/api/sync')
+    syncs++
+    if (!hold) return Response.json(snapshot(user))
+    return new Promise(resolve => pending.push({ resolve, signal: options.signal }))
+  })
+  dom.window.history.replaceState({}, '', '/#overview')
+  await render(App)
+  assert.equal(syncs, 1)
+  hold = true
+  await act(async () => {
+    for (let index = 0; index < 3; index++) {
+      dom.window.dispatchEvent(new dom.window.Event('focus'))
+      dom.window.dispatchEvent(new dom.window.Event('online'))
+      dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'))
+    }
+    await tick()
+  })
+  assert.equal(syncs, 2, 'duplicate background events must not launch more database snapshots')
+  assert.equal(pending[0].signal.aborted, false)
+  await act(async () => { dom.window.dispatchEvent(new dom.window.Event('drivepulse:mutation-succeeded')); await tick() })
+  assert.equal(syncs, 3, 'a completed mutation must fetch a newer snapshot')
+  assert.equal(pending[0].signal.aborted, true)
+  await act(async () => {
+    pending[1].resolve(Response.json(snapshot(user)))
+    pending[0].resolve(Response.json(snapshot()))
+    await tick(); await tick()
+  })
+  assert.equal(sessionState.userId, user.id, 'the stale aborted snapshot must not replace fresh session data')
+  assert.ok(container.querySelector('.sidebar-logout'))
+})
+
 const inspectionVehicle = { id: 'mercedes-c', name: 'Mercedes-Benz C-Class', fleetCode: 'CAR-00002', plate: 'NDP 1002', version: 1, odometer: 1500 }
 async function changeField(name, value) {
   await act(async () => {
@@ -186,9 +225,9 @@ async function changeField(name, value) {
     await tick()
   })
 }
-async function submitInspectionStep() {
+async function submitForm() {
   await act(async () => {
-    const form = container.querySelector('form'), submitter = form.querySelector('button[type=submit]')
+    const form = container.querySelector('form'), submitter = form.querySelector('button[type=submit], button:not([type])')
     form.dispatchEvent(new dom.window.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter }))
     await tick()
   })
@@ -228,14 +267,14 @@ test('post-return inspection saves the automatically linked trip and mileage wit
   assert.doesNotMatch(text(), /DP-ALREADY-REVIEWED/)
   for (const [name, value] of Object.entries({ driverVerification: 'matched', odometer: '2500', fuelLevel: '100', frontLeft: '32', frontRight: '32', rearLeft: '32', rearRight: '32' })) await changeField(name, value)
   assert.match(text(), /1,000 km used/)
-  await submitInspectionStep()
+  await submitForm()
   for (const name of ['tyres', 'controls', 'exterior', 'interior', 'fuel']) await changeField(name, '1')
   await changeField('cleanliness', 'Clean')
   await act(async () => [...container.querySelectorAll('button')].find(button => button.textContent.includes('Back to vehicle details')).click())
   assert.equal(container.querySelector('[name=odometer]').value, '2500')
-  await submitInspectionStep()
+  await submitForm()
   assert.equal(container.querySelector('[name=tyres]').value, '1')
-  await submitInspectionStep()
+  await submitForm()
   await changeField('damageStatus', 'no')
   await changeField('scratches', 'No visible damage.')
   for (const view of ['exterior', 'interior']) {
@@ -246,9 +285,9 @@ test('post-return inspection saves the automatically linked trip and mileage wit
       await tick()
     })
   }
-  await submitInspectionStep()
+  await submitForm()
   await changeField('outcome', 'approved')
-  await submitInspectionStep()
+  await submitForm()
   assert.equal(saved.length, 1)
   assert.equal(saved[0].bookingId, trip.id)
   assert.equal(saved[0].version, trip.version)
@@ -269,4 +308,159 @@ test('changing vehicles automatically switches trip context instead of retaining
   assert.match(text(), /5,500/)
   assert.doesNotMatch(text(), /DP-FIRST/)
   assert.equal(container.querySelector('[name=reservationId]'), null)
+})
+
+test('login accepts edited credentials and releases its inputs after network and service errors', async t => {
+  const attempts = [], signedIn = []
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    assert.equal(path, '/api/auth/login')
+    attempts.push(JSON.parse(options.body))
+    if (attempts.length === 1) throw new TypeError('Simulated network interruption')
+    if (attempts.length === 2) return Response.json({ error: 'Service is restarting. Please retry.' }, { status: 503 })
+    return Response.json({ user })
+  })
+  const props = { mode: 'login', onSuccess: account => signedIn.push(account) }
+  await render(AuthPage, props)
+  await changeField('username', 'incorrect@example.com')
+  await changeField('username', '')
+  await changeField('username', 'client@example.com')
+  await changeField('password', 'TypedPassword!')
+  await act(async () => container.querySelector('[aria-label="Show password"]').click())
+  assert.equal(container.querySelector('[name=password]').type, 'text')
+  assert.equal(container.querySelector('[name=password]').value, 'TypedPassword!')
+  await act(async () => container.querySelector('[aria-label="Hide password"]').click())
+  await render(AuthPage, { ...props, emailDelivery: true })
+  await submitForm()
+  assert.match(text(), /could not connect to DrivePulse/)
+  assert.equal(container.querySelector('[name=username]').matches(':disabled'), false)
+  assert.equal(container.querySelector('[name=password]').value, 'TypedPassword!')
+  await changeField('password', 'RevisedPassword!')
+  await submitForm()
+  assert.match(text(), /Service is restarting/)
+  assert.equal(container.querySelector('button[type=submit]').disabled, false)
+  await submitForm()
+  assert.deepEqual(attempts, [
+    { username: 'client@example.com', password: 'TypedPassword!' },
+    { username: 'client@example.com', password: 'RevisedPassword!' },
+    { username: 'client@example.com', password: 'RevisedPassword!' },
+  ])
+  assert.equal(signedIn[0].id, user.id)
+  assert.doesNotMatch(text(), /could not connect|Service is restarting|session expired/i)
+})
+
+test('registration preserves typed profile fields while address dropdowns load and reset dependent selections', async t => {
+  const submissions = []
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    if (path === '/api/geography/regions') return Response.json([{ code: '1300000000', name: 'Test Region' }])
+    if (path === '/api/geography/regions/1300000000/cities') return Response.json([
+      { code: '1300100000', name: 'Test City A', postalCodes: ['1500'] },
+      { code: '1300200000', name: 'Test City B', postalCodes: ['1600'] },
+    ])
+    if (path === '/api/geography/cities/1300100000/barangays') return Response.json([{ code: '1300100001', name: 'Test Barangay A' }])
+    if (path === '/api/geography/cities/1300200000/barangays') return Response.json([{ code: '1300200001', name: 'Test Barangay B' }])
+    assert.equal(path, '/api/auth/signup')
+    submissions.push(JSON.parse(options.body))
+    return Response.json({ verificationRequired: true, email: 'ana@example.com', retryAfterSeconds: 60 })
+  })
+  await render(AuthPage, { mode: 'signup', emailDelivery: true })
+  for (const [name, value] of Object.entries({ firstName: 'Ana', middleName: 'Maria', lastName: 'Santos', phone: '+63 912 345 6789', street: '24 Test Street', email: 'ana@example.com', password: 'TypedPassword!', confirm: 'TypedPassword!' })) await changeField(name, value)
+  assert.equal(container.querySelector('[name=phone]').placeholder, '+63 9XX XXX XXXX')
+  await changeField('regionCode', '1300000000')
+  await flush()
+  await changeField('cityCode', '1300100000')
+  await flush()
+  assert.equal(container.querySelector('[name=postalCode]').value, '1500')
+  await changeField('barangayCode', '1300100001')
+  await changeField('cityCode', '1300200000')
+  await flush()
+  assert.equal(container.querySelector('[name=barangayCode]').value, '', 'a city change must clear the previous barangay')
+  assert.equal(container.querySelector('[name=postalCode]').value, '1600')
+  await submitForm()
+  assert.equal(submissions.length, 0, 'incomplete addresses must not be submitted')
+  await changeField('barangayCode', '1300200001')
+  await changeField('postalCode', 'custom')
+  await changeField('postalCode', '1601')
+  await render(AuthPage, { mode: 'signup', emailDelivery: true, sessionNotice: '' })
+  assert.equal(container.querySelector('[name=street]').value, '24 Test Street')
+  assert.equal(container.querySelector('[name=email]').value, 'ana@example.com')
+  await submitForm()
+  assert.equal(submissions.length, 1)
+  assert.deepEqual(submissions[0], { email: 'ana@example.com', password: 'TypedPassword!', firstName: 'Ana', middleName: 'Maria', lastName: 'Santos', phone: '+63 912 345 6789', street: '24 Test Street', city: 'Test City B', postalCode: '1601', regionCode: '1300000000', cityCode: '1300200000', barangayCode: '1300200001', role: 'client' })
+  assert.match(text(), /Verify your email/)
+})
+
+test('walk-in text, dates and branch selections survive refresh and a failed save before retry', async t => {
+  const attempts = [], created = []
+  const branches = [{ id: 'branch-one', name: 'Main Branch' }, { id: 'branch-two', name: 'Airport Branch' }]
+  fleetData.syncVehicles([{ ...inspectionVehicle, rate: 3500 }])
+  t.after(registerConfirmationHandler(async () => true))
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    if (path === '/api/locations') return Response.json(branches)
+    assert.equal(path, '/api/agent/bookings')
+    attempts.push(JSON.parse(options.body))
+    return attempts.length === 1 ? Response.json({ error: 'Reservation service is busy. Retry shortly.' }, { status: 503 }) : Response.json({ id: 'DP-INPUT-TEST' })
+  })
+  const props = { availability: [], onClose() {}, onCreated: booking => created.push(booking) }
+  await render(WalkInReservation, props)
+  assert.equal(container.querySelector('[name=pickup]').tagName, 'SELECT')
+  for (const [name, value] of Object.entries({ name: 'Ana Santos', phone: '+63 912 345 6789', pickup: 'Main Branch', dropoff: 'Airport Branch', note: 'Please confirm the pick-up details.', startTime: '11:30', endTime: '12:30' })) await changeField(name, value)
+  await act(async () => container.querySelector('[name=customerConfirmed]').click())
+  assert.equal(container.querySelector('.form-actions button:not([type])').disabled, true, 'email remains required')
+  await changeField('email', 'incorrect')
+  assert.equal(container.querySelector('.form-actions button:not([type])').disabled, true)
+  await changeField('email', 'ana@example.com')
+  await render(WalkInReservation, { ...props, availability: [] })
+  assert.equal(container.querySelector('[name=name]').value, 'Ana Santos')
+  assert.equal(container.querySelector('[name=pickup]').value, 'Main Branch')
+  assert.equal(container.querySelector('.form-actions button:not([type])').disabled, false)
+  await submitForm()
+  assert.match(text(), /Reservation service is busy/)
+  assert.equal(container.querySelector('[name=name]').matches(':disabled'), false)
+  assert.equal(container.querySelector('[name=note]').value, 'Please confirm the pick-up details.')
+  await changeField('phone', '+63 917 000 1234')
+  await submitForm()
+  assert.equal(attempts.length, 2)
+  assert.deepEqual(attempts[1].renter, { name: 'Ana Santos', email: 'ana@example.com', phone: '+63 917 000 1234' })
+  assert.equal(attempts[1].pickup, 'Main Branch')
+  assert.equal(attempts[1].dropoff, 'Airport Branch')
+  assert.equal(attempts[1].startTime, '11:30')
+  assert.equal(attempts[1].endTime, '12:30')
+  assert.equal(attempts[1].customerConfirmed, true)
+  assert.equal(created[0].id, 'DP-INPUT-TEST')
+})
+
+test('fleet vehicle controls allow clearing numbers, reset model with brand and submit current values', async t => {
+  const saved = [], notices = []
+  fleetData.syncVehicles([])
+  t.after(registerConfirmationHandler(async () => true))
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    assert.equal(path, '/api/manager/vehicles')
+    saved.push(JSON.parse(options.body))
+    return Response.json({ id: 'vehicle-input-test' })
+  })
+  await render(AddVehicleModal, { onClose() {}, onDone: notice => notices.push(notice) })
+  assert.equal(container.querySelector('[name=model]').disabled, true)
+  await changeField('brand', 'Toyota')
+  await changeField('model', 'Camry')
+  await changeField('brand', 'Honda')
+  assert.equal(container.querySelector('[name=model]').value, '')
+  await changeField('model', 'Civic')
+  await changeField('plate', 'XYZ 9876')
+  await changeField('fleetCode', 'CAR-INPUT-TEST')
+  await changeField('rate', '')
+  assert.equal(container.querySelector('button[type=submit]').disabled, true)
+  await changeField('rate', '5200.50')
+  await changeField('mileage', '2500')
+  await changeField('seats', '4')
+  await changeField('tankCapacity', '45')
+  await submitForm()
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].brand, 'Honda')
+  assert.equal(saved[0].model, 'Civic')
+  assert.equal(saved[0].plate, 'XYZ 9876')
+  assert.equal(saved[0].rate, 5200.5)
+  assert.equal(saved[0].mileage, 2500)
+  assert.equal(saved[0].seats, 4)
+  assert.equal(saved[0].tankCapacity, 45)
+  assert.match(notices[0], /Honda Civic/)
 })
