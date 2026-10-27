@@ -1,6 +1,6 @@
 import useDraftState from '../../hooks/useDraftState.js'
 import { useState, useRef, useEffect } from 'react'
-import { initialDates, requiredDocuments, rentalPeriodError, vehicles as baseVehicles, isAvailable, getAvailabilityReason, prettyDate, money } from '../../data.js'
+import { initialDates, requiredDocuments, rentalPeriodError, vehicles as baseVehicles, isAvailable, getAvailabilityReason, canChooseBookingDates, prettyDate, money } from '../../data.js'
 import { api, fetchDocument } from '../../api.js'
 import { downloadFile } from '../../storage.js'
 import VehicleCard from '../../components/fleet/VehicleCard.jsx'
@@ -95,7 +95,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
   const card = vehicle => {
     const reason = getAvailabilityReason(vehicle.id, dates, availability)
     const available = reason === ''
-    return <VehicleCard key={vehicle.id} vehicle={vehicle} available={available} unavailabilityReason={reason} onDetails={() => setModal({ type: 'vehicle', vehicle, available, reason })} onReserve={() => openBooking(vehicle)} />
+    return <VehicleCard key={vehicle.id} vehicle={vehicle} available={available} canChooseDates={canChooseBookingDates(vehicle.id, availability)} unavailabilityReason={reason} onDetails={() => setModal({ type: 'vehicle', vehicle, available, reason })} onReserve={() => openBooking(vehicle)} />
   }
 
   return <div className="app-shell">
@@ -129,6 +129,7 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
     {modal?.type === 'vehicle' && (() => {
       const reason = getAvailabilityReason(modal.vehicle.id, dates, availability)
       const isCarAvailable = reason === ''
+      const canChooseDates = canChooseBookingDates(modal.vehicle.id, availability)
       return <Modal title={modal.vehicle.name} eyebrow={modal.vehicle.label.toUpperCase()} wide onClose={() => setModal(null)}>
         <div className="vehicle-detail-layout">
           <img className="vehicle-detail-image" src={modal.vehicle.image} alt={modal.vehicle.name} />
@@ -162,10 +163,10 @@ export default function ClientPortal({ user, workspace, availability, rates = {}
             </div>
             <button
               className="button button-dark full-width"
-              disabled={user && !isCarAvailable}
+              disabled={Boolean(user) && !isCarAvailable && !canChooseDates}
               onClick={() => user ? openBooking(modal.vehicle) : onAuthenticate('fleet')}
             >
-              {user ? (isCarAvailable ? 'Make this ride yours' : `Unavailable: ${reason}`) : 'Sign in to reserve this ride'}
+              {user ? (isCarAvailable ? 'Make this ride yours' : canChooseDates ? 'Choose other dates' : `Unavailable: ${reason}`) : 'Sign in to reserve this ride'}
               <Icon name="arrow" size={18} />
             </button>
             <p className="small muted">Selected dates: {prettyDate(dates.start)} – {prettyDate(dates.end)}</p>

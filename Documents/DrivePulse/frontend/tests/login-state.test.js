@@ -212,9 +212,9 @@ test('focus and visibility bursts share one sync while a saved change requests f
 })
 
 const inspectionVehicle = { id: 'mercedes-c', name: 'Mercedes-Benz C-Class', fleetCode: 'CAR-00002', plate: 'NDP 1002', version: 1, odometer: 1500 }
-async function changeField(name, value) {
+async function changeField(name, value, scope = container) {
   await act(async () => {
-    const field = container.querySelector(`[name="${name}"]`)
+    const field = scope.querySelector(`[name="${name}"]`)
     assert.ok(field, `field ${name} must exist`)
     if (field.tagName === 'SELECT') { field.value = value; field.dispatchEvent(new dom.window.Event('change', { bubbles: true })) }
     else {
@@ -225,9 +225,9 @@ async function changeField(name, value) {
     await tick()
   })
 }
-async function submitForm() {
+async function submitForm(form = container.querySelector('form')) {
   await act(async () => {
-    const form = container.querySelector('form'), submitter = form.querySelector('button[type=submit], button:not([type])')
+    const submitter = form.querySelector('button[type=submit], button:not([type])')
     form.dispatchEvent(new dom.window.SubmitEvent('submit', { bubbles: true, cancelable: true, submitter }))
     await tick()
   })
@@ -463,4 +463,93 @@ test('fleet vehicle controls allow clearing numbers, reset model with brand and 
   assert.equal(saved[0].seats, 4)
   assert.equal(saved[0].tankCapacity, 45)
   assert.match(notices[0], /Honda Civic/)
+})
+
+test('a currently rented car opens date selection from its card and details and accepts a free future period', async t => {
+  const car = { id: 'bmw-3', name: 'BMW 3 Series', rate: 4200, fleetCode: 'CAR-00001', plate: 'NDP 1001', status: 'Rented' }
+  const active = { id: 'DP-ACTIVE', vehicleId: car.id, status: 'On Rental', start: fleetData.dateISO(-1), startTime: '10:00', end: fleetData.dateISO(6), endTime: '10:00' }
+  const state = snapshot(user)
+  state.vehicles = [car, { ...inspectionVehicle, status: 'Under Inspection' }]
+  state.availability = [active, { vehicleId: inspectionVehicle.id, status: 'Under Inspection', blocked: true }]
+  const branches = [{ id: 'branch-one', name: 'Main Branch' }, { id: 'branch-two', name: 'Airport Branch' }]
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    if (path === '/api/sync') return Response.json(state)
+    if (path === '/api/locations') return Response.json(branches)
+    if (path === '/api/availability') return Response.json(state.availability)
+    assert.equal(path, '/api/bookings/agreement-preview')
+    const dates = JSON.parse(options.body)
+    const problem = fleetData.getAvailabilityReason(car.id, dates, state.availability)
+    if (problem) return Response.json({ error: problem }, { status: 409 })
+    return Response.json({ renter: user, vehicle: car, schedule: dates, quote: { dailyRate: 4200, days: 1, rental: 4200, deposit: 5000, total: 9200 }, terms: 'Test rental terms', digest: 'test-preview' })
+  })
+  dom.window.history.replaceState({}, '', '/#overview')
+  await render(App)
+  const select = container.querySelector('[aria-label="Choose other dates BMW 3 Series"]')
+  assert.ok(select)
+  assert.equal(select.disabled, false, 'a current rental must not disable choosing a future period')
+  assert.equal(container.querySelector('[aria-label="Reserve Mercedes-Benz C-Class"]').disabled, true, 'an undated safety hold still needs clearance')
+  await act(async () => { select.click(); await tick() })
+  await flush()
+  assert.ok(container.querySelector('.booking-steps'))
+  assert.equal(container.querySelector('.booking-form button[type=submit]').disabled, true, 'the conflicting period cannot proceed')
+  const bookingForm = container.querySelector('.booking-form')
+  await changeField('pickup', 'Main Branch', bookingForm)
+  await changeField('dropoff', 'Airport Branch', bookingForm)
+  const pickup = bookingForm.querySelector('[name=start]').closest('.booking-date-picker')
+  await act(async () => pickup.querySelector('button').click())
+  const reserved = pickup.querySelector(`[aria-label^="${fleetData.dateISO(2)}"]`)
+  assert.ok(reserved)
+  assert.equal(reserved.disabled, true, 'reserved times remain locked')
+
+  async function chooseDate(name, day) {
+    const picker = bookingForm.querySelector(`[name=${name}]`).closest('.booking-date-picker')
+    if (picker.querySelector('button').getAttribute('aria-expanded') !== 'true') await act(async () => picker.querySelector('button').click())
+    for (let month = 0; month < 3; month++) {
+      const option = picker.querySelector(`[aria-label="${day}"]`)
+      if (option && !option.disabled) { await act(async () => option.click()); await flush(); return }
+      await act(async () => picker.querySelector('[aria-label="Next month"]').click())
+    }
+    assert.fail(`Free date ${day} must be selectable`)
+  }
+  await chooseDate('start', fleetData.dateISO(7))
+  await chooseDate('end', fleetData.dateISO(8))
+  assert.equal(container.querySelector('.booking-form button[type=submit]').disabled, false)
+  await submitForm(bookingForm)
+  assert.match(text(), /A little paperwork/)
+  await act(async () => container.querySelector('[aria-label="Close dialog"]').click())
+  await act(async () => container.querySelector('.vehicle-name').click())
+  const detailsAction = [...container.querySelectorAll('dialog button')].find(button => button.textContent.includes('Choose other dates'))
+  assert.ok(detailsAction)
+  assert.equal(detailsAction.disabled, false)
+  await act(async () => { detailsAction.click(); await tick() })
+  assert.ok(container.querySelector('.booking-steps'), 'vehicle details must also open the booking flow')
+})
+
+test('walk-in reservations keep a rented vehicle selectable and enable saving after choosing free dates', async t => {
+  const car = { ...inspectionVehicle, rate: 3500, status: 'Rented' }
+  fleetData.syncVehicles([car])
+  const active = { id: 'DP-ACTIVE', vehicleId: car.id, status: 'On Rental', start: fleetData.dateISO(-1), end: fleetData.dateISO(6), startTime: '10:00', endTime: '10:00' }
+  const saved = []
+  t.after(registerConfirmationHandler(async () => true))
+  t.mock.method(globalThis, 'fetch', async (path, options) => {
+    if (path === '/api/locations') return Response.json([{ id: 'branch-one', name: 'Main Branch' }])
+    assert.equal(path, '/api/agent/bookings')
+    saved.push(JSON.parse(options.body))
+    return Response.json({ id: 'DP-FUTURE' })
+  })
+  await render(WalkInReservation, { availability: [active], onClose() {}, onCreated() {} })
+  const option = container.querySelector(`[name=vehicleId] option[value="${car.id}"]`)
+  assert.ok(option)
+  assert.equal(option.disabled, false)
+  for (const [name, value] of Object.entries({ name: 'Future Renter', email: 'future@example.com', phone: '+63 912 345 6789', pickup: 'Main Branch', dropoff: 'Main Branch' })) await changeField(name, value)
+  await act(async () => container.querySelector('[name=customerConfirmed]').click())
+  assert.equal(container.querySelector('.form-actions button:not([type])').disabled, true)
+  await changeField('start', fleetData.dateISO(7))
+  await changeField('end', fleetData.dateISO(8))
+  assert.equal(container.querySelector('.form-actions button:not([type])').disabled, false)
+  await submitForm()
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].vehicleId, car.id)
+  assert.equal(saved[0].start, fleetData.dateISO(7))
+  assert.equal(saved[0].end, fleetData.dateISO(8))
 })

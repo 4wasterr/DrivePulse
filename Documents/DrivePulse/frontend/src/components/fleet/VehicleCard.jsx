@@ -1,7 +1,8 @@
 import Icon from '../ui/Icon.jsx'
 import { money } from '../../data.js'
 
-export default function VehicleCard({ vehicle, onDetails, onReserve, available, unavailabilityReason = '', actionLabel = 'Reserve' }) {
+export default function VehicleCard({ vehicle, onDetails, onReserve, available, canChooseDates = false, unavailabilityReason = '', actionLabel = 'Reserve' }) {
+  const bookingLabel = !available && canChooseDates ? 'Choose other dates' : actionLabel
   return <article className="vehicle-card">
     <div className="vehicle-image">
       <img src={vehicle.image} alt={vehicle.name} loading="lazy" />
@@ -19,7 +20,7 @@ export default function VehicleCard({ vehicle, onDetails, onReserve, available, 
       {!available && unavailabilityReason && (
         <div className="vehicle-unavailable-banner">
           <Icon name="info" size={13} />
-          <span>{unavailabilityReason}</span>
+          <span>{unavailabilityReason}{canChooseDates && ' Choose other dates to check availability.'}</span>
         </div>
       )}
       <div className="vehicle-specs">
@@ -29,7 +30,7 @@ export default function VehicleCard({ vehicle, onDetails, onReserve, available, 
       </div>
       <div className="vehicle-card-footer">
         <span className="vehicle-price">{money(vehicle.rate)}<small> / day</small></span>
-        <button className="round-arrow" onClick={onReserve} disabled={actionLabel === 'Reserve' && !available} title={!available ? unavailabilityReason : `${actionLabel} ${vehicle.name}`} aria-label={`${actionLabel} ${vehicle.name}`}><Icon name="diagonal" size={19} /></button>
+        <button className="round-arrow" onClick={onReserve} disabled={actionLabel === 'Reserve' && !available && !canChooseDates} title={!available && !canChooseDates ? unavailabilityReason : `${bookingLabel} for ${vehicle.name}`} aria-label={`${bookingLabel} ${vehicle.name}`}><Icon name="diagonal" size={19} /></button>
       </div>
     </div>
   </article>

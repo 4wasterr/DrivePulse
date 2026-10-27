@@ -104,3 +104,9 @@ export function getAvailabilityReason(vehicleId, dates, bookings = []) {
 export function isAvailable(vehicleId, dates, bookings = []) {
   return getAvailabilityReason(vehicleId, dates, bookings) === ''
 }
+
+// A current or future reservation does not prevent choosing a different period.
+// Undated safety holds need clearance before any new period can be offered.
+export function canChooseBookingDates(vehicleId, bookings = []) {
+  return !bookings.some(b => b.vehicleId === vehicleId && b.blocked && !b.start && !b.end && !b.archivedAt && !['Completed', 'Cancelled'].includes(b.status))
+}

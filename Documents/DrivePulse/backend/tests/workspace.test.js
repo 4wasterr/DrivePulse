@@ -743,6 +743,29 @@ test('rental contracts show the recorded plate and distinguish renter submission
   assert.match(await open(missing.id), /<dt>License Plate Number<\/dt><dd>Not recorded<\/dd>/);
 });
 
+test('an on-rental car accepts future client and walk-in bookings outside its reserved intervals', async t => {
+  const f = await fixture(t), active = await f.book();
+  active.status = 'On Rental'; active.start = f.date(-1); active.end = f.date(2); active.dispatchedAt = new Date().toISOString();
+  await f.db.prepare('UPDATE bookings SET payload=? WHERE id=?').run(JSON.stringify(active), active.id);
+  assert.equal((await f.operations()).fleet.find(vehicle => vehicle.id === active.vehicleId).status, 'Rented');
+  const renter = { name: 'Future Renter', email: 'future@example.com', phone: '09171234567' };
+  for (const [path, cookie] of [['/bookings', f.client.cookie], ['/agent/bookings', f.agent.cookie]]) {
+    const overlapping = await f.request(path, { method: 'POST', cookie, body: { ...f.dates(active.vehicleId, 1, 3), renter } });
+    assert.equal(overlapping.status, 409, JSON.stringify(overlapping.data));
+  }
+  const dates = f.dates(active.vehicleId, 2, 3);
+  const preview = await f.request('/bookings/agreement-preview', { method: 'POST', cookie: f.client.cookie, body: dates });
+  assert.equal(preview.status, 200, JSON.stringify(preview.data));
+  const client = await f.request('/bookings', { method: 'POST', cookie: f.client.cookie, body: { ...dates, agreed: true, agreementPreviewDigest: preview.data.digest } });
+  assert.equal(client.status, 201, JSON.stringify(client.data));
+  assert.equal(client.data.start, active.end, 'a future pick-up can start at the current rental return time');
+  const reserve = (start, end) => f.request('/agent/bookings', { method: 'POST', cookie: f.agent.cookie, body: { ...f.dates(active.vehicleId, start, end), renter } });
+  assert.equal((await reserve(10, 12)).status, 201, 'a reserved car can receive another future interval');
+  assert.equal((await reserve(4, 5)).status, 201, 'a gap between reserved intervals remains bookable');
+  assert.equal((await reserve(11, 13)).status, 409, 'future reservation overlaps still fail');
+  assert.equal((await reserve(5, 10)).status, 201, 'exact return and pick-up boundaries remain free');
+});
+
 test('renter extensions wait for staff approval and only approved requests update the contract', async t => {
   const f = await fixture(t); let b = await f.book();
   b.status = 'Ready for Dispatch';
