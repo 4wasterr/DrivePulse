@@ -228,7 +228,10 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       if (input.conditionRatings && input.checks && inspectionChecklist.some(({ key }) => normalizeConditions(input.checks, inspectionChecklist)[key] !== checks[key])) D.fail('Condition ratings and condition statuses do not match.');
       const conditionError = conditionProblem(checks, inspectionChecklist, input.outcome);
       if (conditionError) D.fail(conditionError);
-      if (input.driverVerification !== (input.type === 'clearance' ? 'not-applicable' : 'matched')) D.fail('Complete individual / driver verification before the condition record.');
+      // Identity review belongs to the Booking Agent's release checks. Do not
+      // require the removed mechanic selector or invent a driver match.
+      const driverVerification = input.driverVerification || (input.type === 'clearance' ? 'not-applicable' : null);
+      if (driverVerification !== null && driverVerification !== (input.type === 'clearance' ? 'not-applicable' : 'matched')) D.fail('Invalid driver verification result.');
       if (!['Clean', 'Needs cleaning', 'Damaged'].includes(input.cleanliness)) D.fail('Record the interior cleanliness.');
       if (!['approved', 'unsafe'].includes(input.outcome)) D.fail('Choose a safe or unsafe inspection outcome.');
       if (input.outcome === 'approved' && input.cleanliness !== 'Clean') D.fail('Clean or repair the interior before approving the vehicle.');
@@ -243,7 +246,7 @@ function createFleet({ db, allBookings, rawBookings, getBooking, saveBooking, tr
       const damageFlag = input.damageFlag === true || input.outcome === 'unsafe' || input.cleanliness === 'Damaged' || Object.values(checks).some(value => ['Damaged', 'Needs Repair'].includes(value));
       const cleanReturn = input.type === 'post-return' && input.outcome === 'approved' && input.cleanliness === 'Clean' && !damageFlag && fuelLevel >= 100;
       const inspectedVehicle = (await fleet()).find(v => v.id === s.id);
-      const report = { id: randomUUID(), vehicle: { id: s.id, name: inspectedVehicle.name, fleetCode: inspectedVehicle.fleetCode, plate: inspectedVehicle.plate || '' }, vehicleId: s.id, bookingId: b?.id || null, type: input.type, status: input.outcome, role: 'mechanic', odometer, fuelLevel, tirePressure, cleanliness: input.cleanliness, damageFlag, cleanReturn, scratches: D.text(input.scratches, 'Exterior condition / scratches', 1500), note: D.text(input.note, 'Inspection notes', 1500, input.outcome === 'unsafe'), checks, driverVerification: input.driverVerification || null, driverName: b?.renter?.name || null, photos, by: req.user.name, at: stamp() };
+      const report = { id: randomUUID(), vehicle: { id: s.id, name: inspectedVehicle.name, fleetCode: inspectedVehicle.fleetCode, plate: inspectedVehicle.plate || '' }, vehicleId: s.id, bookingId: b?.id || null, type: input.type, status: input.outcome, role: 'mechanic', odometer, fuelLevel, tirePressure, cleanliness: input.cleanliness, damageFlag, cleanReturn, scratches: D.text(input.scratches, 'Exterior condition / scratches', 1500), note: D.text(input.note, 'Inspection notes', 1500, input.outcome === 'unsafe'), checks, driverVerification, driverName: b?.renter?.name || null, photos, by: req.user.name, at: stamp() };
       Object.assign(report, { conditionRatings: normalizeRatings(checks, inspectionChecklist), mechanicId: req.user.id, dispatchDecision: input.outcome === 'approved' ? 'Approved by mechanic' : 'Do not dispatch' });
       if (tripMileage !== null) Object.assign(report, { dispatchOdometer, mileageConsumption: tripMileage });
       if (b) {

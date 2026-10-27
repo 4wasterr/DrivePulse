@@ -47,7 +47,6 @@ function InspectionChecklist({ vehicle, type, booking, mechanic, details, busy, 
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(0)
   const [readings, setReadings] = useDraftState(scope, 'readings', { odometer: '', fuelLevel: '', frontLeft: '', frontRight: '', rearLeft: '', rearRight: '' })
-  const [driverVerification, setDriverVerification] = useDraftState(scope, 'driverVerification', '')
   const [ratings, setRatings] = useDraftState(scope, 'ratings', {})
   const [cleanliness, setCleanliness] = useDraftState(scope, 'cleanliness', '')
   const [damageStatus, setDamageStatus] = useDraftState(scope, 'damageStatus', '')
@@ -97,7 +96,7 @@ function InspectionChecklist({ vehicle, type, booking, mechanic, details, busy, 
         vehicleId: vehicle.id, vehicleVersion: vehicle.version, type, bookingId: type === 'clearance' ? null : booking?.id, version: booking?.version,
         odometer: Number(readings.odometer), fuelLevel: Number(readings.fuelLevel),
         tirePressure: Object.fromEntries(corners.map(([key]) => [key, Number(readings[key])])),
-        cleanliness, scratches, note, outcome, damageFlag: damageStatus === 'yes', conditionRatings: ratings, photos: Object.values(photos), driverVerification
+        cleanliness, scratches, note, outcome, damageFlag: damageStatus === 'yes', conditionRatings: ratings, photos: Object.values(photos)
       } })
       clearDraftScope(owner, scope)
       await onDone(outcome === 'unsafe' ? 'Inspection saved. Do not dispatch; vehicle is Out of Service.' : result.cleanReturn ? 'Inspection and mileage saved. Clean return verified and Security Deposit release recorded.' : 'Condition ratings and mechanic dispatch approval saved. Booking Agent release checks still apply.')
@@ -112,8 +111,7 @@ function InspectionChecklist({ vehicle, type, booking, mechanic, details, busy, 
       {step === 0 && <>
         {details}
         <VehicleIdentity vehicle={vehicle} />
-        {type !== 'clearance' && <p className="info-note">Trip: {booking.id} · Driver: {booking.driverName || booking.renter?.name || 'Named booking driver'} · Agent ID review: {booking.verificationStatus || 'Pending review'}. Match the driver and presented identification to the trip.</p>}
-        <label className="form-field">{type === 'clearance' ? 'Technician verification' : 'Driver / identification match'}<ValidatedField as="select" name="driverVerification" required value={driverVerification} onChange={event => setDriverVerification(event.target.value)}><option value="" disabled>Select verification result</option><option value={type === 'clearance' ? 'not-applicable' : 'matched'}>{type === 'clearance' ? 'Vehicle identity verified for safety clearance' : 'Individual and identification match the named driver'}</option></ValidatedField></label>
+        {type !== 'clearance' && <p className="info-note">Trip: {booking.id} · Driver: {booking.driverName || booking.renter?.name || 'Named booking driver'} · Agent ID review: {booking.verificationStatus || 'Pending review'}.</p>}
         <h4>Measured readings</h4>
         <div className="form-grid">
           <label className="form-field">{type === 'post-return' ? 'Return odometer (km)' : 'Odometer (km)'}<ValidatedField name="odometer" type="number" required min={Math.max(vehicle.odometer ?? 0, type === 'post-return' ? dispatchOdometer ?? 0 : 0)} max="10000000" step="0.01" placeholder={vehicle.odometer == null ? 'Read at the vehicle' : `Last reading: ${vehicle.odometer}`} value={readings.odometer} onChange={event => updateReading('odometer', event.target.value)} /></label>

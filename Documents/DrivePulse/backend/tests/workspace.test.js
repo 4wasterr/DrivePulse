@@ -323,7 +323,9 @@ test('maintenance transitions retain invoices and require a fresh clearance befo
   m = (await update({ status: 'Completed', cost: 1250.5, reference: 'INV-101' })).data;
   assert.equal(m.cost, 1250.5); assert.equal(m.reference, 'INV-101');
   assert.equal((await f.operations()).fleet.find(v => v.id === 'bmw-3').status, 'Under Inspection');
-  assert.equal((await f.inspect({ vehicleId: 'bmw-3' }, 'clearance')).status, 201);
+  const cleared = await f.inspect({ vehicleId: 'bmw-3' }, 'clearance', { driverVerification: undefined });
+  assert.equal(cleared.status, 201, JSON.stringify(cleared.data));
+  assert.equal(cleared.data.driverVerification, 'not-applicable');
   assert.equal((await f.operations()).fleet.find(v => v.id === 'bmw-3').status, 'Available');
   const report = await f.request(`/manager/analytics?start=${f.date(-1)}&end=${f.date(0)}`, { cookie: f.manager.cookie });
   assert.equal(report.status, 200); assert.equal(report.data.maintenanceCost, 1250.5); assert.equal(report.data.maintenance.length, 1);
@@ -821,10 +823,9 @@ test('extension approval rechecks newly booked conflicts and rejection preserves
 test('dropdown inspection statuses persist in vehicle history and unsafe checkpoints cannot be approved', async t => {
   const f = await fixture(t); const b = await f.book();
   const checks = { tyres: 'Good', controls: 'Good', exterior: 'Fair', interior: 'Good', fuel: 'Good' };
-  assert.equal((await f.inspect(b, 'pre-dispatch', { checks, driverVerification: null })).status, 400);
   for (const bad of [{ ...checks, tyres: 'N/A' }, { ...checks, exterior: 'Damaged' }, { ...checks, interior: 'unknown' }]) assert.equal((await f.inspect(b, 'pre-dispatch', { checks: bad, driverVerification: 'matched' })).status, 400);
-  const saved = await f.inspect(b, 'pre-dispatch', { checks, driverVerification: 'matched' });
-  assert.equal(saved.status, 201, JSON.stringify(saved.data)); assert.deepEqual(saved.data.checks, checks); assert.equal(saved.data.driverVerification, 'matched');
+  const saved = await f.inspect(b, 'pre-dispatch', { checks, driverVerification: undefined });
+  assert.equal(saved.status, 201, JSON.stringify(saved.data)); assert.deepEqual(saved.data.checks, checks); assert.equal(saved.data.driverVerification, null);
   const operations = await f.operations();
   assert.equal(operations.inspections[0].id, saved.data.id); assert.deepEqual(operations.inspections[0].checks, checks);
   assert.equal(operations.fleet.find(v => v.id === b.vehicleId).lastInspection, saved.data.id);

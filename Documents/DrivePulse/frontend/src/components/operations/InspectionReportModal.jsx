@@ -12,7 +12,7 @@ export default function ReportPreview({ report: r, onClose, onBack }) {
       <div className="staff-report-readings"><div><span>Odometer</span><strong>{r.odometer.toLocaleString()} km</strong></div><div><span>Fuel / battery</span><strong>{r.fuelLevel}%</strong></div></div>
       {r.mileageConsumption != null && <section className="mileage-summary" aria-label="Trip mileage calculation"><h4>Total mileage consumption</h4><p>Dispatch: {r.dispatchOdometer.toLocaleString()} km · Return: {r.odometer.toLocaleString()} km</p><strong>{r.mileageConsumption.toLocaleString()} km used</strong></section>}
       <h4>Tire pressure (PSI)</h4><p>Front L {r.tirePressure.frontLeft} · Front R {r.tirePressure.frontRight} · Rear L {r.tirePressure.rearLeft} · Rear R {r.tirePressure.rearRight}</p>
-      <p>{r.driverVerification === 'matched' ? `Driver matched: ${r.driverName || 'Named reservation driver'}` : r.driverVerification === 'not-applicable' ? 'Vehicle identity verified for safety clearance' : 'Driver verification recorded under the earlier inspection workflow'}</p>
+      {r.driverVerification === 'matched' && <p>Driver matched: {r.driverName || 'Named reservation driver'}</p>}
     </section>
     <section aria-label="Vehicle condition"><h3>02 / Vehicle condition</h3><dl className="inspection-review">{checklist.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{conditionLabel(r.conditionRatings?.[key] ?? r.checks?.[key])}</dd></div>)}<div><dt>Interior cleanliness</dt><dd>{r.cleanliness}</dd></div></dl></section>
     <section aria-label="Damage status"><h3>03 / Damage status</h3><p>{r.damageFlag ? 'Damage / repair required' : 'No damage observed'}</p><p>{r.scratches}</p>
