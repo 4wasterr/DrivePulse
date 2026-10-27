@@ -28,7 +28,7 @@ function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit
     const state = stateRow ? JSON.parse(stateRow.payload) : {};
     const vehicleProfile = { ...definition };
     for (const key of ['name', 'brand', 'model', 'category', 'plate', 'transmission', 'seats', 'fuelType', 'tankCapacity']) if (state[key] !== undefined) vehicleProfile[key] = state[key];
-    const document = { id: `${kind.toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`, kind, bookingId: b.id, transactionReference: b.transactionReference || b.id, createdAt: stamp(), by: user.name, actorId: user.id, sample: !!b.sample,
+    const document = { id: `${kind.toUpperCase()}-${randomUUID().slice(0, 10).toUpperCase()}`, kind, bookingId: b.id, transactionReference: b.transactionReference || b.id, createdAt: stamp(), by: user.name, actorId: user.id, actorRole: user.role, sample: !!b.sample,
       renter: structuredClone(b.renter), vehicle: { ...vehicleProfile, fleetCode: state.fleetCode || definition?.fleetCode || `CAR-${String(D.FLEET.findIndex(v => v.id === b.vehicleId) + 1).padStart(5, '0')}` },
       schedule: { start: b.start, startTime: b.startTime, end: b.end, endTime: b.endTime, pickup: b.pickup, dropoff: b.dropoff },
       billing: { ...D.billing(b), rental: b.rental, deposit: b.deposit, lateFee: b.lateFee || 0, days: b.days, dailyRate: b.dailyRate || b.rental / b.days, total: b.status === 'Cancelled' ? D.billing(b).fee : b.rental + b.deposit + (b.lateFee || 0) }, ...extra };
@@ -67,14 +67,21 @@ function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit
       const b = await getBooking(row.booking_id);
       if (req.user.role === 'client' && b.ownerId !== req.user.id) D.fail('Issued document not found.', 404);
       const d = JSON.parse(row.payload);
-      res.set('Content-Disposition', `${req.query.view === 'inline' ? 'inline' : 'attachment'}; filename="${d.id}.html"`).type('html').send(render(d));
+      // Older immutable documents did not capture the issuer's role. The renter
+      // who submitted an online booking must never become its staff signatory.
+      let actorRole = d.actorRole;
+      if (!actorRole && d.actorId) {
+        actorRole = d.actorId === b.ownerId || d.actorId === b.agreementAcceptance?.by ? 'client' : (await db.prepare('SELECT role FROM audit_log WHERE actor_id=? AND resource=? AND at>=? ORDER BY at ASC,sequence ASC LIMIT 1').get(d.actorId, b.id, d.createdAt))?.role;
+      }
+      res.set('Content-Disposition', `${req.query.view === 'inline' ? 'inline' : 'attachment'}; filename="${d.id}.html"`).type('html').send(render(d, actorRole));
     });
     app.get('/api/agreement-terms', role('agent', 'client'), (req, res) => res.json({ terms: DEFAULT_TERMS }));
   }
   return { register, contract, receipt, cashReceipt, issue };
 }
-function render(d) {
+function render(d, actorRole = d.actorRole) {
   const isAgreement = d.kind === 'agreement';
+  const staffIssuer = ['agent', 'manager'].includes(actorRole);
   const title = {
     agreement: 'Official Vehicle Rental Agreement & Terms',
     confirmation: 'Reservation Confirmation & Booking Summary',
@@ -91,9 +98,10 @@ function render(d) {
   ['Renter', `${d.renter.name} · ${d.renter.email || 'In-Person Customer'}`],
   ['Vehicle Description', `${d.vehicle.name} (${d.vehicle.category || 'Standard'})`],
   ['Unique Vehicle ID / Fleet Code', d.vehicle.fleetCode || d.vehicle.id || '—'],
+  ['License Plate Number', d.vehicle.plate || 'Not recorded'],
   ['Scheduled Pick-up', `${d.schedule.start} at ${d.schedule.startTime} PHT (${d.schedule.pickup})`],
   ['Scheduled Return', `${d.schedule.end} at ${d.schedule.endTime} PHT (${d.schedule.dropoff})`],
-  ['Issuing Officer', d.by],
+  [staffIssuer ? 'Issuing Officer' : actorRole === 'client' ? 'Submitted By' : 'Document Created By', d.by || 'Not recorded'],
   ['Date & Time Issued', fmt(d.createdAt)]];
   if (d.bookingStatus) fields.push(['Reservation Status', d.bookingStatus]);
   if (d.cancellation) fields.push(['Cancellation reason', d.cancellation.reason], ['Cancellation fee (20% of verified downpayment)', money(d.cancellation.fee)], ['Rental / downpayment refund', money(d.cancellation.rentalRefund)], ['Security deposit refund', money(d.cancellation.depositRefund)], ['Total refund pending cash release', money(d.cancellation.refundDue)], ['Cancellation fee balance', money(d.cancellation.balanceDue)]);
@@ -205,14 +213,14 @@ function render(d) {
     <div class="terms-text">${escape(d.terms)}</div>
     <div class="signature-row">
       <div class="signature-box">
-        <span>Verified Lessee / Authorized Renter</span>
+        <span>Lessee / Renter</span>
         <strong>${escape(d.signature || d.renter.name)}</strong>
-        <small>Agreed via digital booking submission</small>
+        <small>Named renter for this reservation</small>
       </div>
       <div class="signature-box">
         <span>Authorized DrivePulse Representative</span>
-        <strong>${escape(d.by)}</strong>
-        <small>Digitally verified & issued</small>
+        <strong>${escape(staffIssuer ? d.by : 'Pending staff confirmation')}</strong>
+        <small>${staffIssuer ? `Issued by ${actorRole === 'agent' ? 'Booking Agent' : 'Operations Manager'}` : 'No staff representative recorded on this document'}</small>
       </div>
     </div>
   </div>

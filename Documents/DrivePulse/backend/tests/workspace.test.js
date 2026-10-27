@@ -691,6 +691,58 @@ test('agreement previews use server prices and profile, reject stale terms, and 
 });
 
 
+test('rental contracts show the recorded plate and distinguish renter submission from staff issuance', async t => {
+  const f = await fixture(t), booking = await f.book();
+  const renter = f.client.data.user.name, officer = f.agent.data.user.name;
+  const signatureBoxes = html => [...html.matchAll(/class="signature-box">([\s\S]*?)<\/div>/g)].map(match => match[1]);
+  const open = async (id, cookie = f.client.cookie) => {
+    const response = await f.request('/rental-documents/' + id + '?view=inline', { cookie });
+    assert.equal(response.status, 200);
+    return response.data.toString();
+  };
+  const records = [];
+  for (const record of [booking.agreement, booking.confirmation]) {
+    const row = await f.db.prepare('SELECT payload FROM rental_documents WHERE id=?').get(record.id);
+    const doc = JSON.parse(row.payload);
+    records.push(doc);
+    assert.equal(doc.actorRole, 'client');
+    const html = await open(record.id), boxes = signatureBoxes(html);
+    assert.ok(boxes[0].includes(`<strong>${renter}</strong>`));
+    assert.match(boxes[1], /Pending staff confirmation/);
+    assert.ok(!boxes[1].includes(`<strong>${renter}</strong>`));
+    assert.ok(html.includes(`<dt>License Plate Number</dt><dd>${doc.vehicle.plate}</dd>`));
+    assert.match(html, /<dt>Submitted By<\/dt>/);
+    assert.doesNotMatch(html, /Verified Lessee|Agreed via digital booking submission|Digitally verified & issued/);
+    assert.equal((await f.db.prepare('SELECT payload FROM rental_documents WHERE id=?').get(record.id)).payload, row.payload, 'viewing must not alter the immutable document or its digest');
+  }
+  const issued = await f.request(`/agent/bookings/${booking.id}/agreement`, { method: 'POST', cookie: f.agent.cookie, body: { version: booking.version } });
+  assert.equal(issued.status, 201, JSON.stringify(issued.data));
+  const signed = JSON.parse((await f.db.prepare('SELECT payload FROM rental_documents WHERE id=?').get(issued.data.agreement.id)).payload);
+  assert.equal(signed.actorRole, 'agent');
+  const staffHtml = await open(signed.id);
+  assert.ok(signatureBoxes(staffHtml)[1].includes(`<strong>${officer}</strong>`));
+  assert.match(staffHtml, /Issued by Booking Agent/);
+  assert.match(staffHtml, /<dt>Issuing Officer<\/dt>/);
+  assert.match(signatureBoxes(await open(booking.agreement.id, f.agent.cookie))[1], /Pending staff confirmation/, 'the viewer must not become the issuer of an earlier document');
+
+  for (const original of [records[0], signed]) {
+    const legacy = { ...original, id: 'LEGACY-' + original.id };
+    delete legacy.actorRole;
+    await f.db.prepare('INSERT INTO rental_documents(id,booking_id,kind,created_at,payload) VALUES(?,?,?,?,?)').run(legacy.id, booking.id, legacy.kind, legacy.createdAt, JSON.stringify(legacy));
+    const box = signatureBoxes(await open(legacy.id))[1];
+    if (original.actorRole === 'client') assert.match(box, /Pending staff confirmation/);
+    else assert.ok(box.includes(`<strong>${officer}</strong>`), 'legacy staff issuance uses the recorded audit actor');
+  }
+
+  const state = JSON.parse((await f.db.prepare("SELECT payload FROM fleet_records WHERE kind='vehicle' AND id=?").get(booking.vehicleId)).payload);
+  state.plate = 'NEW 9876';
+  await f.db.prepare("UPDATE fleet_records SET payload=? WHERE kind='vehicle' AND id=?").run(JSON.stringify(state), booking.vehicleId);
+  assert.ok((await open(signed.id)).includes(`<dt>License Plate Number</dt><dd>${signed.vehicle.plate}</dd>`), 'issued contracts retain the plate recorded at issuance');
+  const missing = { ...signed, id: 'LEGACY-MISSING-PLATE', vehicle: { ...signed.vehicle, plate: '' } };
+  await f.db.prepare('INSERT INTO rental_documents(id,booking_id,kind,created_at,payload) VALUES(?,?,?,?,?)').run(missing.id, booking.id, missing.kind, missing.createdAt, JSON.stringify(missing));
+  assert.match(await open(missing.id), /<dt>License Plate Number<\/dt><dd>Not recorded<\/dd>/);
+});
+
 test('renter extensions wait for staff approval and only approved requests update the contract', async t => {
   const f = await fixture(t); let b = await f.book();
   b.status = 'Ready for Dispatch';
