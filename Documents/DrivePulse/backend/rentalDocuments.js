@@ -73,15 +73,21 @@ function createRentalDocuments({ db, getBooking, saveBooking, transaction, audit
       if (!actorRole && d.actorId) {
         actorRole = d.actorId === b.ownerId || d.actorId === b.agreementAcceptance?.by ? 'client' : (await db.prepare('SELECT role FROM audit_log WHERE actor_id=? AND resource=? AND at>=? ORDER BY at ASC,sequence ASC LIMIT 1').get(d.actorId, b.id, d.createdAt))?.role;
       }
-      res.set('Content-Disposition', `${req.query.view === 'inline' ? 'inline' : 'attachment'}; filename="${d.id}.html"`).type('html').send(render(d, actorRole));
+      // Online confirmations predate staff review. Show the real staff handler
+      // from this booking's recorded operations without rewriting issued records
+      // or treating whoever happens to open the document as its representative.
+      const representative = d.terms && !['agent', 'manager'].includes(actorRole) ? await db.prepare("SELECT actor_id,actor,role,at FROM audit_log WHERE resource=? AND role IN ('agent','manager') AND status>=200 AND status<300 AND action IN ('Walk-in scheduled','ID review recorded','Payment recorded','Rental contract issued','Digital dispatch pass issued','Vehicle dispatched','Rental extension approved','Rental extension reviewed') ORDER BY sequence DESC LIMIT 1").get(b.id) : null;
+      res.set('Content-Disposition', `${req.query.view === 'inline' ? 'inline' : 'attachment'}; filename="${d.id}.html"`).type('html').send(render(d, actorRole, representative));
     });
     app.get('/api/agreement-terms', role('agent', 'client'), (req, res) => res.json({ terms: DEFAULT_TERMS }));
   }
   return { register, contract, receipt, cashReceipt, issue };
 }
-function render(d, actorRole = d.actorRole) {
+function render(d, actorRole = d.actorRole, bookingRepresentative = null) {
   const isAgreement = d.kind === 'agreement';
   const staffIssuer = ['agent', 'manager'].includes(actorRole);
+  const representative = staffIssuer ? { actor: d.by, role: actorRole } : bookingRepresentative;
+  const representativeRole = representative?.role === 'agent' ? 'Booking Agent' : 'Operations Manager';
   const title = {
     agreement: 'Official Vehicle Rental Agreement & Terms',
     confirmation: 'Reservation Confirmation & Booking Summary',
@@ -219,8 +225,8 @@ function render(d, actorRole = d.actorRole) {
       </div>
       <div class="signature-box">
         <span>Authorized DrivePulse Representative</span>
-        <strong>${escape(staffIssuer ? d.by : 'Pending staff confirmation')}</strong>
-        <small>${staffIssuer ? `Issued by ${actorRole === 'agent' ? 'Booking Agent' : 'Operations Manager'}` : 'No staff representative recorded on this document'}</small>
+        <strong>${escape(representative?.actor || 'Pending staff confirmation')}</strong>
+        <small>${staffIssuer ? `Issued by ${representativeRole}` : representative ? `Booking handled by ${representativeRole} · ${escape(fmt(representative.at))}` : 'No staff representative has handled this booking yet'}</small>
       </div>
     </div>
   </div>

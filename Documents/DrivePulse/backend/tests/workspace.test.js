@@ -723,14 +723,26 @@ test('rental contracts show the recorded plate and distinguish renter submission
   assert.ok(signatureBoxes(staffHtml)[1].includes(`<strong>${officer}</strong>`));
   assert.match(staffHtml, /Issued by Booking Agent/);
   assert.match(staffHtml, /<dt>Issuing Officer<\/dt>/);
-  assert.match(signatureBoxes(await open(booking.agreement.id, f.agent.cookie))[1], /Pending staff confirmation/, 'the viewer must not become the issuer of an earlier document');
+  for (const record of [booking.agreement, booking.confirmation]) {
+    const reflected = await open(record.id);
+    assert.ok(signatureBoxes(reflected)[1].includes(`<strong>${officer}</strong>`), 'staff handling must reflect on the original online agreement and confirmation');
+    assert.match(signatureBoxes(reflected)[1], /Booking handled by Booking Agent/);
+    assert.match(reflected, /<dt>Submitted By<\/dt>/, 'the original document creator remains unchanged');
+  }
+  const otherAgent = await f.account('agent', 'casey');
+  assert.ok(signatureBoxes(await open(booking.confirmation.id, otherAgent.cookie))[1].includes(`<strong>${officer}</strong>`), 'opening a document must not assign its viewer as representative');
+  const handled = await f.request(`/agent/bookings/${booking.id}/payment`, { method: 'POST', cookie: otherAgent.cookie, body: { version: issued.data.version, type: 'rental', amount: 1000, received: true, representative: renter } });
+  assert.equal(handled.status, 200, JSON.stringify(handled.data));
+  assert.ok(signatureBoxes(await open(booking.confirmation.id))[1].includes(`<strong>${otherAgent.data.user.name}</strong>`), 'actual booking handling updates the representative without reissuing the confirmation');
+  assert.ok(signatureBoxes(await open(signed.id))[1].includes(`<strong>${officer}</strong>`), 'a staff-issued contract retains its actual issuer');
+  assert.equal((await f.db.prepare('SELECT payload FROM rental_documents WHERE id=?').get(booking.confirmation.id)).payload, JSON.stringify(records[1]), 'staff reflection must preserve the original payload and digest');
 
   for (const original of [records[0], signed]) {
     const legacy = { ...original, id: 'LEGACY-' + original.id };
     delete legacy.actorRole;
     await f.db.prepare('INSERT INTO rental_documents(id,booking_id,kind,created_at,payload) VALUES(?,?,?,?,?)').run(legacy.id, booking.id, legacy.kind, legacy.createdAt, JSON.stringify(legacy));
     const box = signatureBoxes(await open(legacy.id))[1];
-    if (original.actorRole === 'client') assert.match(box, /Pending staff confirmation/);
+    if (original.actorRole === 'client') assert.ok(box.includes(`<strong>${otherAgent.data.user.name}</strong>`));
     else assert.ok(box.includes(`<strong>${officer}</strong>`), 'legacy staff issuance uses the recorded audit actor');
   }
 
