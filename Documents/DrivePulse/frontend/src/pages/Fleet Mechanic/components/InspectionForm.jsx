@@ -11,26 +11,32 @@ import VehicleIdentity from '../../../components/fleet/VehicleIdentity.jsx'
 import checklist from '../../../../../shared/inspectionChecklist.json'
 import { CONDITION_RATINGS, conditionLabel, conditionProblem } from '../../../../../shared/inspection.mjs'
 import { mileageConsumption } from '../../../../../shared/mileage.mjs'
+import { inspectionBooking, inspectionTypeForVehicle } from '../../../utils/inspectionBooking.js'
 
 const stages = ['Vehicle details', 'Vehicle condition', 'Damage status', 'Dispatch decision']
 const corners = [['frontLeft', 'Front left'], ['frontRight', 'Front right'], ['rearLeft', 'Rear left'], ['rearRight', 'Rear right']]
 
 export default function InspectionForm({ operations, initial, mechanic, onClose, onDone }) {
-  const initialType = initial.type || (operations.bookings.some(b => b.vehicleId === initial.vehicleId && ['Pending Approval', 'Ready for Dispatch'].includes(b.status)) || !initial.vehicleId ? 'pre-dispatch' : 'clearance')
+  const initialVehicleId = initial.booking?.vehicleId || initial.vehicleId || operations.fleet[0]?.id || ''
+  const initialType = initial.type || (initial.booking ? initial.booking.status === 'Completed' ? 'post-return' : 'pre-dispatch' : inspectionTypeForVehicle(operations.bookings, initialVehicleId))
   const [type, setType] = useState(initialType)
-  const [vehicleId, setVehicleId] = useState(initial.booking?.vehicleId || initial.vehicleId || operations.fleet[0]?.id || '')
-  const [bookingId, setBookingId] = useState(initial.booking?.id || '')
+  const [vehicleId, setVehicleId] = useState(initialVehicleId)
   const [busy, setBusy] = useState(false)
   const vehicle = operations.fleet.find(v => v.id === vehicleId)
-  const eligible = operations.bookings.filter(b => b.vehicleId === vehicleId && (type === 'pre-dispatch' ? ['Pending Approval', 'Ready for Dispatch'].includes(b.status) : b.status === 'Completed' && b.returnedAt))
-  const chosen = eligible.find(b => b.id === bookingId) || eligible[0]
+  const chosen = inspectionBooking(operations.bookings, vehicleId, type, initial.booking?.id)
+  const missingBooking = type !== 'clearance' && !chosen
+  const onRental = operations.bookings.some(booking => booking.vehicleId === vehicleId && booking.status === 'On Rental')
+  const suggestedType = inspectionTypeForVehicle(operations.bookings, vehicleId)
   const details = <div className="form-grid">
-    <label className="form-field">Inspection type<ValidatedField as="select" name="type" value={type} onChange={event => { setType(event.target.value); setBookingId('') }}><option value="pre-dispatch">Pre-dispatch / handover</option><option value="post-return">Post-return</option><option value="clearance">Safety / maintenance clearance</option></ValidatedField></label>
-    <label className="form-field">Vehicle<ValidatedField as="select" name="vehicleId" value={vehicleId} onChange={event => { setVehicleId(event.target.value); setBookingId('') }}>{operations.fleet.map(v => <option key={v.id} value={v.id}>{v.fleetCode || v.id} · {v.name} · {v.plate || 'Plate not recorded'}</option>)}</ValidatedField></label>
-    {type !== 'clearance' && <label className="form-field span-2">Reservation<ValidatedField as="select" name="reservationId" required value={chosen?.id || ''} onChange={event => setBookingId(event.target.value)}><option value="" disabled>Select a reservation</option>{eligible.map(b => <option value={b.id} key={b.id}>{b.id} · {b.start} – {b.end} · {b.status}</option>)}</ValidatedField></label>}
+    <label className="form-field">Inspection type<ValidatedField as="select" name="type" value={type} onChange={event => setType(event.target.value)}><option value="pre-dispatch">Pre-dispatch / handover</option><option value="post-return">Post-return</option><option value="clearance">Safety / maintenance clearance</option></ValidatedField></label>
+    <label className="form-field">Vehicle<ValidatedField as="select" name="vehicleId" value={vehicleId} onChange={event => setVehicleId(event.target.value)}>{operations.fleet.map(v => <option key={v.id} value={v.id}>{v.fleetCode || v.id} · {v.name} · {v.plate || 'Plate not recorded'}</option>)}</ValidatedField></label>
   </div>
   return <Modal draftKey="inspection" title="Digital vehicle inspection" eyebrow="FLEET MECHANIC" wide onClose={onClose}>
-    {!vehicle ? <p>No active vehicles are available for inspection.</p> : <InspectionChecklist key={`${vehicleId}:${type}:${chosen?.id || ''}`} vehicle={vehicle} type={type} booking={chosen} mechanic={mechanic} details={details} busy={busy} setBusy={setBusy} onDone={onDone} />}
+    {!vehicle ? <p>No active vehicles are available for inspection.</p> : missingBooking ? <>
+      {details}<VehicleIdentity vehicle={vehicle} />
+      <p className="info-note" role="status">{onRental ? 'This vehicle is still on rental. Record its return in the Booking Agent workspace before completing a post-return inspection.' : type === 'post-return' ? 'No returned trip is awaiting inspection for this vehicle.' : 'No upcoming trip is awaiting a pre-dispatch inspection for this vehicle.'}</p>
+      {!onRental && suggestedType !== type && <button type="button" className="button button-outline" onClick={() => setType(suggestedType)}>{suggestedType === 'clearance' ? 'Start safety / maintenance clearance' : suggestedType === 'post-return' ? 'Open pending post-return inspection' : 'Open pending pre-dispatch inspection'}</button>}
+    </> : <InspectionChecklist key={`${vehicleId}:${type}:${chosen?.id || ''}`} vehicle={vehicle} type={type} booking={chosen} mechanic={mechanic} details={details} busy={busy} setBusy={setBusy} onDone={onDone} />}
   </Modal>
 }
 
@@ -71,7 +77,7 @@ function InspectionChecklist({ vehicle, type, booking, mechanic, details, busy, 
   async function submit(event) {
     event.preventDefault(); setError('')
     if (step === 0) {
-      if (type !== 'clearance' && !booking) { setError('Select an eligible reservation.'); return }
+      if (type !== 'clearance' && !booking) { setError('No trip is awaiting this inspection. Reopen the vehicle from the inspection queue.'); return }
       if (mileageError) { setError(mileageError); return }
     }
     if (step === 1) {
@@ -106,8 +112,7 @@ function InspectionChecklist({ vehicle, type, booking, mechanic, details, busy, 
       {step === 0 && <>
         {details}
         <VehicleIdentity vehicle={vehicle} />
-        {type !== 'clearance' && !booking && <p className="info-note">No eligible reservation for this inspection type. Use safety clearance for service work.</p>}
-        {type !== 'clearance' && <p className="info-note">Driver: {booking?.driverName || booking?.renter?.name || 'See reservation'} · Agent ID review: {booking?.verificationStatus || 'Pending review'}. Match the driver and presented identification to the reservation.</p>}
+        {type !== 'clearance' && <p className="info-note">Trip: {booking.id} · Driver: {booking.driverName || booking.renter?.name || 'Named booking driver'} · Agent ID review: {booking.verificationStatus || 'Pending review'}. Match the driver and presented identification to the trip.</p>}
         <label className="form-field">{type === 'clearance' ? 'Technician verification' : 'Driver / identification match'}<ValidatedField as="select" name="driverVerification" required value={driverVerification} onChange={event => setDriverVerification(event.target.value)}><option value="" disabled>Select verification result</option><option value={type === 'clearance' ? 'not-applicable' : 'matched'}>{type === 'clearance' ? 'Vehicle identity verified for safety clearance' : 'Individual and identification match the named driver'}</option></ValidatedField></label>
         <h4>Measured readings</h4>
         <div className="form-grid">
