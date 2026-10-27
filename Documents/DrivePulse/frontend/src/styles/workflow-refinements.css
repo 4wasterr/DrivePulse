@@ -1,7 +1,8 @@
-.vehicle-identity { display:grid; grid-template-columns:minmax(0,2fr) repeat(2,minmax(0,1fr)); gap:16px; padding:16px; margin:12px 0 20px; background:#f4f5f1; border:1px solid #dde2d6; border-radius:9px; }
+.vehicle-identity { display:grid; grid-template-columns:minmax(0,2fr) repeat(2,minmax(0,1fr)); align-items:start; gap:16px; padding:16px; margin:12px 0 20px; background:#f4f5f1; border:1px solid #dde2d6; border-radius:9px; }
 .vehicle-identity > div { min-width:0; }
-.vehicle-identity span { display:block; font-size:11px; color:#66705d; margin-bottom:6px; }
-.vehicle-identity strong, .vehicle-identity h3 { overflow-wrap:anywhere; font-size:16px; margin:0; line-height:1.4; color:#263021; }
+.vehicle-identity > div:nth-child(n+2) { text-align:center; }
+.vehicle-identity span { display:block; font-size:11px; line-height:1.6; color:#66705d; margin:0 0 6px; }
+.vehicle-identity strong { display:block; overflow-wrap:anywhere; font-size:16px; margin:0; line-height:1.4; color:#263021; }
 .inspection-selector { border:0; padding:0; min-width:0; }
 .inspection-form h3 { margin:24px 0 14px; }
 .inspection-form .staff-checklist { display:grid; gap:12px; }
@@ -86,6 +87,7 @@
   .ride-filter-bar .ride-search, .ride-filter-bar .ride-price { grid-column:1 / -1; }
   .find-ride .trip-search, .find-ride .trip-search.trip-search-inline { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .vehicle-identity { grid-template-columns:minmax(0,1fr); gap:12px; }
+  .vehicle-identity > div:nth-child(n+2) { text-align:left; }
   .customer-details-form .walkin-layout { grid-template-columns:minmax(0,1fr); }
 }
 @media(max-width:480px) {
